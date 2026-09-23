@@ -53,7 +53,7 @@ struct KurthTopBarView: View {
                 .frame(width: sideWidth, alignment: .leading)
 
             address
-                .modifier(KurthCapsule(active: isCapsules, minWidth: 300))
+                .modifier(KurthCapsule(active: isCapsules, minWidth: 180))
                 .frame(maxWidth: .infinity)
 
             trailingControls
@@ -154,13 +154,6 @@ struct KurthTopBarView: View {
                 NavigationHistoryContextMenu(historyType: .forward, windowState: windowState)
             }
 
-            Button {
-                if session?.isLoading == true { session?.stop() } else { session?.refresh() }
-            } label: {
-                Image(systemName: session?.isLoading == true ? "xmark" : "arrow.clockwise")
-                    .contentTransition(.symbolEffect(.replace))
-            }
-            .kurthBarIcon()
         }
     }
 
@@ -170,15 +163,12 @@ struct KurthTopBarView: View {
     private var address: some View {
         if let tab = browserManager.tabs.selectedSession(in: windowState) {
             HStack(spacing: NookDesign.Spacing.sm) {
-                Button {
+                // Copiar a la izquierda y recargar a la derecha, como Safari: el dominio queda
+                // al centro entre los dos.
+                Button("Copiar URL", systemImage: didCopy ? "checkmark" : "link") {
                     copyURL(tab.url)
-                } label: {
-                    Image(systemName: didCopy ? "checkmark" : "link")
-                        .contentTransition(.symbolEffect(.replace))
-                        .font(NookDesign.Font.caption)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.tertiary)
+                .kurthFieldIcon()
                 .help("Copiar URL")
 
                 Text(Self.shortHost(tab.url))
@@ -189,6 +179,12 @@ struct KurthTopBarView: View {
                     .contentShape(Rectangle())
                     .onTapGesture { commandPalette.openWithCurrentURL(tab.url) }
                     .onHoverTracking { isHoveringAddress = $0 }
+
+                Button(session?.isLoading == true ? "Detener" : "Recargar",
+                       systemImage: session?.isLoading == true ? "xmark" : "arrow.clockwise") {
+                    if session?.isLoading == true { session?.stop() } else { session?.refresh() }
+                }
+                .kurthFieldIcon()
             }
             .padding(.horizontal, NookDesign.Spacing.md)
         }
@@ -234,6 +230,9 @@ struct KurthTopBarView: View {
                     browserManager.toggleAISidebar(for: windowState)
                 }
                 .kurthBarIcon()
+                // Un ícono relleno lleva más tinta que uno de contorno y se lee más oscuro con
+                // el mismo gris; lo bajamos para que pese igual que los demás.
+                .opacity(0.78)
             }
         }
     }
@@ -278,8 +277,47 @@ private extension View {
     func kurthBarIcon() -> some View {
         self
             .labelStyle(.iconOnly)
-            .buttonStyle(NookIconButtonStyle())
+            .buttonStyle(KurthBarButtonStyle())
             .foregroundStyle(.secondary)
+    }
+
+    /// Íconos dentro del campo de la URL: mismo gris, un poco más chicos.
+    func kurthFieldIcon() -> some View {
+        self
+            .labelStyle(.iconOnly)
+            .font(NookDesign.Font.caption)
+            .buttonStyle(KurthBarButtonStyle(size: 20))
+            .foregroundStyle(.secondary)
+    }
+}
+
+/// NookIconButtonStyle sin bajar al 30 % los botones desactivados: en la barra todos los
+/// íconos van en el mismo gris (atrás/adelante sin historial se veían más claros).
+private struct KurthBarButtonStyle: ButtonStyle {
+    var size: CGFloat = NookDesign.Size.iconButton
+    @State private var isHovering = false
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        ZStack {
+            NookDesign.Radius.shape(NookDesign.Radius.md)
+                .fill(fill(isPressed: configuration.isPressed))
+                .frame(width: size, height: size)
+            configuration.label
+        }
+        .frame(width: size, height: size)
+        .contentShape(Rectangle())
+        .scaleEffect(configuration.isPressed && isEnabled ? 0.95 : 1.0)
+        .animation(NookDesign.Motion.quick, value: configuration.isPressed)
+        .animation(NookDesign.Motion.quick, value: isHovering)
+        .onHoverTracking { isHovering = $0 }
+    }
+
+    private func fill(isPressed: Bool) -> Color {
+        guard isEnabled else { return .clear }
+        if isPressed { return NookDesign.Surface.fillPressed }
+        if isHovering { return NookDesign.Surface.fill }
+        return .clear
     }
 }
 
