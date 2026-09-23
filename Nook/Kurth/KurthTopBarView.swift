@@ -53,7 +53,6 @@ struct KurthTopBarView: View {
                 .frame(width: sideWidth, alignment: .leading)
 
             address
-                .modifier(KurthCapsule(active: isCapsules, minWidth: 180))
                 .frame(maxWidth: .infinity)
 
             trailingControls
@@ -162,32 +161,59 @@ struct KurthTopBarView: View {
     @ViewBuilder
     private var address: some View {
         if let tab = browserManager.tabs.selectedSession(in: windowState) {
-            HStack(spacing: NookDesign.Spacing.sm) {
-                // Copiar a la izquierda y recargar a la derecha, como Safari: el dominio queda
-                // al centro entre los dos.
-                Button("Copiar URL", systemImage: didCopy ? "checkmark" : "link") {
-                    copyURL(tab.url)
+            if isCapsules {
+                // Cápsula: el dominio centrado y los íconos anclados a las orillas, no al texto.
+                // Mide lo que ocupa el dominio (mínimo `addressMinWidth`) y crece si es largo.
+                hostText(tab)
+                    .padding(.horizontal, 20 + NookDesign.Spacing.md)
+                    .frame(minWidth: Self.addressMinWidth)
+                    .frame(height: 30)
+                    .overlay(alignment: .leading) {
+                        copyButton(tab).padding(.leading, NookDesign.Spacing.xs)
+                    }
+                    .overlay(alignment: .trailing) {
+                        reloadButton.padding(.trailing, NookDesign.Spacing.xs)
+                    }
+                    .nookGlassEffect(in: Capsule())
+            } else {
+                // Copiar a la izquierda y recargar a la derecha, como Safari.
+                HStack(spacing: NookDesign.Spacing.sm) {
+                    copyButton(tab)
+                    hostText(tab)
+                    reloadButton
                 }
-                .kurthFieldIcon()
-                .help("Copiar URL")
-
-                Text(Self.shortHost(tab.url))
-                    .font(NookDesign.Font.body)
-                    .foregroundStyle(isHoveringAddress ? .primary : .secondary)
-                    .truncationMode(.head)
-                    .lineLimit(1)
-                    .contentShape(Rectangle())
-                    .onTapGesture { commandPalette.openWithCurrentURL(tab.url) }
-                    .onHoverTracking { isHoveringAddress = $0 }
-
-                Button(session?.isLoading == true ? "Detener" : "Recargar",
-                       systemImage: session?.isLoading == true ? "xmark" : "arrow.clockwise") {
-                    if session?.isLoading == true { session?.stop() } else { session?.refresh() }
-                }
-                .kurthFieldIcon()
+                .padding(.horizontal, NookDesign.Spacing.md)
             }
-            .padding(.horizontal, NookDesign.Spacing.md)
         }
+    }
+
+    static let addressMinWidth: CGFloat = 150
+
+    private func hostText(_ tab: PageSession) -> some View {
+        Text(Self.shortHost(tab.url))
+            .font(NookDesign.Font.body)
+            .foregroundStyle(isHoveringAddress ? .primary : .secondary)
+            .truncationMode(.head)
+            .lineLimit(1)
+            .contentShape(Rectangle())
+            .onTapGesture { commandPalette.openWithCurrentURL(tab.url) }
+            .onHoverTracking { isHoveringAddress = $0 }
+    }
+
+    private func copyButton(_ tab: PageSession) -> some View {
+        Button("Copiar URL", systemImage: didCopy ? "checkmark" : "link") {
+            copyURL(tab.url)
+        }
+        .kurthFieldIcon()
+        .help("Copiar URL")
+    }
+
+    private var reloadButton: some View {
+        Button(session?.isLoading == true ? "Detener" : "Recargar",
+               systemImage: session?.isLoading == true ? "xmark" : "arrow.clockwise") {
+            if session?.isLoading == true { session?.stop() } else { session?.refresh() }
+        }
+        .kurthFieldIcon()
     }
 
     /// Solo el dominio, sin "www.": la ruta y el título salen de la barra.
