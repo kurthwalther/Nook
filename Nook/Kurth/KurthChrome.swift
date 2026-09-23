@@ -33,9 +33,48 @@ enum KurthChrome {
     /// Le dice a WebKit cuántos puntos de arriba tapa la barra: el contenido fijo de la página
     /// (encabezados de YouTube, Gmail) se acomoda debajo y el scroll sigue pasando por detrás.
     @MainActor static func syncObscuredInset(_ webView: WKWebView) {
+        observeDefaultsOnce()
         let inset = obscuredTop(for: webView)
         if webView.obscuredContentInsets.top != inset {
             webView.obscuredContentInsets = NSEdgeInsets(top: inset, left: 0, bottom: 0, right: 0)
+        }
+        // Con una franja tapada, WebKit pinta encima el color del encabezado fijo de la página
+        // (Craft, Gmail) como bloque sólido: la barra se veía opaca. Lo apagamos para que pase
+        // el contenido real por debajo. `defaults write com.gstudios.nook kurth.colorExtension -bool true`
+        // lo regresa.
+        let keepExtension = UserDefaults.standard.bool(forKey: "kurth.colorExtension")
+        setPrivateBool(webView, "_setShouldSuppressTopColorExtensionView:", inset > 0 && !keepExtension)
+    }
+
+    /// Llama un setter BOOL interno de WebKit solo si existe: si una versión de macOS lo quita,
+    /// Nook sigue igual y solo vuelve el comportamiento de fábrica.
+    @MainActor private static func setPrivateBool(_ object: NSObject, _ name: String, _ value: Bool) {
+        let selector = NSSelectorFromString(name)
+        guard object.responds(to: selector), let imp = object.method(for: selector) else { return }
+        typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
+        unsafeBitCast(imp, to: Setter.self)(object, selector, value)
+    }
+
+    /// Los ajustes `kurth.*` se prueban en vivo: al cambiar uno, las páginas se reacomodan.
+    /// Nook escribe defaults seguido; solo reacomodamos si cambió uno nuestro.
+    @MainActor private static var observingDefaults = false
+    @MainActor private static var lastKurthDefaults: [String] = []
+    /// Ajustes que tocan a la página. (kurth.barMaterial lo observa SwiftUI por su cuenta.)
+    private static let pageKeys = ["kurth.colorExtension"]
+    @MainActor private static func kurthDefaults() -> [String] {
+        pageKeys.map { "\($0)=\(UserDefaults.standard.object(forKey: $0).map { "\($0)" } ?? "-")" }
+    }
+    @MainActor private static func observeDefaultsOnce() {
+        guard !observingDefaults else { return }
+        observingDefaults = true
+        lastKurthDefaults = kurthDefaults()
+        NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated {
+                let now = kurthDefaults()
+                guard now != lastKurthDefaults else { return }
+                lastKurthDefaults = now
+                NSApp.windows.compactMap(\.contentView).forEach(markWebViewsForLayout)
+            }
         }
     }
 
