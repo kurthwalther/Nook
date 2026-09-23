@@ -806,7 +806,9 @@ class BrowserManager: ObservableObject {
 
         if savedWidth > 0 {
             savedSidebarWidth = savedWidth
-            sidebarWidth = savedVisibility ? savedWidth : 0
+            // Keep the width even when the sidebar starts hidden: toggleSidebar() only flips
+            // visibility, so a zero width here left the sidebar "visible" at 0 pt after relaunch.
+            sidebarWidth = savedWidth
         } else {
             // First launch: ensure sidebar is visible with default width
             savedSidebarWidth = 250
