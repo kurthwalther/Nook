@@ -38,7 +38,6 @@ struct WindowView: View {
                 }
 
             SidebarWebViewStack()
-                .environmentObject(hoverSidebarManager) // kurth: la barra flotante lo lee para los semáforos
 
             // Hover-reveal Sidebar overlay (slides in over web content)
             SidebarHoverOverlayView()
@@ -262,15 +261,18 @@ struct WindowView: View {
 
         // kurth: barra flotante sobre la página (Nook/Kurth/KurthTopBarView.swift).
         if hasTopBar && KurthChrome.floatingTopBar {
-            ZStack(alignment: .top) {
-                WebsiteView()
-                    .zIndex(2000)
-                KurthTopBarView()
-                    .environmentObject(browserManager)
-                    .environment(windowState)
-                    .zIndex(2500)
+            VStack(spacing: 0) {
+                // Ocupa sus 8 pt como en el original: ese es el margen gris sobre la tarjeta.
                 WebsiteLoadingIndicator()
                     .zIndex(3000)
+                ZStack(alignment: .top) {
+                    WebsiteView()
+                        .zIndex(2000)
+                    KurthTopBarView()
+                        .environmentObject(browserManager)
+                        .environment(windowState)
+                        .zIndex(2500)
+                }
             }
             .overlay {
                 if aiService.isExecutingTools {

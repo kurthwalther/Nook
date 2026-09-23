@@ -22,6 +22,10 @@ struct KurthTopBarView: View {
     @Environment(CommandPalette.self) private var commandPalette
     @Environment(\.nookSettings) var nookSettings
 
+    /// Material de la barra, ajustable en vivo sin recompilar:
+    /// `defaults write com.gstudios.nook kurth.barMaterial ultraThin|thin|regular|thick|bar|none`
+    @AppStorage("kurth.barMaterial") private var materialName = "ultraThin"
+
     @State private var leadingWidth: CGFloat = 0
     @State private var trailingWidth: CGFloat = 0
     @State private var didCopy = false
@@ -66,10 +70,10 @@ struct KurthTopBarView: View {
             bottomTrailingRadius: 0, topTrailingRadius: NookDesign.Radius.md,
             style: .continuous
         )
-            .fill(.bar)
+            .fill(material)
             .overlay(alignment: .bottom) {
                 Rectangle()
-                    .fill(.bar)
+                    .fill(material)
                     .frame(height: KurthChrome.topBarFade)
                     .mask(LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom))
                     .offset(y: KurthChrome.topBarFade)
@@ -180,7 +184,7 @@ struct KurthTopBarView: View {
             }
 
             if nookSettings.showAIAssistant {
-                Button("Chat", systemImage: windowState.isSidebarAIChatVisible ? "bubble.left.fill" : "bubble.left") {
+                Button("Chat", systemImage: "message.fill") {
                     browserManager.toggleAISidebar(for: windowState)
                 }
                 .kurthBarIcon()
@@ -189,6 +193,17 @@ struct KurthTopBarView: View {
     }
 
     // MARK: - Estado
+
+    private var material: AnyShapeStyle {
+        switch materialName {
+        case "thin": AnyShapeStyle(.thinMaterial)
+        case "regular": AnyShapeStyle(.regularMaterial)
+        case "thick": AnyShapeStyle(.thickMaterial)
+        case "bar": AnyShapeStyle(.bar)
+        case "none": AnyShapeStyle(.clear)
+        default: AnyShapeStyle(.ultraThinMaterial)
+        }
+    }
 
     /// Nil mientras otra ventana tiene la página: los controles quedan inertes.
     private var session: PageSession? {
