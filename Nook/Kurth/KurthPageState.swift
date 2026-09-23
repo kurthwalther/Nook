@@ -50,10 +50,35 @@ final class KurthPageState {
     }
 
     func refreshColor(from webView: WKWebView) {
-        let color = Self.privateColor(webView, "_sampledPageTopColor") ?? webView.themeColor ?? webView.underPageBackgroundColor
+        let sampled = Self.privateColor(webView, "_sampledPageTopColor")
+        let color = sampled ?? webView.themeColor ?? webView.underPageBackgroundColor
         if color != topColor { topColor = color }
         let header = Self.privateColor(webView, "_sampledTopFixedPositionContentColor")
         if header != topHeaderColor { topHeaderColor = header }
+        applyUnderPageColor(sampled, to: webView)
+    }
+
+    // MARK: - Hueco del rebote elástico
+
+    /// Color que WebKit pinta en el hueco al jalar hasta arriba. Nook lo fija con un píxel suyo
+    /// que con la barra encima salía blanco (#FFFFFF contra #FBF8F6 en Craft, medido el 23 sep):
+    /// se veía una franja blanca bajo la barra. Lo igualamos al color de arriba de la página, el
+    /// mismo que usa la barra, y si alguien lo vuelve a cambiar lo regresamos.
+    private var wantedUnderPage: NSColor?
+    private var underPageObservation: NSKeyValueObservation?
+
+    private func applyUnderPageColor(_ color: NSColor?, to webView: WKWebView) {
+        guard let color else { return }
+        wantedUnderPage = color
+        if webView.underPageBackgroundColor != color { webView.underPageBackgroundColor = color }
+        guard underPageObservation == nil else { return }
+        underPageObservation = webView.observe(\.underPageBackgroundColor) { [weak self] webView, _ in
+            MainActor.assumeIsolated {
+                guard let self, let wanted = self.wantedUnderPage,
+                      webView.underPageBackgroundColor != wanted else { return }
+                webView.underPageBackgroundColor = wanted
+            }
+        }
     }
 
     private static func privateColor(_ webView: WKWebView, _ name: String) -> NSColor? {
