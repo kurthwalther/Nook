@@ -16,10 +16,13 @@
 //  Las capas se combinan con `lighten` (zen-browser-ui.css:64,76): por canal gana el más claro,
 //  y por eso los cruces no salen lodosos.
 //
-//  Superficie del tema = fondo de ventana + tinte + grano, y su opacidad es la del tema: en 1 es
+//  Superficie del tema = base + tinte + grano, y su opacidad es la del tema: en 1 es
 //  sólida y más abajo deja ver el difuminado de lo de atrás (KurthVibrancy). La intensidad del
 //  tinte ya no sigue a la opacidad (en Zen sí): va fija en `tintStrength` y el color se ajusta
 //  con la posición en el lienzo. Kurth, 23 sep: "al máximo sigue transparente".
+//  La base es blanca en claro (con el gris de ventana, #ECECEC, el tema blanco salía #F6F6F6) y
+//  el fondo de ventana en oscuro. Referencia medida: el sidebar de Superconductor es #F8F8F9 al
+//  76 % sobre un difuminado sin color.
 //
 
 import SwiftUI
@@ -38,7 +41,7 @@ struct KurthThemeBackground: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                NookDesign.Surface.windowBackground
+                colorScheme == .dark ? NookDesign.Surface.windowBackground : Color.white
                 tint(size: geo.size)
                     .compositingGroup()
                     // Ventana inactiva: el tinte se apaga un poco, como el material de Zen.

@@ -132,9 +132,12 @@ struct KurthThemePicker: View {
 
     private func tapCanvas(at point: CGPoint) {
         let p = normalized(point)
+        // Clic en el lienzo = modo libre (centro negro, orilla blanca), aunque el punto viniera
+        // de un preset. Zen conserva el modo del preset y así no había forma de llegar al blanco.
+        // Arrastrar sí conserva el modo, para afinar un preset sin que el color salte.
         edit(animated: true) { t in
+            t.kind = .free
             if t.dots.isEmpty {
-                t.kind = .free
                 t.dots = [KurthThemeDot(hex: "#000000", x: p.x, y: p.y)]
                 t.harmony = "floating"
                 t.recolor()

@@ -168,7 +168,8 @@ enum KurthThemeMath {
             Preset(id: id, kind: kind, lightness: l / 100, dots: dots, position: (x / 360, y / 360), swatch: swatch)
         }
         return [
-            [p(0, .lightness, 90, 1, 240, 240, ["#f4efdf"]), p(1, .lightness, 80, 1, 233, 157, ["#f0b8cd"]),
+            // Blanco primero (Kurth, 23 sep); en Zen esta página empieza en el crema.
+            [p(40, .gray, 0, 1, 360, 180, ["#FFFFFF"]), p(0, .lightness, 90, 1, 240, 240, ["#f4efdf"]), p(1, .lightness, 80, 1, 233, 157, ["#f0b8cd"]),
              p(2, .lightness, 80, 1, 236, 111, ["#e9c3e3"]), p(3, .lightness, 70, 1, 234, 173, ["#da7682"]),
              p(4, .lightness, 70, 1, 220, 187, ["#eb8570"]), p(5, .lightness, 60, 1, 225, 237, ["#dcce7f"]),
              p(6, .lightness, 60, 1, 147, 195, ["#5becad"]), p(7, .lightness, 50, 1, 81, 84, ["#919bb5"])],
@@ -184,12 +185,10 @@ enum KurthThemeMath {
              p(26, .lightness, 35, 3, 301, 176, ["#7A3840", "#7E7934", "#6F446E"]), p(27, .lightness, 30, 3, 237, 210, ["#834116", "#408019", "#7A1F5B"]),
              p(28, .lightness, 30, 3, 91, 228, ["#2D6C55", "#345565", "#347623"]), p(29, .lightness, 25, 3, 67, 159, ["#2D4A53", "#2E3251", "#265A41"]),
              p(30, .lightness, 20, 3, 314, 235, ["#402F26", "#374026", "#3B2B34"]), p(31, .lightness, 20, 3, 118, 215, ["#16503D", "#1A3C4C", "#1B570F"])],
-            // Grises: Zen empieza en #E0E0E0; aquí el primero es blanco (orilla del lienzo) y sale
-            // #202020, que casi no se distingue del negro. Kurth pidió blanco el 23 sep.
-            [p(32, .gray, 0, 1, 360, 180, ["#FFFFFF"]), p(33, .gray, 0, 1, 340, 180, ["#E0E0E0"]),
-             p(34, .gray, 0, 1, 315, 180, ["#C0C0C0"]), p(35, .gray, 0, 1, 292.5, 180, ["#A0A0A0"]),
-             p(36, .gray, 0, 1, 270, 180, ["#808080"]), p(37, .gray, 0, 1, 247.5, 180, ["#606060"]),
-             p(38, .gray, 0, 1, 225, 180, ["#404040"]), p(39, .gray, 0, 1, 180, 180, ["#000000"])],
+            [p(32, .gray, 0, 1, 340, 180, ["#E0E0E0"]), p(33, .gray, 0, 1, 315, 180, ["#C0C0C0"]),
+             p(34, .gray, 0, 1, 292.5, 180, ["#A0A0A0"]), p(35, .gray, 0, 1, 270, 180, ["#808080"]),
+             p(36, .gray, 0, 1, 247.5, 180, ["#606060"]), p(37, .gray, 0, 1, 225, 180, ["#404040"]),
+             p(38, .gray, 0, 1, 202.5, 180, ["#202020"]), p(39, .gray, 0, 1, 180, 180, ["#000000"])],
         ]
     }()
 }
