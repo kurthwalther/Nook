@@ -38,8 +38,7 @@ struct KurthTopBarView: View {
     /// En "capsules", blur detrás de las cápsulas. Apagado: el Liquid Glass ya separa la barra
     /// de la página, y la página pasa nítida. Se cambia con clic derecho en la barra.
     @AppStorage("kurth.capsuleBlur") private var capsuleBlur = false
-    /// En "capsules", una capa ligera del color del sitio dentro del vidrio, para legibilidad.
-    @AppStorage("kurth.capsuleTint") private var capsuleTint = true
+    /// En "capsules", capa ligera del color del sitio dentro del vidrio, para legibilidad.
     @AppStorage("kurth.capsuleTintOpacity") private var capsuleTintOpacity = 0.35
 
     @State private var leadingWidth: CGFloat = 0
@@ -120,7 +119,6 @@ struct KurthTopBarView: View {
                     if isCapsules {
                         Divider()
                         Toggle("Blur detrás de las cápsulas", isOn: $capsuleBlur)
-                        Toggle("Color del sitio en las cápsulas", isOn: $capsuleTint)
                     }
                 }
         }
@@ -129,8 +127,10 @@ struct KurthTopBarView: View {
 
     private var showsBlur: Bool { !isCapsules || capsuleBlur }
 
+    /// Con la capa del sitio las cápsulas se leen mejor, salvo cuando la página tiene encabezado
+    /// fijo (YouTube): ahí quedan pegadas a él y el vidrio puro se ve mejor que la capa encima.
     private var glassTint: Color? {
-        guard capsuleTint, let pageColor else { return nil }
+        guard let pageColor, pageState?.hasTopHeader != true else { return nil }
         return Color(nsColor: pageColor).opacity(capsuleTintOpacity)
     }
 

@@ -39,11 +39,11 @@ enum KurthChrome {
         if webView.obscuredContentInsets.top != inset {
             webView.obscuredContentInsets = NSEdgeInsets(top: inset, left: 0, bottom: 0, right: 0)
         }
-        // Con una franja tapada, WebKit pinta encima el color del encabezado fijo de la página
-        // (Craft, Gmail) como bloque sólido: la barra se veía opaca. Lo apagamos para que pase
-        // el contenido real por debajo. `defaults write com.gstudios.nook kurth.colorExtension -bool true`
-        // lo regresa.
-        let keepExtension = UserDefaults.standard.bool(forKey: "kurth.colorExtension")
+        // Si la página tiene encabezado fijo pegado arriba (YouTube), WebKit rellena la franja
+        // tapada con su color para que el contenido no se asome por encima del encabezado. Se
+        // queda encendido: lo que tapaba Craft era la scroll pocket (abajo), no esto.
+        // `defaults write com.gstudios.nook kurth.colorExtension -bool false` lo apaga.
+        let keepExtension = UserDefaults.standard.object(forKey: "kurth.colorExtension") as? Bool ?? true
         setPrivateBool(webView, "_setShouldSuppressTopColorExtensionView:", inset > 0 && !keepExtension)
         // Además WebKit dibuja su propia "scroll pocket" (el borde de Safari) sobre la franja: un
         // bloque de color que tapaba la página aunque la barra no tuviera fondo. La escondemos

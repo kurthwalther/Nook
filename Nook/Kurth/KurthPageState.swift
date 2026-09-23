@@ -25,6 +25,11 @@ final class KurthPageState {
     private(set) var scrollY: CGFloat = 0
     /// Color de la parte alta de la página, o nil mientras WebKit no lo tenga.
     private(set) var topColor: NSColor?
+    /// Color del encabezado fijo pegado arriba (YouTube, Gmail), o nil si la página no tiene.
+    /// Es lo que WebKit usa para su extensión de color sobre la franja tapada.
+    private(set) var topHeaderColor: NSColor?
+
+    var hasTopHeader: Bool { topHeaderColor != nil }
 
     var isAtTop: Bool { scrollY <= 1 }
 
@@ -45,12 +50,14 @@ final class KurthPageState {
     }
 
     func refreshColor(from webView: WKWebView) {
-        let color = Self.sampledTopColor(webView) ?? webView.themeColor ?? webView.underPageBackgroundColor
+        let color = Self.privateColor(webView, "_sampledPageTopColor") ?? webView.themeColor ?? webView.underPageBackgroundColor
         if color != topColor { topColor = color }
+        let header = Self.privateColor(webView, "_sampledTopFixedPositionContentColor")
+        if header != topHeaderColor { topHeaderColor = header }
     }
 
-    private static func sampledTopColor(_ webView: WKWebView) -> NSColor? {
-        let selector = NSSelectorFromString("_sampledPageTopColor")
+    private static func privateColor(_ webView: WKWebView, _ name: String) -> NSColor? {
+        let selector = NSSelectorFromString(name)
         guard webView.responds(to: selector) else { return nil }
         return webView.perform(selector)?.takeUnretainedValue() as? NSColor
     }
