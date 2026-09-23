@@ -105,6 +105,12 @@ final class HoverSidebarManager: ObservableObject {
               let registry = windowRegistry,
               let activeState = registry.activeWindow else { return }
 
+        // kurth: mientras se edita el tema, la barra se queda a la vista (se ve el tema aplicado).
+        if KurthThemeStore.shared.editingSpaceID != nil, !activeState.isSidebarVisible {
+            reveal()
+            return
+        }
+
         // Never show overlay while the real sidebar is visible
         if activeState.isSidebarVisible {
             if isOverlayVisible {

@@ -49,6 +49,17 @@ struct KurthThemePicker: View {
     private var canvas: some View {
         ZStack {
             DotGrid(color: .primary.opacity(colorScheme == .dark ? 0.05 : 0.10))
+            // Fondo que atrapa clic y arrastre en cualquier parte: mueve el primario (o lo crea).
+            Color.clear
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0, coordinateSpace: .named("kurthCanvas"))
+                        .onChanged { value in
+                            if value.translation == .zero { tapCanvas(at: value.location) }
+                            else if !theme.dots.isEmpty { draggingIndex = 0; drag(index: 0, to: value.location) }
+                        }
+                        .onEnded { _ in draggingIndex = nil }
+                )
             ForEach(Array(theme.dots.enumerated()), id: \.offset) { index, dot in
                 dotView(index: index, dot: dot)
             }
@@ -63,8 +74,6 @@ struct KurthThemePicker: View {
         .coordinateSpace(.named("kurthCanvas"))
         .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .contentShape(Rectangle())
-        .onTapGesture(coordinateSpace: .local) { point in tapCanvas(at: point) }
         .overlay(alignment: .topLeading) { schemeButtons.padding(8) }
         .overlay(alignment: .bottomTrailing) { colorActions.padding(8) }
     }
@@ -73,6 +82,8 @@ struct KurthThemePicker: View {
         let isPrimary = index == 0
         let size: CGFloat = isPrimary ? 38 : 16
         let border: CGFloat = isPrimary ? 6 : 3
+        // El gesto va ANTES de .position: después, su área sería todo el lienzo y el último punto
+        // se quedaba con todos los clics (se podía ajustar con 1 color y con 2–3 ya no).
         return Circle()
             .fill(Color(hex: dot.hex))
             .overlay(Circle().strokeBorder(.white, lineWidth: border))
@@ -80,7 +91,7 @@ struct KurthThemePicker: View {
             .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
             .scaleEffect(draggingIndex == index ? 1.2 : 1)
             .animation(NookDesign.Motion.quick, value: draggingIndex)
-            .position(x: dot.x * canvasSize, y: dot.y * canvasSize)
+            .contentShape(Circle().inset(by: -4))
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .named("kurthCanvas"))
                     .onChanged { value in
@@ -94,6 +105,7 @@ struct KurthThemePicker: View {
                     Button("Quitar este color") { removeDot() }
                 }
             }
+            .position(x: dot.x * canvasSize, y: dot.y * canvasSize)
     }
 
     // MARK: - Interacción

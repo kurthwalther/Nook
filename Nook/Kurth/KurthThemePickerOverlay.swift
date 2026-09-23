@@ -42,8 +42,8 @@ struct KurthThemePickerOverlay: View {
                 KurthThemePicker(theme: Binding(get: { draft }, set: { store.updateDraft($0) }))
                     .nookGlassEffect(in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .padding(.leading, leadingInset)
-                    // Debajo de la franja de los semáforos (Spacing.sidebarTop = 52), no encima.
-                    .padding(.top, NookDesign.Spacing.sidebarTop)
+                    // Más abajo que la franja de los semáforos y la barra de arriba.
+                    .padding(.top, 72)
                     .transition(.scale(scale: 0.96, anchor: .topLeading).combined(with: .opacity))
                     .onExitCommand { store.endEditing(tabs: tabs) }
             }
@@ -56,7 +56,11 @@ struct KurthThemePickerOverlay: View {
         }
     }
 
+    /// A la derecha de la barra lateral: la fija, o la que aparece al pasar el mouse (que se
+    /// queda abierta mientras se edita), para no taparla.
     private var leadingInset: CGFloat {
-        windowState.isSidebarVisible ? windowState.sidebarWidth + 12 : 12
+        windowState.isSidebarVisible
+            ? windowState.sidebarWidth + 12
+            : max(windowState.sidebarWidth, windowState.savedSidebarWidth) + KurthChrome.overlayInset + 12
     }
 }
