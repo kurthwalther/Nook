@@ -28,6 +28,10 @@ struct KurthTopBarView: View {
     @AppStorage("kurth.barMaterial") private var materialName = "blur"
     @AppStorage("kurth.blurRadius") private var blurRadius = 18.0
     @AppStorage("kurth.blurSaturation") private var blurSaturation = 1.6
+    /// Línea de 1 px físico bajo la barra, como la de Safari en macOS 27. 0 la quita y regresa
+    /// el desvanecido. `defaults write com.gstudios.nook kurth.hairline -float 0.1`
+    @AppStorage("kurth.hairline") private var hairlineOpacity = 0.1
+    @Environment(\.displayScale) private var displayScale
 
     @State private var leadingWidth: CGFloat = 0
     @State private var trailingWidth: CGFloat = 0
@@ -55,12 +59,19 @@ struct KurthTopBarView: View {
         .background(alignment: .top) {
             ZStack(alignment: .top) {
                 if materialName == "blur" {
-                    KurthBackdropBlur(radius: blurRadius, saturation: blurSaturation, fade: KurthChrome.topBarFade)
-                        .frame(height: KurthChrome.topBarHeight + KurthChrome.topBarFade)
+                    KurthBackdropBlur(radius: blurRadius, saturation: blurSaturation, fade: fade)
+                        .frame(height: KurthChrome.topBarHeight + fade)
                         .clipShape(topCorners)
                         .allowsHitTesting(false)
                 } else {
                     barMaterial
+                }
+                if hairlineOpacity > 0 {
+                    Rectangle()
+                        .fill(.primary.opacity(hairlineOpacity))
+                        .frame(height: 1 / displayScale)
+                        .frame(height: KurthChrome.topBarHeight, alignment: .bottom)
+                        .allowsHitTesting(false)
                 }
                 // Capa invisible que atrapa el clic en el fondo para arrastrar la ventana,
                 // en vez de que pase a la página de abajo.
@@ -214,6 +225,9 @@ struct KurthTopBarView: View {
     }
 
     // MARK: - Estado
+
+    /// Con línea, el blur termina limpio en ella; sin línea, se apaga poco a poco.
+    private var fade: CGFloat { hairlineOpacity > 0 ? 0 : KurthChrome.topBarFade }
 
     private var material: AnyShapeStyle {
         switch materialName {
