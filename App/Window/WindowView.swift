@@ -38,6 +38,7 @@ struct WindowView: View {
                 }
 
             SidebarWebViewStack()
+                .kurthWindowIntro() // kurth: todo aparece junto al abrir la ventana, como Zen
 
             // Hover-reveal Sidebar overlay (slides in over web content)
             SidebarHoverOverlayView()
