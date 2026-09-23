@@ -118,18 +118,26 @@ struct KurthThemePicker: View {
         return (0.5 + x * k, 0.5 + y * k)
     }
 
+    /// Una sola escritura por gesto: cada `theme.x = …` suelto es un set del binding que redibuja
+    /// el fondo de la ventana.
+    private func edit(animated: Bool = false, _ change: (inout KurthTheme) -> Void) {
+        var t = theme
+        change(&t)
+        if animated { withAnimation(dotSpring) { theme = t } } else { theme = t }
+    }
+
     private func tapCanvas(at point: CGPoint) {
         let p = normalized(point)
-        withAnimation(dotSpring) {
-            if theme.dots.isEmpty {
-                theme.kind = .free
-                theme.dots = [KurthThemeDot(hex: "#000000", x: p.x, y: p.y)]
-                theme.harmony = "floating"
-                theme.recolor()
+        edit(animated: true) { t in
+            if t.dots.isEmpty {
+                t.kind = .free
+                t.dots = [KurthThemeDot(hex: "#000000", x: p.x, y: p.y)]
+                t.harmony = "floating"
+                t.recolor()
             } else {
-                theme.dots[0].x = p.x
-                theme.dots[0].y = p.y
-                theme.placeCompliments()
+                t.dots[0].x = p.x
+                t.dots[0].y = p.y
+                t.placeCompliments()
             }
         }
     }
@@ -138,37 +146,39 @@ struct KurthThemePicker: View {
     /// que ese punto quede bajo el cursor.
     private func drag(index: Int, to location: CGPoint) {
         let p = normalized(location)
-        if index == 0 {
-            theme.dots[0].x = p.x
-            theme.dots[0].y = p.y
-        } else {
-            let offsets = KurthThemeMath.angles(for: theme.harmony)
-            let offset = index - 1 < offsets.count ? offsets[index - 1] * .pi / 180 : 0
-            let dx = p.x - 0.5, dy = p.y - 0.5
-            let distance = sqrt(dx * dx + dy * dy), angle = atan2(dy, dx) - offset
-            theme.dots[0].x = 0.5 + distance * cos(angle)
-            theme.dots[0].y = 0.5 + distance * sin(angle)
+        edit { t in
+            if index == 0 {
+                t.dots[0].x = p.x
+                t.dots[0].y = p.y
+            } else {
+                let offsets = KurthThemeMath.angles(for: t.harmony)
+                let offset = index - 1 < offsets.count ? offsets[index - 1] * .pi / 180 : 0
+                let dx = p.x - 0.5, dy = p.y - 0.5
+                let distance = sqrt(dx * dx + dy * dy), angle = atan2(dy, dx) - offset
+                t.dots[0].x = 0.5 + distance * cos(angle)
+                t.dots[0].y = 0.5 + distance * sin(angle)
+            }
+            t.placeCompliments()
         }
-        theme.placeCompliments()
     }
 
     private func addDot() {
         guard !theme.dots.isEmpty, theme.dots.count < 3 else { return }
-        withAnimation(dotSpring) {
-            theme.harmony = KurthThemeMath.defaultHarmony(dots: theme.dots.count + 1)
-            theme.placeCompliments()
+        edit(animated: true) { t in
+            t.harmony = KurthThemeMath.defaultHarmony(dots: t.dots.count + 1)
+            t.placeCompliments()
         }
     }
 
     private func removeDot() {
         guard !theme.dots.isEmpty else { return }
-        withAnimation(dotSpring) {
-            if theme.dots.count == 1 {
-                theme.dots = []
-                theme.harmony = "floating"
+        edit(animated: true) { t in
+            if t.dots.count == 1 {
+                t.dots = []
+                t.harmony = "floating"
             } else {
-                theme.harmony = KurthThemeMath.defaultHarmony(dots: theme.dots.count - 1)
-                theme.placeCompliments()
+                t.harmony = KurthThemeMath.defaultHarmony(dots: t.dots.count - 1)
+                t.placeCompliments()
             }
         }
     }
@@ -176,19 +186,19 @@ struct KurthThemePicker: View {
     private func cycleHarmony() {
         let options = KurthThemeMath.harmonies(forDots: theme.dots.count)
         guard options.count > 1, let i = options.firstIndex(of: theme.harmony) else { return }
-        withAnimation(dotSpring) {
-            theme.harmony = options[(i + 1) % options.count]
-            theme.placeCompliments()
+        edit(animated: true) { t in
+            t.harmony = options[(i + 1) % options.count]
+            t.placeCompliments()
         }
     }
 
     private func apply(_ preset: KurthThemeMath.Preset) {
-        withAnimation(dotSpring) {
-            theme.kind = preset.kind
-            theme.lightness = preset.lightness
-            theme.harmony = preset.dots == 3 ? "analogous" : "floating"
-            theme.dots = [KurthThemeDot(hex: preset.swatch[0], x: preset.position.x, y: preset.position.y)]
-            theme.placeCompliments()
+        edit(animated: true) { t in
+            t.kind = preset.kind
+            t.lightness = preset.lightness
+            t.harmony = preset.dots == 3 ? "analogous" : "floating"
+            t.dots = [KurthThemeDot(hex: preset.swatch[0], x: preset.position.x, y: preset.position.y)]
+            t.placeCompliments()
         }
     }
 

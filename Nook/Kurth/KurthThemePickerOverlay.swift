@@ -39,7 +39,9 @@ struct KurthThemePickerOverlay: View {
                     .contentShape(Rectangle())
                     .onTapGesture { store.endEditing(tabs: tabs) }
 
-                KurthThemePicker(theme: Binding(get: { draft }, set: { store.updateDraft($0) }))
+                // El get lee el borrador vivo, no el `draft` capturado: con el capturado, cada escritura
+                // de un mismo gesto partía del valor viejo y la última deshacía a las anteriores.
+                KurthThemePicker(theme: Binding(get: { store.draft ?? draft }, set: { store.updateDraft($0) }))
                     .nookGlassEffect(in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .padding(.leading, leadingInset)
                     // Más abajo que la franja de los semáforos y la barra de arriba.
