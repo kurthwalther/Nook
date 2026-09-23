@@ -50,6 +50,7 @@ struct SidebarHoverOverlayView: View {
                         .environmentObject(browserManager.gradientColorManager)
                         .environment(\.nookInsideGlass, true)
                         .frame(maxHeight: .infinity)
+                        .background { KurthHoverTheme() } // kurth: el tema también en la barra flotante
                         .nookGlassEffect(in: KurthChrome.overlayShape) // kurth
                         .alwaysArrowCursor()
                         .padding(nookSettings.sidebarPosition == .left ? .leading : .trailing, horizontalInset)

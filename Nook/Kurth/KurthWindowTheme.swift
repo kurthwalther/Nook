@@ -9,6 +9,11 @@
 //  Al cambiar de Space el tema cruza en 0.25 s sin rebote, como Zen (las dos capas ::before y
 //  ::after de zen-browser-ui.css); un solo Color no podía cruzar de 2 a 3 colores.
 //
+//  Debajo del tinte va el material translúcido que Nook quitó en 60d0d34 (vibrancy
+//  `.behindWindow`): lo de atrás de la ventana se ve difuminado y la opacidad del tema decide
+//  cuánto. Cuesta más que un fondo plano (el servidor de ventanas difumina lo de atrás en cada
+//  cuadro que cambia); se volvió a poner por decisión de Kurth, 23 sep.
+//
 
 import SwiftUI
 import NookDesign
@@ -21,22 +26,47 @@ struct KurthWindowTheme: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let store = KurthThemeStore.shared
         let spaceID = windowState.isIncognito ? nil : windowState.spaceID
-        let accent = windowState.isIncognito
-            ? SpaceGradient.incognito.primaryColorHex
-            : spaceID.flatMap { tabs.space($0)?.accentHex }
-        let theme = store.theme(for: spaceID, accentHex: accent)
+        let theme = Self.theme(window: windowState, tabs: tabs)
         let isActive = windowRegistry.activeWindowId == windowState.id
 
         ZStack {
-            NookDesign.Surface.windowBackground
+            BlurEffectView(material: .sidebar, blendingMode: .behindWindow, state: .followsWindowActiveState)
             KurthThemeBackground(theme: theme, isActive: isActive)
                 .id(spaceID)
                 .transition(.opacity)
         }
         .animation(KurthMotion.respecting(reduceMotion, .smooth(duration: 0.25)), value: spaceID)
         .animation(NookDesign.Motion.standard, value: isActive)
+    }
+
+    /// El tema que pinta esta ventana (el borrador si se está editando).
+    @MainActor
+    static func theme(window: BrowserWindowState, tabs: TabsController) -> KurthTheme {
+        let spaceID = window.isIncognito ? nil : window.spaceID
+        let accent = window.isIncognito
+            ? SpaceGradient.incognito.primaryColorHex
+            : spaceID.flatMap { tabs.space($0)?.accentHex }
+        return KurthThemeStore.shared.theme(for: spaceID, accentHex: accent)
+    }
+}
+
+/// El tema dentro de la barra lateral que sale al pasar el mouse: la misma porción del degradado
+/// que se vería con la barra fija, porque se dibuja al tamaño de la ventana y se recorre a su
+/// posición. Va sobre el vidrio, así que la opacidad del tema también deja ver lo de atrás.
+struct KurthHoverTheme: View {
+    @Environment(BrowserWindowState.self) private var windowState
+    @Environment(TabsController.self) private var tabs
+
+    var body: some View {
+        GeometryReader { geo in
+            let frame = geo.frame(in: .global)
+            let window = windowState.window?.contentView?.bounds.size ?? frame.size
+            KurthThemeBackground(theme: KurthWindowTheme.theme(window: windowState, tabs: tabs))
+                .frame(width: window.width, height: window.height)
+                .offset(x: -frame.minX, y: -frame.minY)
+        }
+        .allowsHitTesting(false)
     }
 }
 

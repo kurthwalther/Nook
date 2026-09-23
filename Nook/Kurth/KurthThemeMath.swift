@@ -138,7 +138,7 @@ enum KurthThemeMath {
     // MARK: - Color que se pinta (blendWithWhiteOverlay en macOS)
 
     /// Cada color del tema se mezcla con blanco y lleva de alfa la opacidad del tema. Con
-    /// opacidad 0.5 queda 92 % color + 8 % blanco. MIN_OPACITY de Zen = 0.30.
+    /// opacidad 0.5 queda 92 % color + 8 % blanco.
     static func paintColor(hex: String, opacity: Double) -> Color {
         let (r, g, b) = rgb(fromHex: hex)
         let mix = min(1, opacity + 0.30 + 0.6 * (1 - (opacity + 0.30)))

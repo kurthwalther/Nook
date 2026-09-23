@@ -4,7 +4,7 @@
 //  Nook (rama kurth)
 //
 //  Tema por Space, como Zen: de 0 a 3 colores ubicados en el lienzo del selector, armonía,
-//  opacidad (0.30–0.80) y grano (0–1 en 16 pasos). Reemplaza el degradado obligatorio de Nook
+//  opacidad (0.10–0.80) y grano (0–1 en 16 pasos). Reemplaza el degradado obligatorio de Nook
 //  (Surface.containerGradient) sin tocar su modelo: el tema vive en un archivo propio y el color
 //  primario se escribe en SpaceRecord.accentHex, así que los puntos del switcher, carpetas,
 //  Ajustes e importación de Arc siguen igual. Si el archivo se pierde, cada Space vuelve a un
@@ -35,7 +35,9 @@ struct KurthTheme: Codable, Equatable {
 
     var primaryHex: String? { dots.first?.hex }
 
-    static let minOpacity = 0.30
+    /// Zen usa 0.30 sobre base opaca; sobre el material translúcido el mínimo deja ver casi solo
+    /// lo de atrás. Kurth lo pidió más transparente el 23 sep.
+    static let minOpacity = 0.10
     static let maxOpacity = 0.80
 
     /// Tema de 1 color a partir del acento de siempre del Space.

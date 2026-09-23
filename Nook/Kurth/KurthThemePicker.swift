@@ -7,7 +7,7 @@
 //  panel de 380 pt con padding 10 y radio 12; lienzo neutro con puntos de 1 px cada 6 px; hasta
 //  3 colores (primario de 38 pt con borde blanco de 6, secundarios de 16 con borde de 3, escala
 //  1.2 al arrastrar); ángulo = tono y distancia = luminosidad; armonías; 5 páginas de 8 presets;
-//  onda de opacidad (0.30–0.80, háptica cada 0.1) y perilla de textura de 16 pasos con háptica.
+//  onda de opacidad (0.10–0.80, háptica cada 0.1) y perilla de textura de 16 pasos con háptica.
 //  La vista previa es en vivo; se guarda al cerrar.
 //
 
@@ -223,6 +223,7 @@ struct KurthThemePicker: View {
                 .frame(width: 24, height: 22)
                 .foregroundStyle(nookSettings.appearanceMode == mode ? .primary : .tertiary)
                 .background(nookSettings.appearanceMode == mode ? Color.primary.opacity(0.1) : .clear, in: Capsule())
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .help(help)
@@ -240,9 +241,11 @@ struct KurthThemePicker: View {
 
     private func actionButton(_ icon: String, help: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
+            // Con .plain, macOS solo acepta el clic sobre el dibujo del ícono: el "−" medía ~9×2 pt.
             Image(systemName: icon)
                 .font(NookDesign.Font.caption.weight(.semibold))
                 .frame(width: 24, height: 22)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .foregroundStyle(enabled ? .secondary : .quaternary)
@@ -273,6 +276,7 @@ struct KurthThemePicker: View {
     private func pageButton(_ icon: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon).font(NookDesign.Font.caption.weight(.semibold)).frame(width: 20, height: 26)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .foregroundStyle(enabled ? .secondary : .quaternary)
