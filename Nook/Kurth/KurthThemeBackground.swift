@@ -14,7 +14,7 @@
 //   - 3 colores: radial en (0,0) con el primario (10 → 70 %), radial en (95 %,0) con el segundo
 //     (0 → 75 %) y lineal de −5° con el tercero (10 → 80 %).
 //  Las capas se combinan con `lighten` (zen-browser-ui.css:64,76): por canal gana el más claro,
-//  y por eso los cruces no salen lodosos. Va sobre un material translúcido (KurthWindowTheme),
+//  y por eso los cruces no salen lodosos. Va sobre el difuminado de lo de atrás (KurthVibrancy),
 //  así que el alfa del tinte es la transparencia real de la ventana.
 //
 

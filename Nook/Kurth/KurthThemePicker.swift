@@ -26,6 +26,10 @@ struct KurthThemePicker: View {
 
     static let panelWidth: CGFloat = 380
     private let canvasSize: CGFloat = 360
+    /// Margen del círculo útil: el punto primario (38 pt) cabe entero en la orilla, como el
+    /// padding de 30 px de Zen. Sin esto, el blanco y los grises claros salían cortados.
+    private let rimInset: CGFloat = 22
+    private var usable: CGFloat { canvasSize - 2 * rimInset }
     /// Movimientos que hace el selector solo (clic, presets): el spring de Zen (0.4 s, bounce 0.3).
     private let dotSpring = Animation.spring(duration: 0.4, bounce: 0.3)
 
@@ -105,14 +109,14 @@ struct KurthThemePicker: View {
                     Button("Quitar este color") { removeDot() }
                 }
             }
-            .position(x: dot.x * canvasSize, y: dot.y * canvasSize)
+            .position(x: rimInset + dot.x * usable, y: rimInset + dot.y * usable)
     }
 
     // MARK: - Interacción
 
     private func normalized(_ point: CGPoint) -> (x: Double, y: Double) {
-        // Sujeto al círculo inscrito.
-        let x = point.x / canvasSize - 0.5, y = point.y / canvasSize - 0.5
+        // Sujeto al círculo útil.
+        let x = (point.x - rimInset) / usable - 0.5, y = (point.y - rimInset) / usable - 0.5
         let d = sqrt(x * x + y * y), limit = 0.5
         let k = d > limit ? limit / d : 1
         return (0.5 + x * k, 0.5 + y * k)

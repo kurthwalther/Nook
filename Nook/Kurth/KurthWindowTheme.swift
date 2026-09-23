@@ -9,10 +9,10 @@
 //  Al cambiar de Space el tema cruza en 0.25 s sin rebote, como Zen (las dos capas ::before y
 //  ::after de zen-browser-ui.css); un solo Color no podía cruzar de 2 a 3 colores.
 //
-//  Debajo del tinte va el material translúcido que Nook quitó en 60d0d34 (vibrancy
-//  `.behindWindow`): lo de atrás de la ventana se ve difuminado y la opacidad del tema decide
-//  cuánto. Cuesta más que un fondo plano (el servidor de ventanas difumina lo de atrás en cada
-//  cuadro que cambia); se volvió a poner por decisión de Kurth, 23 sep.
+//  Debajo del tinte va lo de atrás de la ventana, difuminado y sin color propio (KurthVibrancy,
+//  la receta de gpui): la opacidad del tema decide cuánto se ve. Upstream quitó su blur en
+//  60d0d34 porque cuesta más que un fondo plano (el servidor de ventanas difumina lo de atrás en
+//  cada cuadro que cambia); volvió por decisión de Kurth, 23 sep.
 //
 
 import SwiftUI
@@ -31,7 +31,7 @@ struct KurthWindowTheme: View {
         let isActive = windowRegistry.activeWindowId == windowState.id
 
         ZStack {
-            BlurEffectView(material: .sidebar, blendingMode: .behindWindow, state: .followsWindowActiveState)
+            KurthVibrancy()
             KurthThemeBackground(theme: theme, isActive: isActive)
                 .id(spaceID)
                 .transition(.opacity)
