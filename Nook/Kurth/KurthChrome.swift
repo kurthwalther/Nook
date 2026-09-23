@@ -19,6 +19,15 @@ enum KurthChrome {
     /// Desvanecido bajo la barra: el blur se apaga poco a poco en vez de cortar con una línea.
     static let topBarFade: CGFloat = 12
 
+    /// Barra lateral que aparece al pasar el mouse: 4 pt de las orillas, como Zen (8 dejaba un
+    /// hueco en la esquina: radio 12 dentro de una ventana de radio 16 no es concéntrico, y en
+    /// la diagonal la separación era de 9.6 pt contra 8 en los lados).
+    static let overlayInset: CGFloat = 4
+    /// El radio sale de la esquina real de la ventana menos la separación (16 − 4 = 12).
+    static var overlayShape: ConcentricRectangle {
+        ConcentricRectangle(corners: .concentric(minimum: 12), isUniform: true)
+    }
+
     /// Rectángulo de la barra por ventana, en coordenadas de SwiftUI (origen arriba a la izquierda).
     @MainActor private static var barRects: [ObjectIdentifier: CGRect] = [:]
 

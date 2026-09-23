@@ -226,7 +226,8 @@ struct WebsiteView: View {
                         // computed from a flattened bitmap rather than recompositing the
                         // WKWebView's live GPU video layer, which caused black flashes.
                         .compositingGroup()
-                        .nookElevation(.raised)
+                        // kurth: con la barra flotante la sombra la pone KurthPageEdge detrás.
+                        .nookElevation(KurthChrome.floatingTopBar && !shouldShowSplit ? .flat : .raised)
                         // Critical: Use allowsHitTesting to prevent SwiftUI from intercepting mouse events
                         // This allows right-clicks to pass through to the underlying NSView (WKWebView)
                         .allowsHitTesting(!browserManager.dialogManager.isVisible)

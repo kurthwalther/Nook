@@ -432,13 +432,26 @@ private struct KurthBarProbe: NSViewRepresentable {
             guard let window = window ?? hostWindow else { return }
             KurthChrome.setBarRect(nil, in: window)
             setWindowButtons(hidden: false, in: window)
+            buttonTypes.compactMap { window.standardWindowButton($0) }.forEach { $0.alphaValue = 1 }
         }
+
+        private var buttonsHidden: Bool?
 
         private func setWindowButtons(hidden: Bool, in window: NSWindow) {
             // En pantalla completa manda FullScreenToolbarView.
-            guard !window.styleMask.contains(.fullScreen) else { return }
-            for type in buttonTypes {
-                window.standardWindowButton(type)?.isHidden = hidden
+            guard !window.styleMask.contains(.fullScreen), hidden != buttonsHidden else { return }
+            buttonsHidden = hidden
+            let buttons = buttonTypes.compactMap { window.standardWindowButton($0) }
+            // Fundido al ritmo de la barra lateral en vez de aparecer de golpe. Ocultos quedan
+            // además isHidden: un botón con alfa 0 seguiría recibiendo clics.
+            if !hidden { buttons.forEach { $0.alphaValue = 0; $0.isHidden = false } }
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = hidden ? 0.15 : 0.21
+                context.timingFunction = CAMediaTimingFunction(controlPoints: 0.25, 0.1, 0.25, 1)
+                buttons.forEach { $0.animator().alphaValue = hidden ? 0 : 1 }
+            } completionHandler: { [weak self] in
+                guard self?.buttonsHidden == true else { return }
+                buttons.forEach { $0.isHidden = true }
             }
         }
     }

@@ -27,6 +27,29 @@ final class HoverSidebarManager: ObservableObject {
     var keepOpenHysteresis: CGFloat = 52
     /// Vertical slack to allow small overshoot above/below the window frame.
     var verticalSlack: CGFloat = 24
+    // kurth: como Zen, ya abierta aguanta que el mouse salga de la ventana 200 pt de lado y
+    // 100 arriba o abajo, y espera KurthMotion.hoverGrace antes de irse.
+    var keepOpenOutsideSlack: CGFloat = 200
+    var keepOpenVerticalSlack: CGFloat = 100
+    private var pendingHide: DispatchWorkItem?
+
+    /// Mostrar cancela cualquier ocultado pendiente.
+    func reveal() {
+        pendingHide?.cancel()
+        pendingHide = nil
+        if !isOverlayVisible { isOverlayVisible = true }
+    }
+
+    /// Ocultar espera la gracia; si el mouse vuelve antes, reveal() la cancela.
+    func scheduleHide() {
+        guard isOverlayVisible, pendingHide == nil else { return }
+        let work = DispatchWorkItem { [weak self] in
+            self?.pendingHide = nil
+            self?.isOverlayVisible = false
+        }
+        pendingHide = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + KurthMotion.hoverGrace, execute: work)
+    }
 
     // MARK: - Dependencies
     weak var browserManager: BrowserManager?
@@ -101,12 +124,11 @@ final class HoverSidebarManager: ObservableObject {
         let mouse = NSEvent.mouseLocation
         let frame = window.frame
 
-        // Allow slight vertical overshoot
-        let verticalOK = mouse.y >= frame.minY - verticalSlack && mouse.y <= frame.maxY + verticalSlack
+        // Allow slight vertical overshoot (kurth: más holgura si ya está abierta)
+        let vSlack = isOverlayVisible ? keepOpenVerticalSlack : verticalSlack
+        let verticalOK = mouse.y >= frame.minY - vSlack && mouse.y <= frame.maxY + vSlack
         if !verticalOK {
-            if isOverlayVisible {
-                isOverlayVisible = false
-            }
+            scheduleHide()
             return
         }
 
@@ -122,24 +144,21 @@ final class HoverSidebarManager: ObservableObject {
         if nookSettings?.sidebarPosition == .left {
             inTriggerZone = (mouse.x >= frame.minX - overshootSlack) && (mouse.x <= frame.minX + triggerWidth)
             // Keep-open zone: extends past the sidebar to allow moving cursor slightly into browser page
-            inKeepOpenZone = (mouse.x >= frame.minX) && (mouse.x <= frame.minX + overlayWidth + keepOpenHysteresis)
+            inKeepOpenZone = (mouse.x >= frame.minX - keepOpenOutsideSlack) && (mouse.x <= frame.minX + overlayWidth + keepOpenHysteresis) // kurth
             // Sidebar content zone: cursor is actually over the sidebar itself
             inSidebarContentZone = (mouse.x >= frame.minX) && (mouse.x <= frame.minX + overlayWidth)
         } else {
             let rightEdge = frame.maxX
             inTriggerZone = (mouse.x >= rightEdge - triggerWidth - overshootSlack) && (mouse.x <= rightEdge + overshootSlack)
             // Keep-open zone: extends past the sidebar to allow moving cursor slightly into browser page
-            inKeepOpenZone = (mouse.x >= rightEdge - overlayWidth - keepOpenHysteresis) && (mouse.x <= rightEdge)
+            inKeepOpenZone = (mouse.x >= rightEdge - overlayWidth - keepOpenHysteresis) && (mouse.x <= rightEdge + keepOpenOutsideSlack) // kurth
             // Sidebar content zone: cursor is actually over the sidebar itself
             inSidebarContentZone = (mouse.x >= rightEdge - overlayWidth) && (mouse.x <= rightEdge)
         }
         
         // Show sidebar if: in trigger zone, OR (sidebar visible AND (in keep-open zone OR over sidebar content))
         let shouldShow = inTriggerZone || (isOverlayVisible && (inKeepOpenZone || inSidebarContentZone))
-        if shouldShow != isOverlayVisible {
-            withAnimation(.easeInOut(duration: 0.15)) {
-                isOverlayVisible = shouldShow
-            }
-        }
+        // kurth: la vista anima (resorte al entrar, curva al salir); aquí solo cambia el estado.
+        if shouldShow { reveal() } else { scheduleHide() }
     }
 }

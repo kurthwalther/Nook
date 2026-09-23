@@ -20,8 +20,10 @@ struct SidebarHoverOverlayView: View {
     @Environment(\.nookSettings) var nookSettings
 
     private let cornerRadius: CGFloat = NookDesign.Radius.lg
-    private let horizontalInset: CGFloat = NookDesign.Spacing.md
-    private let verticalInset: CGFloat = NookDesign.Spacing.md
+    // kurth: 4 pt de las orillas con forma concéntrica a la ventana (KurthChrome.overlayShape).
+    private let horizontalInset: CGFloat = KurthChrome.overlayInset
+    private let verticalInset: CGFloat = KurthChrome.overlayInset
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         // Only render overlay plumbing when the real sidebar is collapsed
@@ -33,9 +35,8 @@ struct SidebarHoverOverlayView: View {
                     .contentShape(Rectangle())
                     .onHoverTracking { isIn in
                         if isIn && !windowState.isSidebarVisible {
-                            withAnimation(NookDesign.Motion.quick) {
-                                hoverManager.isOverlayVisible = true
-                            }
+                            // kurth: sin withAnimation; la animación vive en un solo lugar (abajo).
+                            hoverManager.reveal()
                         }
                         NSCursor.arrow.set()
                     }
@@ -49,7 +50,7 @@ struct SidebarHoverOverlayView: View {
                         .environmentObject(browserManager.gradientColorManager)
                         .environment(\.nookInsideGlass, true)
                         .frame(maxHeight: .infinity)
-                        .nookGlassEffect(in: NookDesign.Radius.shape(cornerRadius))
+                        .nookGlassEffect(in: KurthChrome.overlayShape) // kurth
                         .alwaysArrowCursor()
                         .padding(nookSettings.sidebarPosition == .left ? .leading : .trailing, horizontalInset)
                         .padding(.vertical, verticalInset)
@@ -60,6 +61,11 @@ struct SidebarHoverOverlayView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: nookSettings.sidebarPosition == .left ? .topLeading : .topTrailing)
+            // kurth: entra con resorte corto y sale más rápido con curva, como Zen.
+            .animation(
+                KurthMotion.respecting(reduceMotion, hoverManager.isOverlayVisible ? KurthMotion.reveal : KurthMotion.dismiss),
+                value: hoverManager.isOverlayVisible
+            )
             // Container remains passive; only overlay/hotspot intercept
         }
     }

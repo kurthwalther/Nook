@@ -78,6 +78,8 @@ struct CommandPaletteView: View {
         }
     }
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion // kurth
+
     var body: some View {
         let isVisible = commandPalette.isVisible
         let textFieldColor: Color = text.isEmpty ? .secondary : .primary
@@ -275,6 +277,8 @@ struct CommandPaletteView: View {
                         .frame(maxWidth: .infinity)
                         .frame(width: effectiveCommandPaletteWidth)
                         .nookGlassEffect(in: NookDesign.Radius.shape(NookDesign.Radius.xxl))
+                        // kurth: entra desde 0.97 anclada arriba; solo el vidrio, no la capa que cierra al tocar.
+                        .scaleEffect(isVisible || reduceMotion ? 1 : 0.97, anchor: .top)
                         .animation(
                             NookDesign.Motion.quick,
                             value: searchManager.suggestions.count
@@ -294,6 +298,8 @@ struct CommandPaletteView: View {
         }
         .allowsHitTesting(isVisible)
         .opacity(isVisible ? 1.0 : 0.0)
+        // kurth: aparecía y desaparecía de golpe; entra con resorte y sale más rápido.
+        .animation(KurthMotion.respecting(reduceMotion, isVisible ? KurthMotion.reveal : KurthMotion.dismiss), value: isVisible)
         .onChange(of: commandPalette.isVisible) { _, newVisible in
             if newVisible {
                 searchManager.setTabs(browserManager.tabs, window: windowState)
@@ -315,11 +321,15 @@ struct CommandPaletteView: View {
                 }
             } else {
                 isSearchFocused = false
-                searchManager.clearSuggestions()
-                text = ""
-                userTypedText = ""
-                activeSiteSearch = nil
-                selectedSuggestionIndex = -1
+                // kurth: limpiar cuando termine la salida; si no, la tarjeta se encoge vacía.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
+                    guard !commandPalette.isVisible else { return }
+                    searchManager.clearSuggestions()
+                    text = ""
+                    userTypedText = ""
+                    activeSiteSearch = nil
+                    selectedSuggestionIndex = -1
+                }
             }
         }
         .onChange(of: windowState.spaceID) { _, _ in

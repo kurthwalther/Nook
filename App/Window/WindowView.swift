@@ -267,6 +267,13 @@ struct WindowView: View {
                     .zIndex(3000)
                 ZStack(alignment: .top) {
                     WebsiteView()
+                        // Sombra ligera bajo la página (KurthPageEdge); en split cada panel va aparte.
+                        .background {
+                            if browserManager.tabs.selectedSession(in: windowState) != nil,
+                               !browserManager.splitManager.isSplit(for: windowState.id) {
+                                KurthPageEdge()
+                            }
+                        }
                         .zIndex(2000)
                     KurthTopBarView()
                         .environmentObject(browserManager)
