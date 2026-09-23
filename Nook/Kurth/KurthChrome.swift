@@ -33,12 +33,19 @@ enum KurthChrome {
     /// (medido el 23 sep: ventana ~17 pt, página a 8 pt, pedía ~9 y tenía 8). Donde la esquina
     /// no toca una de la ventana (junto a la barra lateral fija) queda en 8.
     static var pageShape: ConcentricRectangle {
-        ConcentricRectangle(corners: .concentric(minimum: .fixed(8)))
+        ConcentricRectangle(corners: .concentric(minimum: .fixed(pageMinimumRadius)))
     }
 
     /// La barra superior cubre la parte de arriba de la tarjeta: mismas esquinas arriba, rectas abajo.
     static var pageTopShape: ConcentricRectangle {
-        ConcentricRectangle(uniformTopCorners: .concentric(minimum: .fixed(8)), uniformBottomCorners: .fixed(0))
+        ConcentricRectangle(uniformTopCorners: .concentric(minimum: .fixed(pageMinimumRadius)), uniformBottomCorners: .fixed(0))
+    }
+
+    /// Radio mínimo de la página. Concéntrico da 8 (16 − 8); `kurth.pageRadius` lo sube para
+    /// probar (Kurth pidió ver 9 el 23 sep). Se aplica al reiniciar Nook.
+    static var pageMinimumRadius: CGFloat {
+        let override = UserDefaults.standard.double(forKey: "kurth.pageRadius")
+        return override > 0 ? override : 8
     }
 
     /// Rectángulo de la barra por ventana, en coordenadas de SwiftUI (origen arriba a la izquierda).

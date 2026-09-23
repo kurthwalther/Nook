@@ -48,8 +48,12 @@ struct KurthTopBarView: View {
 
     private var isCapsules: Bool { barStyle != "tinted" }
 
-    /// Con cápsulas de 30 pt, 46 deja 8 pt arriba y abajo; en "tinted" basta con 40.
-    private var barHeight: CGFloat { isCapsules ? 46 : KurthChrome.topBarHeight }
+    /// Con cápsulas de 28 pt, 44 deja 8 pt arriba y abajo, igual que a los lados; en "tinted" 40.
+    private var barHeight: CGFloat { isCapsules ? 44 : KurthChrome.topBarHeight }
+    /// Separación de las cápsulas con la orilla de la página: la misma arriba y al lado (8/8),
+    /// que es el equilibrio que queda cuando una cápsula no puede ser concéntrica con la esquina.
+    private var sidePadding: CGFloat { isCapsules ? 8 : NookDesign.Spacing.sm }
+    private var iconSize: CGFloat { isCapsules ? 24 : NookDesign.Size.iconButton }
 
     var body: some View {
         let sideWidth = max(leadingWidth, trailingWidth)
@@ -68,7 +72,7 @@ struct KurthTopBarView: View {
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { trailingWidth = $0 }
                 .frame(width: sideWidth, alignment: .trailing)
         }
-        .padding(.horizontal, NookDesign.Spacing.sm)
+        .padding(.horizontal, sidePadding)
         .frame(height: barHeight)
         .frame(maxWidth: .infinity)
         .background(alignment: .top) { barBackground }
@@ -152,12 +156,12 @@ struct KurthTopBarView: View {
             Button("Toggle Sidebar", systemImage: nookSettings.sidebarPosition == .left ? "sidebar.left" : "sidebar.right") {
                 browserManager.toggleSidebar(for: windowState)
             }
-            .kurthBarIcon()
+            .kurthBarIcon(size: iconSize)
 
             Button("Go Back", systemImage: "chevron.backward") {
                 if let webView = windowWebView { webView.goBack() } else { session?.goBack() }
             }
-            .kurthBarIcon()
+            .kurthBarIcon(size: iconSize)
             .disabled(!(session?.canGoBack ?? false))
             .contextMenu {
                 NavigationHistoryContextMenu(historyType: .back, windowState: windowState)
@@ -168,7 +172,7 @@ struct KurthTopBarView: View {
                 Button("Go Forward", systemImage: "chevron.forward") {
                     if let webView = windowWebView { webView.goForward() } else { session?.goForward() }
                 }
-                .kurthBarIcon()
+                .kurthBarIcon(size: iconSize)
                 .contextMenu {
                     NavigationHistoryContextMenu(historyType: .forward, windowState: windowState)
                 }
@@ -177,7 +181,7 @@ struct KurthTopBarView: View {
 
             // En "tinted" recargar va junto a las flechas; en "capsules", dentro de la cápsula.
             if !isCapsules {
-                reloadButton.kurthBarIcon()
+                reloadButton.kurthBarIcon(size: iconSize)
             }
         }
         .animation(NookDesign.Motion.quick, value: session?.canGoForward)
@@ -194,7 +198,7 @@ struct KurthTopBarView: View {
                 hostText(tab)
                     .padding(.horizontal, Self.capsuleInset + 20 + NookDesign.Spacing.lg)
                     .frame(minWidth: Self.addressMinWidth)
-                    .frame(height: 30)
+                    .frame(height: Self.capsuleHeight)
                     .overlay(alignment: .leading) {
                         copyButton(tab).padding(.leading, Self.capsuleInset)
                     }
@@ -214,6 +218,7 @@ struct KurthTopBarView: View {
     }
 
     static let addressMinWidth: CGFloat = 130
+    static let capsuleHeight: CGFloat = 28
     /// Aire entre los íconos y la orilla de cada cápsula.
     static let capsuleInset: CGFloat = 8
 
@@ -273,7 +278,7 @@ struct KurthTopBarView: View {
                 Button("Extensions", systemImage: "slider.horizontal.2.square") {
                     windowState.isExtensionLibraryVisible.toggle()
                 }
-                .kurthBarIcon()
+                .kurthBarIcon(size: iconSize)
                 // El panel de extensiones de WindowView se cuelga de este marco.
                 .anchorPreference(key: ExtensionLibraryAnchorKey.self, value: .bounds) { $0 }
             }
@@ -282,7 +287,7 @@ struct KurthTopBarView: View {
                 Button("Chat", systemImage: "text.bubble") {
                     browserManager.toggleAISidebar(for: windowState)
                 }
-                .kurthBarIcon()
+                .kurthBarIcon(size: iconSize)
             }
         }
     }
@@ -324,10 +329,10 @@ struct KurthTopBarView: View {
 }
 
 private extension View {
-    func kurthBarIcon() -> some View {
+    func kurthBarIcon(size: CGFloat = NookDesign.Size.iconButton) -> some View {
         self
             .labelStyle(.iconOnly)
-            .buttonStyle(KurthBarButtonStyle())
+            .buttonStyle(KurthBarButtonStyle(size: size))
             .foregroundStyle(.secondary)
     }
 
@@ -468,7 +473,7 @@ private struct KurthCapsule: ViewModifier {
                 // los dejaba en 0 y la cápsula los recortaba hasta desaparecer.
                 .fixedSize(horizontal: minWidth == 0, vertical: false)
                 .frame(minWidth: minWidth == 0 ? nil : minWidth)
-                .frame(height: 30)
+                .frame(height: KurthTopBarView.capsuleHeight)
                 .modifier(KurthGlass(tint: tint))
         } else {
             content
