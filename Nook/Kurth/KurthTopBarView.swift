@@ -230,9 +230,6 @@ struct KurthTopBarView: View {
                     browserManager.toggleAISidebar(for: windowState)
                 }
                 .kurthBarIcon()
-                // Un ícono relleno lleva más tinta que uno de contorno y se lee más oscuro con
-                // el mismo gris; lo bajamos para que pese igual que los demás.
-                .opacity(0.78)
             }
         }
     }
