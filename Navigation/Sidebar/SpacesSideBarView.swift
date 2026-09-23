@@ -272,6 +272,14 @@ struct SpacesSideBarView: View {
 
             Divider()
 
+            // kurth: selector de tema como el de Zen ("Edit Theme…" en su barra lateral)
+            Button {
+                KurthThemeStore.shared.openPicker(window: windowState, tabs: tabs)
+            } label: {
+                Label("Editar tema…", systemImage: "paintpalette")
+            }
+            .disabled(windowState.isIncognito || windowState.spaceID == nil)
+
             Menu {
                 ForEach(SidebarPosition.allCases) { position in
                     Toggle(isOn: Binding(

@@ -30,6 +30,9 @@ struct WindowView: View {
         ZStack {
             WindowBackground()
                 .contextMenu {
+                    // kurth: selector de tema como el de Zen
+                    Button("Editar tema…") { KurthThemeStore.shared.openPicker(window: windowState, tabs: tabs) }
+                        .disabled(windowState.isIncognito || windowState.spaceID == nil)
                     Button("Space Settings...") {
                         SettingsNavigation.shared.currentSettingsTab = .spaces
                         openSettings()
@@ -47,6 +50,7 @@ struct WindowView: View {
 
             CommandPaletteView()
             DialogView()
+            KurthThemePickerOverlay() // kurth
 
             // Peek overlay for external link previews
             PeekOverlayView()
@@ -191,11 +195,11 @@ struct WindowView: View {
 
     @ViewBuilder
     private func WindowBackground() -> some View {
-        // Private windows keep the neutral incognito accent, never the space's color.
-        let accent = windowState.isIncognito ? SpaceGradient.incognito.primaryColor : browserManager.gradientColorManager.accentColor
         let isActive = windowRegistry.activeWindowId == windowState.id
 
-        NookDesign.Surface.containerGradient(accent: accent, isActive: isActive)
+        // kurth: el tema del Space de ESTA ventana (Nook/Kurth/KurthWindowTheme.swift), en lugar
+        // del degradado obligatorio con el acento de la ventana activa.
+        KurthWindowTheme()
             // Private windows tint all chrome so they are never mistaken for a regular window.
             .overlay(windowState.isIncognito ? NookDesign.Surface.privateTint : Color.clear)
             .frame(maxWidth: .infinity, maxHeight: .infinity)

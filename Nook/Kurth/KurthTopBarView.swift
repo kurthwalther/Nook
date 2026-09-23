@@ -132,6 +132,10 @@ struct KurthTopBarView: View {
                         Toggle("Blur detrás de las cápsulas", isOn: $capsuleBlur)
                     }
                     Divider()
+                    Button("Editar tema…") {
+                        KurthThemeStore.shared.openPicker(window: windowState, tabs: browserManager.tabs)
+                    }
+                    .disabled(windowState.isIncognito || windowState.spaceID == nil)
                     Button("Radio de la página… (\(Int(KurthPrefs.shared.pageRadius)) pt)") {
                         showsRadiusPanel = true
                     }
@@ -140,7 +144,7 @@ struct KurthTopBarView: View {
         .animation(.easeOut(duration: 0.18), value: isAtTop)
     }
 
-    private var showsBlur: Bool { !isCapsules || capsuleBlur }
+    private var showsBlur: Bool { hasPage && (!isCapsules || capsuleBlur) }
 
     /// Con la capa del sitio las cápsulas se leen mejor, salvo cuando la página tiene encabezado
     /// fijo (YouTube): ahí quedan pegadas a él y el vidrio puro se ve mejor que la capa encima.
@@ -149,7 +153,11 @@ struct KurthTopBarView: View {
         return Color(nsColor: pageColor).opacity(capsuleTintOpacity)
     }
 
+    private var hasPage: Bool { browserManager.tabs.selectedSession(in: windowState) != nil }
+
     private var colorOpacity: Double {
+        // Sin pestaña no hay página que tapar: la barra deja ver el tema.
+        guard hasPage else { return 0 }
         if isAtTop { return 1 }
         return isCapsules ? 0 : tintOpacity
     }

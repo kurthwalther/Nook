@@ -555,7 +555,12 @@ class KeyboardShortcutManager {
             case .installExtension:
                 browserManager.showExtensionInstallDialog()
             case .customizeSpaceGradient:
-                browserManager.showSpaceSettings()
+                // kurth: abre el selector de tema en vez de Ajustes
+                if let window = browserManager.windowRegistry?.activeWindow {
+                    KurthThemeStore.shared.openPicker(window: window, tabs: browserManager.tabs)
+                } else {
+                    browserManager.showSpaceSettings()
+                }
             case .organizeTabs:
                 NotificationCenter.default.post(name: .organizeTabsRequested, object: nil)
             }

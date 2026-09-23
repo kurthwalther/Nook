@@ -384,10 +384,17 @@ struct NookCommands: Commands {
             }
 
             CommandMenu("Appearance") {
+                // kurth: ⌘⇧G abre el selector de tema (como Zen); Ajustes del Space sigue abajo.
+                Button("Editar tema…") {
+                    if let window = windowRegistry.activeWindow {
+                        KurthThemeStore.shared.openPicker(window: window, tabs: browserManager.tabs)
+                    }
+                }
+                .modifier(dynamicShortcut(.customizeSpaceGradient))
+                .disabled(windowRegistry.activeWindow?.spaceID == nil)
                 Button("Space Settings...") {
                     browserManager.showSpaceSettings()
                 }
-                .modifier(dynamicShortcut(.customizeSpaceGradient))
                 .disabled(windowRegistry.activeWindow?.spaceID == nil)
             }
         }
