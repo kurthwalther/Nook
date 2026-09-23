@@ -38,6 +38,9 @@ struct KurthTopBarView: View {
     /// En "capsules", blur detrás de las cápsulas. Apagado: el Liquid Glass ya separa la barra
     /// de la página, y la página pasa nítida. Se cambia con clic derecho en la barra.
     @AppStorage("kurth.capsuleBlur") private var capsuleBlur = false
+    /// En "capsules", una capa ligera del color del sitio dentro del vidrio, para legibilidad.
+    @AppStorage("kurth.capsuleTint") private var capsuleTint = true
+    @AppStorage("kurth.capsuleTintOpacity") private var capsuleTintOpacity = 0.35
 
     @State private var leadingWidth: CGFloat = 0
     @State private var trailingWidth: CGFloat = 0
@@ -51,7 +54,7 @@ struct KurthTopBarView: View {
 
         HStack(spacing: 0) {
             leadingControls
-                .modifier(KurthCapsule(active: isCapsules))
+                .modifier(KurthCapsule(active: isCapsules, tint: glassTint))
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { leadingWidth = $0 }
                 .frame(width: sideWidth, alignment: .leading)
 
@@ -59,7 +62,7 @@ struct KurthTopBarView: View {
                 .frame(maxWidth: .infinity)
 
             trailingControls
-                .modifier(KurthCapsule(active: isCapsules))
+                .modifier(KurthCapsule(active: isCapsules, tint: glassTint))
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { trailingWidth = $0 }
                 .frame(width: sideWidth, alignment: .trailing)
         }
@@ -117,6 +120,7 @@ struct KurthTopBarView: View {
                     if isCapsules {
                         Divider()
                         Toggle("Blur detrás de las cápsulas", isOn: $capsuleBlur)
+                        Toggle("Color del sitio en las cápsulas", isOn: $capsuleTint)
                     }
                 }
         }
@@ -124,6 +128,11 @@ struct KurthTopBarView: View {
     }
 
     private var showsBlur: Bool { !isCapsules || capsuleBlur }
+
+    private var glassTint: Color? {
+        guard capsuleTint, let pageColor else { return nil }
+        return Color(nsColor: pageColor).opacity(capsuleTintOpacity)
+    }
 
     private var colorOpacity: Double {
         if isAtTop { return 1 }
@@ -194,7 +203,7 @@ struct KurthTopBarView: View {
                     .overlay(alignment: .trailing) {
                         reloadButton.kurthFieldIcon().padding(.trailing, Self.capsuleInset)
                     }
-                    .nookGlassEffect(in: Capsule())
+                    .modifier(KurthGlass(tint: glassTint))
             } else {
                 // Copiar junto al dominio; recargar vive con las flechas en esta variante.
                 HStack(spacing: NookDesign.Spacing.md + 2) {
@@ -438,6 +447,7 @@ private struct KurthBarProbe: NSViewRepresentable {
 private struct KurthCapsule: ViewModifier {
     let active: Bool
     var minWidth: CGFloat = 0
+    var tint: Color? = nil
 
     func body(content: Content) -> some View {
         if active {
@@ -448,9 +458,22 @@ private struct KurthCapsule: ViewModifier {
                 .fixedSize(horizontal: minWidth == 0, vertical: false)
                 .frame(minWidth: minWidth == 0 ? nil : minWidth)
                 .frame(height: 30)
-                .nookGlassEffect(in: Capsule())
+                .modifier(KurthGlass(tint: tint))
         } else {
             content
         }
+    }
+}
+
+/// nookGlassEffect con tinte opcional: el vidrio toma un poco del color del sitio sin volverse
+/// sólido. Sin tinte es idéntico al de Nook.
+private struct KurthGlass: ViewModifier {
+    let tint: Color?
+
+    func body(content: Content) -> some View {
+        content
+            .clipShape(Capsule())
+            .glassEffect(tint.map { Glass.regular.tint($0) } ?? .regular, in: Capsule())
+            .nookElevation(.floating)
     }
 }
