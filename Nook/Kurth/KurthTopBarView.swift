@@ -361,7 +361,10 @@ private struct KurthCapsule: ViewModifier {
         if active {
             content
                 .padding(.horizontal, NookDesign.Spacing.xs)
-                .frame(minWidth: minWidth)
+                // Los grupos de botones miden lo que miden: un marco flexible con ancho 0
+                // los dejaba en 0 y la cápsula los recortaba hasta desaparecer.
+                .fixedSize(horizontal: minWidth == 0, vertical: false)
+                .frame(minWidth: minWidth == 0 ? nil : minWidth)
                 .frame(height: 30)
                 .nookGlassEffect(in: Capsule())
         } else {
