@@ -41,6 +41,7 @@ struct KurthTopBarView: View {
     /// En "capsules", capa ligera del color del sitio dentro del vidrio, para legibilidad.
     @AppStorage("kurth.capsuleTintOpacity") private var capsuleTintOpacity = 0.35
 
+    @State private var showsRadiusPanel = false
     @State private var leadingWidth: CGFloat = 0
     @State private var trailingWidth: CGFloat = 0
     @State private var didCopy = false
@@ -117,6 +118,9 @@ struct KurthTopBarView: View {
                 .frame(height: barHeight)
                 .contentShape(Rectangle())
                 .backgroundDraggable()
+                .popover(isPresented: $showsRadiusPanel, arrowEdge: .bottom) {
+                    KurthRadiusPanel()
+                }
                 .contextMenu {
                     Picker("Estilo de barra", selection: $barStyle) {
                         Text("Cápsulas (tipo Safari)").tag("capsules")
@@ -128,14 +132,9 @@ struct KurthTopBarView: View {
                         Toggle("Blur detrás de las cápsulas", isOn: $capsuleBlur)
                     }
                     Divider()
-                    Picker("Radio de la página", selection: Binding(
-                        get: { KurthPrefs.shared.pageRadius },
-                        set: { KurthPrefs.shared.pageRadius = $0 }
-                    )) {
-                        Text("Radio 8 (concéntrico)").tag(8.0)
-                        Text("Radio 10").tag(10.0)
+                    Button("Radio de la página… (\(Int(KurthPrefs.shared.pageRadius)) pt)") {
+                        showsRadiusPanel = true
                     }
-                    .pickerStyle(.inline)
                 }
         }
         .animation(.easeOut(duration: 0.18), value: isAtTop)
@@ -500,5 +499,37 @@ private struct KurthGlass: ViewModifier {
             .clipShape(Capsule())
             .glassEffect(tint.map { Glass.regular.tint($0) } ?? .regular, in: Capsule())
             .nookElevation(.floating)
+    }
+}
+
+// MARK: - Panel del radio de la página
+
+/// Slider de 8 a 16 para probar el radio de la página en vivo (se abre desde el clic derecho).
+private struct KurthRadiusPanel: View {
+    var body: some View {
+        let prefs = KurthPrefs.shared
+        VStack(alignment: .leading, spacing: NookDesign.Spacing.md) {
+            HStack {
+                Text("Radio de la página")
+                    .font(NookDesign.Font.body.weight(.semibold))
+                Spacer()
+                Text("\(Int(prefs.pageRadius)) pt")
+                    .font(NookDesign.Font.body.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            Slider(value: Binding(get: { prefs.pageRadius }, set: { prefs.pageRadius = $0.rounded() }), in: 8...16, step: 1) {
+                EmptyView()
+            } minimumValueLabel: {
+                Text("8").font(NookDesign.Font.caption).foregroundStyle(.secondary)
+            } maximumValueLabel: {
+                Text("16").font(NookDesign.Font.caption).foregroundStyle(.secondary)
+            }
+            Text("8 es el concéntrico: esquina de la ventana (16) − separación (8).")
+                .font(NookDesign.Font.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(NookDesign.Spacing.xl)
+        .frame(width: 280)
     }
 }
