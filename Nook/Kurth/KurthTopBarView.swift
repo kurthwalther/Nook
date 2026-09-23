@@ -185,14 +185,14 @@ struct KurthTopBarView: View {
                 // Cápsula: el dominio centrado y los íconos anclados a las orillas, no al texto.
                 // Mide lo que ocupa el dominio (mínimo `addressMinWidth`) y crece si es largo.
                 hostText(tab)
-                    .padding(.horizontal, 20 + NookDesign.Spacing.lg)
+                    .padding(.horizontal, Self.capsuleInset + 20 + NookDesign.Spacing.lg)
                     .frame(minWidth: Self.addressMinWidth)
                     .frame(height: 30)
                     .overlay(alignment: .leading) {
-                        copyButton(tab).padding(.leading, NookDesign.Spacing.xs)
+                        copyButton(tab).padding(.leading, Self.capsuleInset)
                     }
                     .overlay(alignment: .trailing) {
-                        reloadButton.kurthFieldIcon().padding(.trailing, NookDesign.Spacing.xs)
+                        reloadButton.kurthFieldIcon().padding(.trailing, Self.capsuleInset)
                     }
                     .nookGlassEffect(in: Capsule())
             } else {
@@ -206,7 +206,9 @@ struct KurthTopBarView: View {
         }
     }
 
-    static let addressMinWidth: CGFloat = 150
+    static let addressMinWidth: CGFloat = 130
+    /// Aire entre los íconos y la orilla de cada cápsula.
+    static let capsuleInset: CGFloat = 8
 
     private func hostText(_ tab: PageSession) -> some View {
         Text(Self.shortHost(tab.url))
@@ -270,7 +272,7 @@ struct KurthTopBarView: View {
             }
 
             if nookSettings.showAIAssistant {
-                Button("Chat", systemImage: "text.bubble.fill") {
+                Button("Chat", systemImage: "text.bubble") {
                     browserManager.toggleAISidebar(for: windowState)
                 }
                 .kurthBarIcon()
@@ -440,7 +442,7 @@ private struct KurthCapsule: ViewModifier {
     func body(content: Content) -> some View {
         if active {
             content
-                .padding(.horizontal, NookDesign.Spacing.xs)
+                .padding(.horizontal, KurthTopBarView.capsuleInset - 2)
                 // Los grupos de botones miden lo que miden: un marco flexible con ancho 0
                 // los dejaba en 0 y la cápsula los recortaba hasta desaparecer.
                 .fixedSize(horizontal: minWidth == 0, vertical: false)
