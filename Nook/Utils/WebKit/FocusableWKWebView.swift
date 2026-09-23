@@ -26,6 +26,12 @@ final class FocusableWKWebView: WKWebView, SessionWebView {
         contextMenuBridge = nil
     }
 
+    // kurth: la barra superior flota sobre la página; aquí la página aprende cuánto le tapa.
+    override func layout() {
+        super.layout()
+        KurthChrome.syncObscuredInset(self)
+    }
+
     override func mouseDown(with event: NSEvent) {
         // Store Option key state for Peek functionality
         owningSession?.isOptionKeyDown = event.modifierFlags.contains(.option)

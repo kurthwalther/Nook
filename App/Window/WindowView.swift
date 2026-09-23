@@ -38,6 +38,7 @@ struct WindowView: View {
                 }
 
             SidebarWebViewStack()
+                .environmentObject(hoverSidebarManager) // kurth: la barra flotante lo lee para los semáforos
 
             // Hover-reveal Sidebar overlay (slides in over web content)
             SidebarHoverOverlayView()
@@ -258,7 +259,29 @@ struct WindowView: View {
         }()
         
         let hasTopBar = nookSettings.topBarAddressView
-        
+
+        // kurth: barra flotante sobre la página (Nook/Kurth/KurthTopBarView.swift).
+        if hasTopBar && KurthChrome.floatingTopBar {
+            ZStack(alignment: .top) {
+                WebsiteView()
+                    .zIndex(2000)
+                KurthTopBarView()
+                    .environmentObject(browserManager)
+                    .environment(windowState)
+                    .zIndex(2500)
+                WebsiteLoadingIndicator()
+                    .zIndex(3000)
+            }
+            .overlay {
+                if aiService.isExecutingTools {
+                    ToolExecutionGlowView()
+                        .transition(.opacity.animation(.easeInOut(duration: 0.3)))
+                        .allowsHitTesting(false)
+                }
+            }
+            .padding(.bottom, 8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
         ZStack(alignment: .top) {
             VStack(spacing: 0) {
                 if hasTopBar {
@@ -304,6 +327,7 @@ struct WindowView: View {
         }
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } // kurth: cierra el else de la barra flotante
     }
 
     @ViewBuilder

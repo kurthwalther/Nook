@@ -183,7 +183,8 @@ struct WebsiteView: View {
     }
 
     private var webViewClipShape: AnyShape {
-        let hasTopBar = nookSettings.topBarAddressView
+        // kurth: con la barra flotante la página llega hasta arriba y lleva las cuatro esquinas.
+        let hasTopBar = nookSettings.topBarAddressView && !KurthChrome.floatingTopBar
 
         if hasTopBar {
             return AnyShape(UnevenRoundedRectangle(
