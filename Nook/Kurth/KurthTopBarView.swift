@@ -35,6 +35,9 @@ struct KurthTopBarView: View {
     @AppStorage("kurth.tintOpacity") private var tintOpacity = 0.72
     /// Línea de 1 px físico bajo la barra cuando la página ya se desplazó. 0 la quita.
     @AppStorage("kurth.hairline") private var hairlineOpacity = 0.1
+    /// En "capsules", blur detrás de las cápsulas. Apagado: el Liquid Glass ya separa la barra
+    /// de la página, y la página pasa nítida. Se cambia con clic derecho en la barra.
+    @AppStorage("kurth.capsuleBlur") private var capsuleBlur = false
 
     @State private var leadingWidth: CGFloat = 0
     @State private var trailingWidth: CGFloat = 0
@@ -78,10 +81,12 @@ struct KurthTopBarView: View {
     /// página pasa por debajo desenfocada: sola en "capsules", con una capa de su color en "tinted".
     private var barBackground: some View {
         ZStack(alignment: .top) {
-            KurthBackdropBlur(radius: blurRadius, saturation: blurSaturation, fade: 0)
-                .frame(height: KurthChrome.topBarHeight)
-                .clipShape(topCorners)
-                .allowsHitTesting(false)
+            if showsBlur {
+                KurthBackdropBlur(radius: blurRadius, saturation: blurSaturation, fade: 0)
+                    .frame(height: KurthChrome.topBarHeight)
+                    .clipShape(topCorners)
+                    .allowsHitTesting(false)
+            }
 
             topCorners
                 .fill(Color(nsColor: pageColor ?? .windowBackgroundColor))
@@ -93,7 +98,8 @@ struct KurthTopBarView: View {
                 .fill(.primary.opacity(hairlineOpacity))
                 .frame(height: 1 / displayScale)
                 .frame(height: KurthChrome.topBarHeight, alignment: .bottom)
-                .opacity(isAtTop ? 0 : 1)
+                // Sin superficie de barra (cápsulas sin blur) la línea cortaría la página.
+                .opacity(isAtTop || !showsBlur ? 0 : 1)
                 .allowsHitTesting(false)
 
             // Capa invisible que atrapa el clic en el fondo: arrastra la ventana en vez de
@@ -108,10 +114,16 @@ struct KurthTopBarView: View {
                         Text("Color del sitio").tag("tinted")
                     }
                     .pickerStyle(.inline)
+                    if isCapsules {
+                        Divider()
+                        Toggle("Blur detrás de las cápsulas", isOn: $capsuleBlur)
+                    }
                 }
         }
         .animation(.easeOut(duration: 0.18), value: isAtTop)
     }
+
+    private var showsBlur: Bool { !isCapsules || capsuleBlur }
 
     private var colorOpacity: Double {
         if isAtTop { return 1 }
@@ -144,16 +156,24 @@ struct KurthTopBarView: View {
                 NavigationHistoryContextMenu(historyType: .back, windowState: windowState)
             }
 
-            Button("Go Forward", systemImage: "chevron.forward") {
-                if let webView = windowWebView { webView.goForward() } else { session?.goForward() }
-            }
-            .kurthBarIcon()
-            .disabled(!(session?.canGoForward ?? false))
-            .contextMenu {
-                NavigationHistoryContextMenu(historyType: .forward, windowState: windowState)
+            // Adelante solo existe cuando hay a dónde ir.
+            if session?.canGoForward == true {
+                Button("Go Forward", systemImage: "chevron.forward") {
+                    if let webView = windowWebView { webView.goForward() } else { session?.goForward() }
+                }
+                .kurthBarIcon()
+                .contextMenu {
+                    NavigationHistoryContextMenu(historyType: .forward, windowState: windowState)
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.8)))
             }
 
+            // En "tinted" recargar va junto a las flechas; en "capsules", dentro de la cápsula.
+            if !isCapsules {
+                reloadButton.kurthBarIcon()
+            }
         }
+        .animation(NookDesign.Motion.quick, value: session?.canGoForward)
     }
 
     // MARK: - Centro: dominio y copiar
@@ -165,22 +185,21 @@ struct KurthTopBarView: View {
                 // Cápsula: el dominio centrado y los íconos anclados a las orillas, no al texto.
                 // Mide lo que ocupa el dominio (mínimo `addressMinWidth`) y crece si es largo.
                 hostText(tab)
-                    .padding(.horizontal, 20 + NookDesign.Spacing.md)
+                    .padding(.horizontal, 20 + NookDesign.Spacing.lg)
                     .frame(minWidth: Self.addressMinWidth)
                     .frame(height: 30)
                     .overlay(alignment: .leading) {
                         copyButton(tab).padding(.leading, NookDesign.Spacing.xs)
                     }
                     .overlay(alignment: .trailing) {
-                        reloadButton.padding(.trailing, NookDesign.Spacing.xs)
+                        reloadButton.kurthFieldIcon().padding(.trailing, NookDesign.Spacing.xs)
                     }
                     .nookGlassEffect(in: Capsule())
             } else {
-                // Copiar a la izquierda y recargar a la derecha, como Safari.
-                HStack(spacing: NookDesign.Spacing.sm) {
+                // Copiar junto al dominio; recargar vive con las flechas en esta variante.
+                HStack(spacing: NookDesign.Spacing.md + 2) {
                     copyButton(tab)
                     hostText(tab)
-                    reloadButton
                 }
                 .padding(.horizontal, NookDesign.Spacing.md)
             }
@@ -208,12 +227,11 @@ struct KurthTopBarView: View {
         .help("Copiar URL")
     }
 
-    private var reloadButton: some View {
+    private var reloadButton: Button<Label<Text, Image>> {
         Button(session?.isLoading == true ? "Detener" : "Recargar",
                systemImage: session?.isLoading == true ? "xmark" : "arrow.clockwise") {
             if session?.isLoading == true { session?.stop() } else { session?.refresh() }
         }
-        .kurthFieldIcon()
     }
 
     /// Solo el dominio, sin "www.": la ruta y el título salen de la barra.
@@ -314,8 +332,7 @@ private extension View {
     }
 }
 
-/// NookIconButtonStyle sin bajar al 30 % los botones desactivados: en la barra todos los
-/// íconos van en el mismo gris (atrás/adelante sin historial se veían más claros).
+/// Como NookIconButtonStyle, con el label en el gris que le pone la barra.
 private struct KurthBarButtonStyle: ButtonStyle {
     var size: CGFloat = NookDesign.Size.iconButton
     @State private var isHovering = false
@@ -330,6 +347,8 @@ private struct KurthBarButtonStyle: ButtonStyle {
         }
         .frame(width: size, height: size)
         .contentShape(Rectangle())
+        // Atrás sin historial se ve suspendido; el resto de los íconos va en el mismo gris.
+        .opacity(isEnabled ? 1 : 0.35)
         .scaleEffect(configuration.isPressed && isEnabled ? 0.95 : 1.0)
         .animation(NookDesign.Motion.quick, value: configuration.isPressed)
         .animation(NookDesign.Motion.quick, value: isHovering)
