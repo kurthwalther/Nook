@@ -22,9 +22,12 @@ struct KurthTopBarView: View {
     @Environment(CommandPalette.self) private var commandPalette
     @Environment(\.nookSettings) var nookSettings
 
-    /// Material de la barra, ajustable en vivo sin recompilar:
-    /// `defaults write com.gstudios.nook kurth.barMaterial ultraThin|thin|regular|thick|bar|none`
-    @AppStorage("kurth.barMaterial") private var materialName = "ultraThin"
+    /// Fondo de la barra, ajustable en vivo sin recompilar:
+    /// `defaults write com.gstudios.nook kurth.barMaterial blur|ultraThin|thin|regular|thick|bar|none`
+    /// "blur" es desenfoque puro sin tinte (KurthBackdropBlur); los demás son materiales de macOS.
+    @AppStorage("kurth.barMaterial") private var materialName = "blur"
+    @AppStorage("kurth.blurRadius") private var blurRadius = 18.0
+    @AppStorage("kurth.blurSaturation") private var blurSaturation = 1.6
 
     @State private var leadingWidth: CGFloat = 0
     @State private var trailingWidth: CGFloat = 0
@@ -49,9 +52,23 @@ struct KurthTopBarView: View {
         .padding(.horizontal, NookDesign.Spacing.sm)
         .frame(height: KurthChrome.topBarHeight)
         .frame(maxWidth: .infinity)
-        .background {
-            barMaterial
-                .backgroundDraggable()
+        .background(alignment: .top) {
+            ZStack(alignment: .top) {
+                if materialName == "blur" {
+                    KurthBackdropBlur(radius: blurRadius, saturation: blurSaturation, fade: KurthChrome.topBarFade)
+                        .frame(height: KurthChrome.topBarHeight + KurthChrome.topBarFade)
+                        .clipShape(topCorners)
+                        .allowsHitTesting(false)
+                } else {
+                    barMaterial
+                }
+                // Capa invisible que atrapa el clic en el fondo para arrastrar la ventana,
+                // en vez de que pase a la página de abajo.
+                Color.clear
+                    .frame(height: KurthChrome.topBarHeight)
+                    .contentShape(Rectangle())
+                    .backgroundDraggable()
+            }
         }
         .background(
             KurthBarProbe(showsWindowButtons: showsWindowButtons)
@@ -64,12 +81,16 @@ struct KurthTopBarView: View {
 
     /// Material de barra de iOS: desenfoca lo que pasa por debajo y se apaga hacia abajo,
     /// sin línea que corte contra la página.
-    private var barMaterial: some View {
+    private var topCorners: UnevenRoundedRectangle {
         UnevenRoundedRectangle(
             topLeadingRadius: NookDesign.Radius.md, bottomLeadingRadius: 0,
             bottomTrailingRadius: 0, topTrailingRadius: NookDesign.Radius.md,
             style: .continuous
         )
+    }
+
+    private var barMaterial: some View {
+        topCorners
             .fill(material)
             .overlay(alignment: .bottom) {
                 Rectangle()

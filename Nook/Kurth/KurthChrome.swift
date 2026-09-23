@@ -44,6 +44,18 @@ enum KurthChrome {
         // lo regresa.
         let keepExtension = UserDefaults.standard.bool(forKey: "kurth.colorExtension")
         setPrivateBool(webView, "_setShouldSuppressTopColorExtensionView:", inset > 0 && !keepExtension)
+        // Además WebKit dibuja su propia "scroll pocket" (el borde de Safari) sobre la franja: un
+        // bloque de color que tapaba la página aunque la barra no tuviera fondo. La escondemos
+        // con una razón propia (bit 7, que WebKit no usa) para que ninguna razón suya la regrese.
+        let hidePocket = inset > 0 && !UserDefaults.standard.bool(forKey: "kurth.scrollPocket")
+        setPrivateReason(webView, hidePocket ? "_addReasonToHideTopScrollPocket:" : "_removeReasonToHideTopScrollPocket:", 1 << 7)
+    }
+
+    @MainActor private static func setPrivateReason(_ object: NSObject, _ name: String, _ reason: UInt8) {
+        let selector = NSSelectorFromString(name)
+        guard object.responds(to: selector), let imp = object.method(for: selector) else { return }
+        typealias Setter = @convention(c) (AnyObject, Selector, UInt8) -> Void
+        unsafeBitCast(imp, to: Setter.self)(object, selector, reason)
     }
 
     /// Llama un setter BOOL interno de WebKit solo si existe: si una versión de macOS lo quita,
@@ -60,7 +72,7 @@ enum KurthChrome {
     @MainActor private static var observingDefaults = false
     @MainActor private static var lastKurthDefaults: [String] = []
     /// Ajustes que tocan a la página. (kurth.barMaterial lo observa SwiftUI por su cuenta.)
-    private static let pageKeys = ["kurth.colorExtension"]
+    private static let pageKeys = ["kurth.colorExtension", "kurth.scrollPocket"]
     @MainActor private static func kurthDefaults() -> [String] {
         pageKeys.map { "\($0)=\(UserDefaults.standard.object(forKey: $0).map { "\($0)" } ?? "-")" }
     }
