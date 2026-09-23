@@ -42,7 +42,8 @@ struct KurthThemePickerOverlay: View {
                 KurthThemePicker(theme: Binding(get: { draft }, set: { store.updateDraft($0) }))
                     .nookGlassEffect(in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .padding(.leading, leadingInset)
-                    .padding(.top, 12)
+                    // Debajo de la franja de los semáforos (Spacing.sidebarTop = 52), no encima.
+                    .padding(.top, NookDesign.Spacing.sidebarTop)
                     .transition(.scale(scale: 0.96, anchor: .topLeading).combined(with: .opacity))
                     .onExitCommand { store.endEditing(tabs: tabs) }
             }
