@@ -34,6 +34,7 @@ enum KurthChrome {
     /// (encabezados de YouTube, Gmail) se acomoda debajo y el scroll sigue pasando por detrás.
     @MainActor static func syncObscuredInset(_ webView: WKWebView) {
         observeDefaultsOnce()
+        if let page = webView as? FocusableWKWebView { KurthPageState.attach(to: page) }
         let inset = obscuredTop(for: webView)
         if webView.obscuredContentInsets.top != inset {
             webView.obscuredContentInsets = NSEdgeInsets(top: inset, left: 0, bottom: 0, right: 0)

@@ -21,96 +21,110 @@ struct KurthTopBarView: View {
     @Environment(BrowserWindowState.self) private var windowState
     @Environment(CommandPalette.self) private var commandPalette
     @Environment(\.nookSettings) var nookSettings
-
-    /// Fondo de la barra, ajustable en vivo sin recompilar:
-    /// `defaults write com.gstudios.nook kurth.barMaterial blur|ultraThin|thin|regular|thick|bar|none`
-    /// "blur" es desenfoque puro sin tinte (KurthBackdropBlur); los demás son materiales de macOS.
-    @AppStorage("kurth.barMaterial") private var materialName = "blur"
-    @AppStorage("kurth.blurRadius") private var blurRadius = 18.0
-    @AppStorage("kurth.blurSaturation") private var blurSaturation = 1.6
-    /// Línea de 1 px físico bajo la barra, como la de Safari en macOS 27. 0 la quita y regresa
-    /// el desvanecido. `defaults write com.gstudios.nook kurth.hairline -float 0.1`
-    @AppStorage("kurth.hairline") private var hairlineOpacity = 0.1
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.colorScheme) private var systemScheme
+
+    /// Variante de barra, se cambia con clic derecho en la barra:
+    /// "capsules" = tipo Safari, tres cápsulas de Liquid Glass sobre la página;
+    /// "tinted"   = blur con una capa del color del sitio encima.
+    @AppStorage("kurth.barStyle") private var barStyle = "capsules"
+    /// Ajustes en vivo (`defaults write com.gstudios.nook <clave> -float <valor>`).
+    @AppStorage("kurth.blurRadius") private var blurRadius = 9.0
+    @AppStorage("kurth.blurSaturation") private var blurSaturation = 1.6
+    /// Opacidad de la capa de color en "tinted" al hacer scroll (1 = sólido, 0 = solo blur).
+    @AppStorage("kurth.tintOpacity") private var tintOpacity = 0.72
+    /// Línea de 1 px físico bajo la barra cuando la página ya se desplazó. 0 la quita.
+    @AppStorage("kurth.hairline") private var hairlineOpacity = 0.1
 
     @State private var leadingWidth: CGFloat = 0
     @State private var trailingWidth: CGFloat = 0
     @State private var didCopy = false
     @State private var isHoveringAddress = false
 
+    private var isCapsules: Bool { barStyle != "tinted" }
+
     var body: some View {
         let sideWidth = max(leadingWidth, trailingWidth)
 
         HStack(spacing: 0) {
             leadingControls
+                .modifier(KurthCapsule(active: isCapsules))
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { leadingWidth = $0 }
                 .frame(width: sideWidth, alignment: .leading)
 
             address
+                .modifier(KurthCapsule(active: isCapsules, minWidth: 300))
                 .frame(maxWidth: .infinity)
 
             trailingControls
+                .modifier(KurthCapsule(active: isCapsules))
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { trailingWidth = $0 }
                 .frame(width: sideWidth, alignment: .trailing)
         }
         .padding(.horizontal, NookDesign.Spacing.sm)
         .frame(height: KurthChrome.topBarHeight)
         .frame(maxWidth: .infinity)
-        .background(alignment: .top) {
-            ZStack(alignment: .top) {
-                if materialName == "blur" {
-                    KurthBackdropBlur(radius: blurRadius, saturation: blurSaturation, fade: fade)
-                        .frame(height: KurthChrome.topBarHeight + fade)
-                        .clipShape(topCorners)
-                        .allowsHitTesting(false)
-                } else {
-                    barMaterial
-                }
-                if hairlineOpacity > 0 {
-                    Rectangle()
-                        .fill(.primary.opacity(hairlineOpacity))
-                        .frame(height: 1 / displayScale)
-                        .frame(height: KurthChrome.topBarHeight, alignment: .bottom)
-                        .allowsHitTesting(false)
-                }
-                // Capa invisible que atrapa el clic en el fondo para arrastrar la ventana,
-                // en vez de que pase a la página de abajo.
-                Color.clear
-                    .frame(height: KurthChrome.topBarHeight)
-                    .contentShape(Rectangle())
-                    .backgroundDraggable()
-            }
-        }
+        .background(alignment: .top) { barBackground }
         .background(
             KurthBarProbe(showsWindowButtons: showsWindowButtons)
         )
         .environment(\.colorScheme, pageScheme ?? systemScheme)
         .animation(NookDesign.Motion.standard, value: pageScheme)
+        .animation(NookDesign.Motion.standard, value: barStyle)
     }
 
     // MARK: - Fondo
 
-    /// Material de barra de iOS: desenfoca lo que pasa por debajo y se apaga hacia abajo,
-    /// sin línea que corte contra la página.
+    /// Hasta arriba, la barra es del color de la página y se funde con ella. Al hacer scroll la
+    /// página pasa por debajo desenfocada: sola en "capsules", con una capa de su color en "tinted".
+    private var barBackground: some View {
+        ZStack(alignment: .top) {
+            KurthBackdropBlur(radius: blurRadius, saturation: blurSaturation, fade: 0)
+                .frame(height: KurthChrome.topBarHeight)
+                .clipShape(topCorners)
+                .allowsHitTesting(false)
+
+            topCorners
+                .fill(Color(nsColor: pageColor ?? .windowBackgroundColor))
+                .frame(height: KurthChrome.topBarHeight)
+                .opacity(colorOpacity)
+                .allowsHitTesting(false)
+
+            Rectangle()
+                .fill(.primary.opacity(hairlineOpacity))
+                .frame(height: 1 / displayScale)
+                .frame(height: KurthChrome.topBarHeight, alignment: .bottom)
+                .opacity(isAtTop ? 0 : 1)
+                .allowsHitTesting(false)
+
+            // Capa invisible que atrapa el clic en el fondo: arrastra la ventana en vez de
+            // que pase a la página de abajo, y trae el selector de variante.
+            Color.clear
+                .frame(height: KurthChrome.topBarHeight)
+                .contentShape(Rectangle())
+                .backgroundDraggable()
+                .contextMenu {
+                    Picker("Estilo de barra", selection: $barStyle) {
+                        Text("Cápsulas (tipo Safari)").tag("capsules")
+                        Text("Color del sitio").tag("tinted")
+                    }
+                    .pickerStyle(.inline)
+                }
+        }
+        .animation(.easeOut(duration: 0.18), value: isAtTop)
+    }
+
+    private var colorOpacity: Double {
+        if isAtTop { return 1 }
+        return isCapsules ? 0 : tintOpacity
+    }
+
     private var topCorners: UnevenRoundedRectangle {
         UnevenRoundedRectangle(
             topLeadingRadius: NookDesign.Radius.md, bottomLeadingRadius: 0,
             bottomTrailingRadius: 0, topTrailingRadius: NookDesign.Radius.md,
             style: .continuous
         )
-    }
-
-    private var barMaterial: some View {
-        topCorners
-            .fill(material)
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(material)
-                    .frame(height: KurthChrome.topBarFade)
-                    .mask(LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom))
-                    .offset(y: KurthChrome.topBarFade)
-                    .allowsHitTesting(false)
-            }
     }
 
     // MARK: - Izquierda: barra lateral, atrás, adelante, recargar
@@ -216,7 +230,7 @@ struct KurthTopBarView: View {
             }
 
             if nookSettings.showAIAssistant {
-                Button("Chat", systemImage: "message.fill") {
+                Button("Chat", systemImage: "text.bubble.fill") {
                     browserManager.toggleAISidebar(for: windowState)
                 }
                 .kurthBarIcon()
@@ -225,20 +239,6 @@ struct KurthTopBarView: View {
     }
 
     // MARK: - Estado
-
-    /// Con línea, el blur termina limpio en ella; sin línea, se apaga poco a poco.
-    private var fade: CGFloat { hairlineOpacity > 0 ? 0 : KurthChrome.topBarFade }
-
-    private var material: AnyShapeStyle {
-        switch materialName {
-        case "thin": AnyShapeStyle(.thinMaterial)
-        case "regular": AnyShapeStyle(.regularMaterial)
-        case "thick": AnyShapeStyle(.thickMaterial)
-        case "bar": AnyShapeStyle(.bar)
-        case "none": AnyShapeStyle(.clear)
-        default: AnyShapeStyle(.ultraThinMaterial)
-        }
-    }
 
     /// Nil mientras otra ventana tiene la página: los controles quedan inertes.
     private var session: PageSession? {
@@ -249,15 +249,24 @@ struct KurthTopBarView: View {
         session.flatMap { browserManager.webViewCoordinator?.getWebView(for: $0.itemID, in: windowState.id) }
     }
 
-    /// Gris claro u oscuro según el color que Nook ya muestrea de la parte alta de la página.
-    private var pageScheme: ColorScheme? {
-        guard let tab = browserManager.tabs.selectedSession(in: windowState),
-              let color = tab.topBarBackgroundColor ?? tab.pageBackgroundColor
-        else { return nil }
-        return color.isPerceivedDark ? .dark : .light
+    private var pageState: KurthPageState? {
+        windowWebView.map(KurthPageState.of)
     }
 
-    @Environment(\.colorScheme) private var systemScheme
+    private var isAtTop: Bool { pageState?.isAtTop ?? true }
+
+    /// El color de la parte alta de la página: el que muestrea WebKit (como Safari) y, si no hay,
+    /// el que ya calcula Nook.
+    private var pageColor: NSColor? {
+        if let color = pageState?.topColor { return color }
+        let tab = browserManager.tabs.selectedSession(in: windowState)
+        return tab?.pageBackgroundColor ?? tab?.topBarBackgroundColor
+    }
+
+    /// Íconos grises claros u oscuros según lo que haya detrás.
+    private var pageScheme: ColorScheme? {
+        pageColor.map { $0.isPerceivedDark ? .dark : .light }
+    }
 
     /// Semáforos solo con barra lateral a la vista: la fija o la que sale al pasar por el borde.
     private var showsWindowButtons: Bool {
@@ -337,6 +346,26 @@ private struct KurthBarProbe: NSViewRepresentable {
             for type in buttonTypes {
                 window.standardWindowButton(type)?.isHidden = hidden
             }
+        }
+    }
+}
+
+// MARK: - Cápsula de Liquid Glass
+
+/// En la variante tipo Safari, cada grupo de la barra va en su cápsula de vidrio.
+private struct KurthCapsule: ViewModifier {
+    let active: Bool
+    var minWidth: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        if active {
+            content
+                .padding(.horizontal, NookDesign.Spacing.xs)
+                .frame(minWidth: minWidth)
+                .frame(height: 30)
+                .nookGlassEffect(in: Capsule())
+        } else {
+            content
         }
     }
 }
