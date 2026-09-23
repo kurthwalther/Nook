@@ -48,6 +48,9 @@ struct KurthTopBarView: View {
 
     private var isCapsules: Bool { barStyle != "tinted" }
 
+    /// Con cápsulas de 30 pt, 46 deja 8 pt arriba y abajo; en "tinted" basta con 40.
+    private var barHeight: CGFloat { isCapsules ? 46 : KurthChrome.topBarHeight }
+
     var body: some View {
         let sideWidth = max(leadingWidth, trailingWidth)
 
@@ -66,7 +69,7 @@ struct KurthTopBarView: View {
                 .frame(width: sideWidth, alignment: .trailing)
         }
         .padding(.horizontal, NookDesign.Spacing.sm)
-        .frame(height: KurthChrome.topBarHeight)
+        .frame(height: barHeight)
         .frame(maxWidth: .infinity)
         .background(alignment: .top) { barBackground }
         .background(
@@ -85,21 +88,21 @@ struct KurthTopBarView: View {
         ZStack(alignment: .top) {
             if showsBlur {
                 KurthBackdropBlur(radius: blurRadius, saturation: blurSaturation, fade: 0)
-                    .frame(height: KurthChrome.topBarHeight)
+                    .frame(height: barHeight)
                     .clipShape(topCorners)
                     .allowsHitTesting(false)
             }
 
             topCorners
                 .fill(Color(nsColor: pageColor ?? .windowBackgroundColor))
-                .frame(height: KurthChrome.topBarHeight)
+                .frame(height: barHeight)
                 .opacity(colorOpacity)
                 .allowsHitTesting(false)
 
             Rectangle()
                 .fill(.primary.opacity(hairlineOpacity))
                 .frame(height: 1 / displayScale)
-                .frame(height: KurthChrome.topBarHeight, alignment: .bottom)
+                .frame(height: barHeight, alignment: .bottom)
                 // Sin superficie de barra (cápsulas sin blur) la línea cortaría la página.
                 .opacity(isAtTop || !showsBlur ? 0 : 1)
                 .allowsHitTesting(false)
@@ -107,7 +110,7 @@ struct KurthTopBarView: View {
             // Capa invisible que atrapa el clic en el fondo: arrastra la ventana en vez de
             // que pase a la página de abajo, y trae el selector de variante.
             Color.clear
-                .frame(height: KurthChrome.topBarHeight)
+                .frame(height: barHeight)
                 .contentShape(Rectangle())
                 .backgroundDraggable()
                 .contextMenu {
