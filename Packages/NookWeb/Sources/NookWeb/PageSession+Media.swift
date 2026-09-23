@@ -253,7 +253,10 @@ extension PageSession {
         var sampleX = bounds.midX
         sampleX = min(max(bounds.minX, sampleX), bounds.maxX - 1)
 
-        let offset: CGFloat = 2.0
+        // kurth: si una barra tapa la parte de arriba (obscuredContentInsets), el contenido
+        // empieza debajo de ella; medir en la franja tapada daba blanco y ese blanco salía en
+        // el rebote elástico al jalar hasta arriba.
+        let offset: CGFloat = 2.0 + webView.obscuredContentInsets.top
         let yCandidate: CGFloat
         if webView.isFlipped {
             yCandidate = bounds.minY + offset
@@ -272,12 +275,13 @@ extension PageSession {
         // Sample the top-rightmost pixel
         let sampleX = bounds.maxX - 1
         let sampleY: CGFloat
+        let inset = webView.obscuredContentInsets.top  // kurth: primer píxel visible, no el tapado
         if webView.isFlipped {
             // In flipped coordinates, minY is at the top
-            sampleY = bounds.minY
+            sampleY = min(bounds.minY + inset, bounds.maxY - 1)
         } else {
             // In non-flipped coordinates, maxY is at the top
-            sampleY = bounds.maxY - 1
+            sampleY = max(bounds.maxY - 1 - inset, bounds.minY)
         }
         
         return CGRect(x: sampleX, y: sampleY, width: 1, height: 1)
