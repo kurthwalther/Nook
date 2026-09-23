@@ -17,7 +17,7 @@ struct KurthPageEdge: View {
     @AppStorage("kurth.pageShadow") private var opacity = 0.24
 
     var body: some View {
-        NookDesign.Radius.shape(NookDesign.Radius.md)
+        KurthChrome.pageShape
             .fill(NookDesign.Surface.windowBackground)
             .shadow(color: .black.opacity(opacity), radius: 4, y: 3)
             .allowsHitTesting(false)

@@ -183,6 +183,8 @@ struct WebsiteView: View {
     }
 
     private var webViewClipShape: AnyShape {
+        // kurth: radios concéntricos con la ventana (KurthChrome.pageShape).
+        if KurthChrome.floatingTopBar && nookSettings.topBarAddressView { return AnyShape(KurthChrome.pageShape) }
         // kurth: con la barra flotante la página llega hasta arriba y lleva las cuatro esquinas.
         let hasTopBar = nookSettings.topBarAddressView && !KurthChrome.floatingTopBar
 

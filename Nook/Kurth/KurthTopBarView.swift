@@ -142,13 +142,8 @@ struct KurthTopBarView: View {
         return isCapsules ? 0 : tintOpacity
     }
 
-    private var topCorners: UnevenRoundedRectangle {
-        UnevenRoundedRectangle(
-            topLeadingRadius: NookDesign.Radius.md, bottomLeadingRadius: 0,
-            bottomTrailingRadius: 0, topTrailingRadius: NookDesign.Radius.md,
-            style: .continuous
-        )
-    }
+    /// Las esquinas de arriba de la tarjeta, concéntricas con la ventana; rectas abajo.
+    private var topCorners: ConcentricRectangle { KurthChrome.pageTopShape }
 
     // MARK: - Izquierda: barra lateral, atrás, adelante, recargar
 

@@ -28,6 +28,19 @@ enum KurthChrome {
         ConcentricRectangle(corners: .concentric(minimum: 12), isUniform: true)
     }
 
+    /// Tarjeta de la página con radios concéntricos (la regla de Apple): cada esquina = esquina
+    /// de la ventana − separación, calculado contra la ventana real y no con un número fijo
+    /// (medido el 23 sep: ventana ~17 pt, página a 8 pt, pedía ~9 y tenía 8). Donde la esquina
+    /// no toca una de la ventana (junto a la barra lateral fija) queda en 8.
+    static var pageShape: ConcentricRectangle {
+        ConcentricRectangle(corners: .concentric(minimum: .fixed(8)))
+    }
+
+    /// La barra superior cubre la parte de arriba de la tarjeta: mismas esquinas arriba, rectas abajo.
+    static var pageTopShape: ConcentricRectangle {
+        ConcentricRectangle(uniformTopCorners: .concentric(minimum: .fixed(8)), uniformBottomCorners: .fixed(0))
+    }
+
     /// Rectángulo de la barra por ventana, en coordenadas de SwiftUI (origen arriba a la izquierda).
     @MainActor private static var barRects: [ObjectIdentifier: CGRect] = [:]
 
