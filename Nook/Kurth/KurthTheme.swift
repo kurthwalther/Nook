@@ -4,13 +4,14 @@
 //  Nook (rama kurth)
 //
 //  Tema por Space, como Zen: de 0 a 3 colores ubicados en el lienzo del selector, armonía,
-//  opacidad (0.10–0.80) y grano (0–1 en 16 pasos). Reemplaza el degradado obligatorio de Nook
+//  opacidad de la superficie (0.10–1.0; 1 = sólida) y grano (0–1 en 16 pasos). Reemplaza el degradado obligatorio de Nook
 //  (Surface.containerGradient) sin tocar su modelo: el tema vive en un archivo propio y el color
 //  primario se escribe en SpaceRecord.accentHex, así que los puntos del switcher, carpetas,
 //  Ajustes e importación de Arc siguen igual. Si el archivo se pierde, cada Space vuelve a un
 //  tema de 1 color con su accentHex.
 //
 
+import AppKit
 import Foundation
 import Observation
 import NookWeb
@@ -30,15 +31,18 @@ struct KurthTheme: Codable, Equatable {
     var kind: KurthThemeMath.Kind = .free
     /// Luminosidad fija de los presets (kind == .lightness).
     var lightness = 0.5
-    var opacity = 0.5
+    /// Opacidad de la superficie del tema sobre lo de atrás (1 = sólida).
+    var opacity = 0.9
     var grain = 0.0
+    /// El accentHex que tenía el Space al guardar. Normalmente es el primario; al guardar por
+    /// cierre de la app no da tiempo de escribir el acento y queda el anterior.
+    var accent: String?
 
     var primaryHex: String? { dots.first?.hex }
 
-    /// Zen usa 0.30 sobre base opaca; sobre el material translúcido el mínimo deja ver casi solo
-    /// lo de atrás. Kurth lo pidió más transparente el 23 sep.
+    /// En 0.10 casi todo es lo de atrás; en 1, sólida. (Zen: 0.30–0.80 sobre su material.)
     static let minOpacity = 0.10
-    static let maxOpacity = 0.80
+    static let maxOpacity = 1.0
 
     /// Tema de 1 color a partir del acento de siempre del Space.
     static func fromAccent(_ hex: String?) -> KurthTheme {
@@ -80,15 +84,23 @@ final class KurthThemeStore {
         return base.appendingPathComponent("com.gstudios.nook/Kurth/themes.json")
     }()
 
-    private init() { load() }
+    /// Para guardar lo que se estaba editando si la app se cierra con el selector abierto.
+    private weak var editingTabs: TabsController?
 
-    /// El tema que se pinta. Si el acento cambió por fuera (Ajustes, importación) y ya no es el
-    /// primario, el tema se reduce a 1 color con ese acento y conserva opacidad y grano.
+    private init() {
+        load()
+        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { KurthThemeStore.shared.saveOnQuit() }
+        }
+    }
+
+    /// El tema que se pinta. Si el acento cambió por fuera (Ajustes, importación) después de
+    /// guardar, el tema se reduce a 1 color con ese acento y conserva opacidad y grano.
     func theme(for spaceID: UUID?, accentHex: String?) -> KurthTheme {
         guard let spaceID else { return .fromAccent(accentHex) }
         if let draft = drafts[spaceID] { return draft }
         guard var theme = saved[spaceID] else { return .fromAccent(accentHex) }
-        if let accentHex, let primary = theme.primaryHex, primary.lowercased() != accentHex.lowercased() {
+        if let accentHex, let expected = theme.accent ?? theme.primaryHex, expected.lowercased() != accentHex.lowercased() {
             var reduced = KurthTheme.fromAccent(accentHex)
             reduced.opacity = theme.opacity
             reduced.grain = theme.grain
@@ -99,8 +111,9 @@ final class KurthThemeStore {
 
     // MARK: - Edición
 
-    func beginEditing(spaceID: UUID?, accentHex: String?) {
+    func beginEditing(spaceID: UUID?, accentHex: String?, tabs: TabsController? = nil) {
         guard let spaceID else { return }
+        editingTabs = tabs
         drafts[spaceID] = theme(for: spaceID, accentHex: accentHex)
         editingSpaceID = spaceID
     }
@@ -115,13 +128,23 @@ final class KurthThemeStore {
     /// Guarda al cerrar y escribe el primario en accentHex (una sola escritura, no por arrastre).
     func endEditing(tabs: TabsController?) {
         guard let id = editingSpaceID else { return }
-        if let draft = drafts[id] {
+        if var draft = drafts[id] {
+            draft.accent = nil
             saved[id] = draft
             write()
             if let hex = draft.primaryHex { tabs?.updateSpace(id, name: nil, icon: nil, accentHex: hex) }
         }
         drafts[id] = nil
         editingSpaceID = nil
+    }
+
+    /// Al salir de la app con el selector abierto: guarda el borrador y anota el acento que el
+    /// Space todavía tiene, para que al abrir no se tome como un cambio externo.
+    private func saveOnQuit() {
+        guard let id = editingSpaceID, var draft = drafts[id] else { return }
+        draft.accent = editingTabs?.space(id)?.accentHex
+        saved[id] = draft
+        write()
     }
 
     // MARK: - Archivo

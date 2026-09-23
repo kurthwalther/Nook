@@ -7,7 +7,7 @@
 //  panel de 380 pt con padding 10 y radio 12; lienzo neutro con puntos de 1 px cada 6 px; hasta
 //  3 colores (primario de 38 pt con borde blanco de 6, secundarios de 16 con borde de 3, escala
 //  1.2 al arrastrar); ángulo = tono y distancia = luminosidad; armonías; 5 páginas de 8 presets;
-//  onda de opacidad (0.10–0.80, háptica cada 0.1) y perilla de textura de 16 pasos con háptica.
+//  onda de opacidad de la superficie (0.10–1, háptica cada 0.1) y perilla de textura de 16 pasos con háptica.
 //  La vista previa es en vivo; se guarda al cerrar.
 //
 
@@ -381,7 +381,7 @@ struct KurthOpacityWave: View {
             })
         }
         .frame(height: 44)
-        .help("Opacidad del tema")
+        .help("Opacidad: a la izquierda se ve lo de atrás de la ventana")
     }
 }
 

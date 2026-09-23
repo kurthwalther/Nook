@@ -14,8 +14,12 @@
 //   - 3 colores: radial en (0,0) con el primario (10 → 70 %), radial en (95 %,0) con el segundo
 //     (0 → 75 %) y lineal de −5° con el tercero (10 → 80 %).
 //  Las capas se combinan con `lighten` (zen-browser-ui.css:64,76): por canal gana el más claro,
-//  y por eso los cruces no salen lodosos. Va sobre el difuminado de lo de atrás (KurthVibrancy),
-//  así que el alfa del tinte es la transparencia real de la ventana.
+//  y por eso los cruces no salen lodosos.
+//
+//  Superficie del tema = fondo de ventana + tinte + grano, y su opacidad es la del tema: en 1 es
+//  sólida y más abajo deja ver el difuminado de lo de atrás (KurthVibrancy). La intensidad del
+//  tinte ya no sigue a la opacidad (en Zen sí): va fija en `tintStrength` y el color se ajusta
+//  con la posición en el lienzo. Kurth, 23 sep: "al máximo sigue transparente".
 //
 
 import SwiftUI
@@ -28,9 +32,13 @@ struct KurthThemeBackground: View {
 
     @Environment(\.colorScheme) private var colorScheme
 
+    /// La opacidad de Zen con la que se mezcla cada color (0.5 = 92 % color, 8 % blanco, alfa .5).
+    static let tintStrength = 0.5
+
     var body: some View {
         GeometryReader { geo in
             ZStack {
+                NookDesign.Surface.windowBackground
                 tint(size: geo.size)
                     .compositingGroup()
                     // Ventana inactiva: el tinte se apaga un poco, como el material de Zen.
@@ -42,13 +50,15 @@ struct KurthThemeBackground: View {
                         .opacity(0.45 * theme.grain)
                 }
             }
+            .compositingGroup()
+            .opacity(theme.opacity)
         }
         .allowsHitTesting(false)
     }
 
     @ViewBuilder
     private func tint(size: CGSize) -> some View {
-        let colors = theme.dots.map { KurthThemeMath.paintColor(hex: $0.hex, opacity: theme.opacity) }
+        let colors = theme.dots.map { KurthThemeMath.paintColor(hex: $0.hex, opacity: Self.tintStrength) }
         switch colors.count {
         case 0:
             colorScheme == .dark ? Color.black.opacity(0.4) : Color.clear

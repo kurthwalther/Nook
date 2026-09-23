@@ -17,7 +17,7 @@ extension KurthThemeStore {
     /// Abre el selector para el Space de esta ventana.
     func openPicker(window: BrowserWindowState, tabs: TabsController) {
         guard !window.isIncognito, let spaceID = window.spaceID else { return }
-        beginEditing(spaceID: spaceID, accentHex: tabs.space(spaceID)?.accentHex)
+        beginEditing(spaceID: spaceID, accentHex: tabs.space(spaceID)?.accentHex, tabs: tabs)
     }
 }
 
