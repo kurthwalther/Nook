@@ -127,6 +127,15 @@ struct KurthTopBarView: View {
                         Divider()
                         Toggle("Blur detrás de las cápsulas", isOn: $capsuleBlur)
                     }
+                    Divider()
+                    Picker("Radio de la página", selection: Binding(
+                        get: { KurthPrefs.shared.pageRadius },
+                        set: { KurthPrefs.shared.pageRadius = $0 }
+                    )) {
+                        Text("Radio 8 (concéntrico)").tag(8.0)
+                        Text("Radio 10").tag(10.0)
+                    }
+                    .pickerStyle(.inline)
                 }
         }
         .animation(.easeOut(duration: 0.18), value: isAtTop)
