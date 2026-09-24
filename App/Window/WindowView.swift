@@ -208,10 +208,7 @@ struct WindowView: View {
     private func SidebarWebViewStack() -> some View {
         let aiVisible = windowState.isSidebarAIChatVisible
         let aiAppearsOnTrailingEdge = nookSettings.sidebarPosition == .left
-        let sidebarVisible = windowState.isSidebarVisible
-        let sidebarOnRight = nookSettings.sidebarPosition == .right
-        let sidebarOnLeft = nookSettings.sidebarPosition == .left
-        
+
         HStack(spacing: 0) {
             if aiAppearsOnTrailingEdge {
                 SpacesSidebar()
@@ -227,10 +224,10 @@ struct WindowView: View {
                 SpacesSidebar()
             }
         }
-        // Apply padding similar to regular sidebar: remove padding when sidebar/AI is visible on that side
-        // When sidebar is on left, AI appears on right (trailing); when sidebar is on right, AI appears on left (leading)
-        .padding(.trailing, (sidebarVisible && sidebarOnRight) || (aiVisible && sidebarOnLeft) ? 0 : 8)
-        .padding(.leading, (sidebarVisible && sidebarOnLeft) || (aiVisible && sidebarOnRight) ? 0 : 8)
+        // kurth: aquí había 8 pt a cada lado sin barra lateral ni agente. Sin nada a un lado, la
+        // página llega hasta la orilla (Kurth, 24 sep): en reposo no se ve marco y el tema aparece
+        // solo donde se abre la barra lateral o el agente. En la esquina de la ventana,
+        // KurthChrome.pageShape toma el radio de la ventana.
     }
 
     @ViewBuilder
