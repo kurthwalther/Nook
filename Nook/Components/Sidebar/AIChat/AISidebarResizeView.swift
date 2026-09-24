@@ -22,7 +22,7 @@ struct AISidebarResizeView: View {
     @StateObject private var dragLockManager = DragLockManager.shared
     @State private var dragSessionID: String = UUID().uuidString
 
-    private let minWidth: CGFloat = 260
+    private let minWidth: CGFloat = 234 // kurth: 10 % más angosto que 260 (Kurth, 24 sep)
     private let maxWidth: CGFloat = 520
 
     private var aiSitsOnRight: Bool {

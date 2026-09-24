@@ -150,6 +150,9 @@ struct KurthAgentChat: View {
         .padding(.vertical, 24)
     }
 
+    /// 2 pt menos que el cuerpo de Nook (13), por pedido de Kurth el 24 sep.
+    static let tamañoDeTexto: CGFloat = 11
+
     @ViewBuilder
     private func burbuja(_ mensaje: KurthAgentService.Mensaje) -> some View {
         switch mensaje.autor {
@@ -157,7 +160,7 @@ struct KurthAgentChat: View {
             HStack {
                 Spacer(minLength: 32)
                 Text(mensaje.texto)
-                    .font(NookDesign.Font.body)
+                    .font(.system(size: Self.tamañoDeTexto))
                     .foregroundStyle(Color.primary.opacity(0.9))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
@@ -170,11 +173,17 @@ struct KurthAgentChat: View {
                     filaDeHerramienta(herramienta)
                 }
                 if !mensaje.texto.isEmpty {
-                    Text(mensaje.texto)
-                        .font(NookDesign.Font.body)
+                    KurthMarkdownText(texto: mensaje.texto, tamaño: Self.tamañoDeTexto)
                         .foregroundStyle(Color.primary.opacity(0.9))
-                        .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        // Los enlaces de la respuesta se abren en el Peek de Nook (la vista previa
+                        // flotante sobre la ventana), no en una pestaña nueva ni en el navegador del
+                        // sistema (Kurth, 24 sep). Desde el Peek se puede abrir como pestaña.
+                        .environment(\.openURL, OpenURLAction { url in
+                            browserManager.peekManager.presentExternalURL(
+                                url, from: browserManager.tabs.selectedSession(in: windowState))
+                            return .handled
+                        })
                 } else if mensaje.enCurso && mensaje.herramientas.isEmpty {
                     puntosDeEspera
                 }
