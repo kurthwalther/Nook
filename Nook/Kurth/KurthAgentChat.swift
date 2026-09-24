@@ -315,9 +315,8 @@ struct KurthAgentChat: View {
             }
         case .agente:
             VStack(alignment: .leading, spacing: 8) {
-                ForEach(mensaje.herramientas) { herramienta in
-                    filaDeHerramienta(herramienta)
-                }
+                // Una línea con lo que hace, las herramientas y los segundos (KurthAgentActividad).
+                KurthAgentActividad(mensaje: mensaje)
                 if !mensaje.texto.isEmpty {
                     KurthMarkdownText(texto: mensaje.texto, tamaño: Self.tamañoDeTexto)
                         .foregroundStyle(Color.primary.opacity(0.9))
@@ -335,57 +334,9 @@ struct KurthAgentChat: View {
                                 url, from: browserManager.tabs.selectedSession(in: windowState))
                             return .handled
                         })
-                } else if mensaje.enCurso && mensaje.herramientas.isEmpty {
-                    puntosDeEspera
                 }
             }
         }
-    }
-
-    private func filaDeHerramienta(_ herramienta: KurthAgentService.Herramienta) -> some View {
-        HStack(spacing: 7) {
-            Image(systemName: iconoDe(herramienta))
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(herramienta.falló ? Color.red.opacity(0.8) : Color.primary.opacity(0.5))
-                .frame(width: 14)
-            Text(herramienta.titulo)
-                .font(NookDesign.Font.caption)
-                .foregroundStyle(Color.primary.opacity(herramienta.terminada ? 0.5 : 0.75))
-                .lineLimit(1)
-                .truncationMode(.middle)
-            if !herramienta.terminada {
-                ProgressView().controlSize(.mini).scaleEffect(0.7)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(NookDesign.Surface.fill.opacity(0.6))
-        .clipShape(NookDesign.Radius.shape(NookDesign.Radius.sm))
-    }
-
-    private func iconoDe(_ herramienta: KurthAgentService.Herramienta) -> String {
-        if herramienta.falló { return "exclamationmark.triangle" }
-        switch herramienta.kind {
-        case "read": return "doc.text"
-        case "edit": return "pencil"
-        case "execute": return "terminal"
-        case "search": return "magnifyingglass"
-        case "fetch": return "arrow.down.circle"
-        case "think": return "bubble.left.and.bubble.right"
-        default: return herramienta.terminada ? "checkmark" : "gearshape"
-        }
-    }
-
-    private var puntosDeEspera: some View {
-        HStack(spacing: 4) {
-            ForEach(0..<3, id: \.self) { _ in
-                Circle()
-                    .fill(Color.primary.opacity(0.3))
-                    .frame(width: 5, height: 5)
-            }
-        }
-        .padding(.vertical, 4)
     }
 
     private var vistaDelPlan: some View {

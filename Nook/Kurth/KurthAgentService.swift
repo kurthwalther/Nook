@@ -50,6 +50,8 @@ final class KurthAgentService {
         var hora = Date()
         /// Lo que Kurth señaló con este mensaje (resúmenes para los chips del globo).
         var señalados: [String]?
+        /// Cuánto trabajó el agente en este turno, para "Trabajó 15 s". Nil en los guardados antes.
+        var duracion: TimeInterval?
     }
 
     /// Algo que Kurth agregó con «+» o arrastrando a la caja: va con el próximo mensaje y se
@@ -484,8 +486,8 @@ final class KurthAgentService {
             case .toolStarted(let id, let titulo, let kind):
                 self.actualizarHerramienta(id: id, titulo: titulo, kind: kind, estado: "in_progress")
 
-            case .toolUpdated(let id, let estadoNuevo):
-                self.actualizarHerramienta(id: id, titulo: nil, kind: nil, estado: estadoNuevo)
+            case .toolUpdated(let id, let estadoNuevo, let titulo):
+                self.actualizarHerramienta(id: id, titulo: titulo, kind: nil, estado: estadoNuevo)
 
             case .plan(let pasos):
                 self.plan = pasos
@@ -556,6 +558,7 @@ final class KurthAgentService {
     private func cerrarTurno() {
         if let indice = indiceDelTurno {
             mensajes[indice].enCurso = false
+            mensajes[indice].duracion = Date().timeIntervalSince(mensajes[indice].hora)
             // Un turno que no dijo nada y no usó nada no aporta: se quita para no dejar una
             // burbuja vacía cuando el usuario cancela.
             if mensajes[indice].texto.isEmpty && mensajes[indice].herramientas.isEmpty {

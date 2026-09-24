@@ -106,7 +106,9 @@ enum KurthACPEvent: Sendable {
     /// El agente empezó a usar una herramienta.
     case toolStarted(id: String, title: String, kind: String)
     /// Esa herramienta cambió de estado ("pending", "in_progress", "completed", "failed").
-    case toolUpdated(id: String, status: String)
+    /// `title`: el adaptador lo manda de nuevo cuando ya tiene la entrada completa (al empezar,
+    /// una terminal se llama "Terminal"; después, el comando).
+    case toolUpdated(id: String, status: String, title: String?)
     /// El plan de trabajo que el agente publica y va actualizando.
     case plan([String])
     /// Los comandos que el agente ofrece («/model», «/context», y cada skill del usuario).
@@ -562,7 +564,8 @@ final class KurthACPClient {
                                   kind: update["kind"]?.stringValue ?? "other"))
         case "tool_call_update":
             onEvent?(.toolUpdated(id: update["toolCallId"]?.stringValue ?? "",
-                                  status: update["status"]?.stringValue ?? "unknown"))
+                                  status: update["status"]?.stringValue ?? "unknown",
+                                  title: update["title"]?.stringValue))
         case "available_commands_update":
             let comandos = (update["availableCommands"]?.arrayValue ?? []).compactMap { c -> KurthACPCommand? in
                 guard let name = c["name"]?.stringValue else { return nil }
