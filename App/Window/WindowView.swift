@@ -345,7 +345,10 @@ struct WindowView: View {
     private func AISidebar() -> some View {
         let handleAlignment: Alignment = nookSettings.sidebarPosition == .left ? .leading : .trailing
         
-        SidebarAIChat()
+        // kurth: el panel es el agente de línea de comandos (KurthAgentChat), no SidebarAIChat,
+        // que hablaba con APIs de pago por token. SidebarAIChat sigue en el proyecto, sin
+        // montar, hasta que esto lleve tiempo probado: volver es cambiar esta línea.
+        KurthAgentChat()
             .frame(width: windowState.aiSidebarWidth)
             .overlay(alignment: handleAlignment) {
                 AISidebarResizeView()
