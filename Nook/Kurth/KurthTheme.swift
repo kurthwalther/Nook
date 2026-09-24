@@ -31,8 +31,10 @@ struct KurthTheme: Codable, Equatable {
     var kind: KurthThemeMath.Kind = .free
     /// Luminosidad fija de los presets (kind == .lightness).
     var lightness = 0.5
-    /// Opacidad de la superficie del tema sobre lo de atrás (1 = sólida). 0.75 ≈ el sidebar de
-    /// Superconductor que Kurth tomó de referencia (76 %, medido el 23 sep).
+    /// Opacidad de la superficie del tema sobre el vidrio (1 = sólida). 0.75 ≈ el sidebar de
+    /// Superconductor, la referencia de Kurth: #F8F8F9 con un alfa aparente de 0.76 sobre el
+    /// vidrio del sistema, no sobre un difuminado sin color. Transmite muy poco (5 de 255 entre
+    /// fondo negro y blanco); medido el 23 sep.
     var opacity = 0.75
     var grain = 0.0
     /// El accentHex que tenía el Space al guardar. Normalmente es el primario; al guardar por

@@ -21,8 +21,10 @@
 //  tinte ya no sigue a la opacidad (en Zen sí): va fija en `tintStrength` y el color se ajusta
 //  con la posición en el lienzo. Kurth, 23 sep: "al máximo sigue transparente".
 //  La base es blanca en claro (con el gris de ventana, #ECECEC, el tema blanco salía #F6F6F6) y
-//  el fondo de ventana en oscuro. Referencia medida: el sidebar de Superconductor es #F8F8F9 al
-//  76 % sobre un difuminado sin color.
+//  el fondo de ventana en oscuro. Referencia medida: el sidebar de Superconductor es #F8F8F9 con
+//  un alfa aparente de 0.76, pero sobre el vidrio del sistema CON su capa de color, no sobre un
+//  difuminado pelado. Por eso casi no transmite: cambia 5 de 255 entre fondo negro y blanco. El
+//  equivalente aquí es opacidad 0.75 con kurth.windowMaterialTint en 1 (ver KurthVibrancy).
 //
 
 import SwiftUI
