@@ -21,7 +21,10 @@ struct SidebarHeader: View {
 
     var body: some View {
         VStack(spacing: NookDesign.Spacing.sectionGap) {
-            if nookSettings.topBarAddressView {
+            // kurth: con la barra flotante, la fila de "ocultar barra lateral" y "agente" sobra: los
+            // dos botones ya están en la barra de la página (Kurth, 24 sep). Sin ellos la fila
+            // quedaba vacía, así que se va completa.
+            if nookSettings.topBarAddressView && !KurthChrome.floatingTopBar {
                 windowControls
             }
 
