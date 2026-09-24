@@ -26,8 +26,8 @@ enum KurthMCPTools {
     static let settings: [Setting] = [
         Setting(key: "kurth.windowMaterial", type: "string", defaultValue: "sidebar",
                 info: "Material del difuminado detrás de la ventana: " + KurthVibrancy.materials.keys.sorted().joined(separator: ", ")),
-        Setting(key: "kurth.windowMaterialTint", type: "bool", defaultValue: false,
-                info: "true = conservar el color propio del material; false = solo el difuminado (el color lo pone el tema)"),
+        Setting(key: "kurth.windowMaterialTint", type: "number", defaultValue: 1.0,
+                info: "Cuánto del color propio del material se conserva (0–1). Es lo que hace que el vidrio se vea claro sobre cualquier fondo: en 0 queda el difuminado crudo y la ventana toma la luminancia de lo de atrás"),
         Setting(key: "kurth.pageRadius", type: "number", defaultValue: 8.0,
                 info: "Radio de las esquinas de la página en pt (8 = concéntrico con la ventana de 16)"),
         Setting(key: "kurth.pageShadow", type: "number", defaultValue: 0.24,
