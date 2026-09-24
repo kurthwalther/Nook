@@ -7,22 +7,21 @@
 //
 //  El ajuste existía desde antes de esta rama: NookSettingsService lo guarda en
 //  "settings.appearanceMode", Ajustes → Appearance lo ofrece y nuestro selector de tema también.
-//  Lo que no existía era quien lo aplicara — en todo el repo no había una sola referencia a
-//  NSAppearance. El valor se guardaba, el botón se pintaba como elegido, se publicaba
-//  .appearanceModeChanged, y ahí terminaba todo: la ventana se quedaba con la apariencia del
-//  sistema eligieras lo que eligieras. Kurth lo notó el 23 sep: puso Sistema con la Mac en
-//  oscuro y Nook siguió en claro. Antes de eso me despistó a mí, que leí "dark" en el ajuste
-//  guardado y di por hecho que la ventana estaba en oscuro sin mirarla.
+//  Upstream lo aplicaba con un preferredColorScheme por ventana en WindowView, no por app. Eso
+//  tiene un defecto que se puede medir: SwiftUI no suelta la ventana cuando el valor vuelve a
+//  nil. Con el Mac en oscuro: nil → negro, .light → blanco, nil otra vez → sigue blanco. Por eso
+//  Kurth veía que de Claro a Sistema no pasaba nada y que en Sistema no se ponía oscuro — la
+//  ventana quedaba clavada en el último modo concreto que hubiera tocado. Se quitó de WindowView
+//  y el modo se aplica aquí, a NSApp.
 //
 //  Se aplica a NSApp: las ventanas sin apariencia propia heredan la de la app, así que con una
 //  línea quedan también los menús, los paneles y las ventanas que se abran después. `nil`
 //  significa seguir al sistema, y seguirlo en vivo si el Mac cambia de modo.
 //
 //  Medido el 23 sep con una ventana de prueba aparte: cambiar NSApp.appearance en vivo ya
-//  actualiza solo el colorScheme de SwiftUI, los colores dinámicos de AppKit y el vidrio. Aun
-//  así se fuerza un redibujo de cada ventana, porque Kurth ve que la barra lateral flotante a
-//  veces no cambia hasta que algo más la toca. Es barato (solo ocurre al cambiar el ajuste) y
-//  no depende de que la causa sea esa.
+//  actualiza solo el colorScheme de SwiftUI, los colores dinámicos de AppKit y el vidrio, y sí
+//  revierte al volver a nil. El redibujo de refresh() se queda porque es barato y solo corre al
+//  cambiar el ajuste.
 //
 
 import AppKit

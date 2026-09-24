@@ -163,7 +163,11 @@ struct WindowView: View {
         .environmentObject(browserManager.gradientColorManager)
         .environmentObject(browserManager.splitManager)
         .environmentObject(hoverSidebarManager)
-        .preferredColorScheme(resolvedColorScheme)
+        // kurth: el modo lo aplica KurthAppearance con NSApp.appearance. Aquí había un
+        // preferredColorScheme por ventana que no revierte: medido el 23 sep, pasar de .light a
+        // nil deja la ventana en claro para siempre (con el Mac en oscuro: nil → negro, .light →
+        // blanco, nil otra vez → sigue blanco). Ese era el "de claro a sistema no pasa nada".
+        // Ver Nook/Kurth/KurthAppearance.swift.
         .kurthWindowShape() // kurth: la esquina real de la ventana, para radios concéntricos
     }
 
@@ -180,14 +184,6 @@ struct WindowView: View {
             browserManager.gradientColorManager.transition(to: gradient)
         } else {
             browserManager.gradientColorManager.setImmediate(gradient)
-        }
-    }
-
-    private var resolvedColorScheme: ColorScheme? {
-        switch nookSettings.appearanceMode {
-        case .light: return .light
-        case .dark: return .dark
-        case .system: return nil  // Follow system appearance
         }
     }
 
