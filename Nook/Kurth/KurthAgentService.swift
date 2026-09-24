@@ -85,12 +85,13 @@ final class KurthAgentService {
     /// Modelo, esfuerzo, modo y rápido, tal como los publica el agente (ver KurthACPConfigOption).
     private(set) var opciones: [KurthACPConfigOption] = []
 
-    /// Lo que el usuario eligió de modelo, esfuerzo y rápido; se vuelve a aplicar en cada sesión.
-    /// El modo de permisos NO se guarda a propósito: vuelve a Manual, como en el CLI. Un "sin
-    /// permisos" pegado entre sesiones es justo lo que aprovecharía una página con instrucciones
-    /// escondidas para el agente.
+    /// Modelo, esfuerzo, rápido y permisos de la última sesión; se vuelven a aplicar en cada una.
+    /// Los permisos antes volvían a Manual a propósito (un "sin permisos" pegado es lo que
+    /// aprovecharía una página con instrucciones escondidas); Kurth pidió el 24 sep que se recuerde
+    /// todo, sabiendo el riesgo.
     private static let claveOpciones = "kurth.agentOptions"
-    private static let opcionesQueSeRecuerdan: Set<String> = ["model", "effort", "fast"]
+    /// En este orden al aplicarlas: del modelo dependen las demás (con Sonnet no existe "fast").
+    private static let opcionesQueSeRecuerdan = ["model", "effort", "fast", "mode"]
 
     func cambiarOpcion(_ id: String, a valor: String) {
         if Self.opcionesQueSeRecuerdan.contains(id) {
@@ -105,13 +106,23 @@ final class KurthAgentService {
         }
     }
 
+    private func recordarOpciones(_ opciones: [KurthACPConfigOption]) {
+        // Mientras arranca, las opciones son las de fábrica hasta que aplicarOpcionesGuardadas pone
+        // las del usuario: guardarlas ahí borraría lo de la última sesión.
+        guard estado != .arrancando else { return }
+        var elegidas = UserDefaults.standard.dictionary(forKey: Self.claveOpciones) as? [String: String] ?? [:]
+        for opcion in opciones where Self.opcionesQueSeRecuerdan.contains(opcion.id) {
+            elegidas[opcion.id] = opcion.currentValue
+        }
+        UserDefaults.standard.set(elegidas, forKey: Self.claveOpciones)
+    }
+
     private func aplicarOpcionesGuardadas() async {
         var elegidas = UserDefaults.standard.dictionary(forKey: Self.claveOpciones) as? [String: String] ?? [:]
         // Si el usuario no ha elegido esfuerzo en el panel, arranca en bajo: el panel es para
         // preguntas rápidas y en xhigh Opus se pone a verificar (24 sep: 17 s para resumir una nota).
         if elegidas["effort"] == nil { elegidas["effort"] = "low" }
-        // El modelo primero: de él dependen las demás (con Sonnet no existe "fast").
-        for id in ["model", "effort", "fast"] {
+        for id in Self.opcionesQueSeRecuerdan {
             guard let valor = elegidas[id], let opcion = cliente.configOptions.first(where: { $0.id == id }),
                   opcion.currentValue != valor,
                   opcion.choices.contains(where: { $0.value == valor }) else { continue }
@@ -425,6 +436,9 @@ final class KurthAgentService {
             case .configChanged(let nuevas):
                 self.opciones = nuevas
                 self.modoActual = self.cliente.currentModeId
+                // Cualquier cambio cuenta como "lo último": también el que hace el propio agente
+                // (p. ej. salir del modo Plan).
+                self.recordarOpciones(nuevas)
             }
         }
 
