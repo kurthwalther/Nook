@@ -15,6 +15,14 @@ Detalle de Zen en `kurth/plan-zen.md`.
 3. Guardar la conversación del chat al cerrar Nook.
 4. Memoria (Zen motor-02 → motor-03), después iCloud fase 1.
 
+## Señalar (24 sep) — instalado, falta que Kurth pruebe el modo caja
+
+Cajas libres (⌘⇧M), selección como chip, marcas del agente (highlight, point_to,
+clear_highlights) con chips 📍, persistencia por dirección. Verificado: marcas del agente con nota,
+anillo de guía y que las guardadas vuelven al abrir la página. **No probado con el mouse:** el
+modo caja (arrastrar → recorte + texto + elementos → chip → mensaje con imagen). Diseño en
+kurth/diseño-señalar.md.
+
 ## Copiloto en el navegador (24 sep) ✅
 
 Herramientas nuevas del MCP (KurthCopilot.swift + KurthCopilot.js + KurthDialogs.swift), todas con
