@@ -31,15 +31,12 @@ struct KurthEmptyPage: View {
     }
 }
 
-/// El espacio de la URL cuando no hay pestaña: escribes una dirección o una búsqueda y se abre
-/// en una pestaña nueva, igual que desde la paleta (CommandPaletteView.selectSuggestion:
-/// normalizeURL con el buscador de los ajustes). Sin sugerencias: para eso está ⌘T.
+/// El espacio de la URL cuando no hay pestaña: se ve como el campo de la barra, pero al tocarlo
+/// abre la paleta flotante de Nook (la misma de ⌘T y de "New Tab"), con sus sugerencias. Antes
+/// era un campo de texto en línea, y Kurth no lo quiso así (24 sep): la paleta ya existe.
 struct KurthAddressInput: View {
-    @EnvironmentObject var browserManager: BrowserManager
-    @Environment(BrowserWindowState.self) private var windowState
-
-    @State private var texto = ""
-    @FocusState private var enfocado: Bool
+    @Environment(CommandPalette.self) private var commandPalette
+    @State private var alPasar = false
 
     static let width: CGFloat = 300
 
@@ -48,25 +45,17 @@ struct KurthAddressInput: View {
             Image(systemName: "magnifyingglass")
                 .font(NookDesign.Font.caption)
                 .foregroundStyle(.secondary)
-            TextField("Busca o escribe una dirección", text: $texto)
-                .textFieldStyle(.plain)
+            Text("Busca o escribe una dirección")
                 .font(NookDesign.Font.body)
-                .focused($enfocado)
-                .onSubmit(abrir)
+                .foregroundStyle(alPasar ? .primary : .secondary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)
         .frame(width: Self.width, height: KurthTopBarView.capsuleHeight)
         .contentShape(Capsule())
-        .onTapGesture { enfocado = true }
-        .onAppear { enfocado = true }
-    }
-
-    private func abrir() {
-        let limpio = texto.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !limpio.isEmpty else { return }
-        let plantilla = browserManager.nookSettings?.resolvedSearchEngineTemplate ?? SearchProvider.google.queryTemplate
-        guard let url = URL(string: normalizeURL(limpio, queryTemplate: plantilla)) else { return }
-        browserManager.tabs.open(url: url, in: windowState, placement: .newTab)
-        texto = ""
+        .onTapGesture { commandPalette.open() }
+        .onHoverTracking { alPasar = $0 }
+        .animation(NookDesign.Motion.quick, value: alPasar)
     }
 }
