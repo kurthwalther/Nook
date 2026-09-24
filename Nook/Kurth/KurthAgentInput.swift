@@ -39,10 +39,11 @@ struct KurthAgentInput: View {
     /// Hay algo arrastrándose encima de la caja.
     @State private var soltando = false
 
-    /// Los controles redondos miden 28 y la caja los rodea con 6: radio 20 = 14 + 6, concéntrico.
+    /// Los controles redondos miden 28 y la caja los rodea con 6. El concéntrico sería 20 (14 + 6);
+    /// Kurth lo prefirió en 16 (24 sep).
     private let control: CGFloat = 28
     private let holgura: CGFloat = 6
-    private var forma: RoundedRectangle { RoundedRectangle(cornerRadius: 20, style: .continuous) }
+    private var forma: RoundedRectangle { RoundedRectangle(cornerRadius: 16, style: .continuous) }
 
     var body: some View {
         caja
