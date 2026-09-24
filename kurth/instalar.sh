@@ -6,14 +6,28 @@ set -euo pipefail
 REPO=${0:A:h:h}
 DD=~/Library/Developer/Xcode/DerivedData/Nook-kurth   # fuera de ~/Documents: iCloud rompe codesign
 APP=$DD/Build/Products/Release/Nook.app
-IDENTIDAD=7878A148379AF0DCC33F248744CD43BDAA8DC56C    # Apple Development de Kurth, equipo VRFY7KFRYP
-export DEVELOPER_DIR=${DEVELOPER_DIR:-$HOME/Downloads/Xcode-beta.app/Contents/Developer}
+
+# Xcode: la beta donde esté (la Air la tiene en ~/Downloads, la Pro en /Applications).
+if [[ -z ${DEVELOPER_DIR:-} ]]; then
+  for CANDIDATO in $HOME/Downloads/Xcode-beta.app /Applications/Xcode-beta.app /Applications/Xcode.app; do
+    [[ -d $CANDIDATO ]] && { export DEVELOPER_DIR=$CANDIDATO/Contents/Developer; break }
+  done
+fi
+
+# Firma: cualquier Apple Development válida de esta Mac (los equipos no son los mismos
+# en las dos máquinas). Se puede forzar con IDENTIDAD=<hash> EQUIPO=<team>.
+if [[ -z ${IDENTIDAD:-} ]]; then
+  LINEA=$(security find-identity -v -p codesigning | grep "Apple Development" | grep -v CSSMERR | head -1)
+  [[ -n $LINEA ]] || { echo "❌ no hay ningún certificado Apple Development válido en esta Mac"; exit 1 }
+  IDENTIDAD=$(echo $LINEA | awk '{print $2}')
+  EQUIPO=$(echo $LINEA | sed -E 's/.*\(([A-Z0-9]+)\)".*/\1/')
+fi
 
 cd $REPO
 inicio=$(date +%s)
 xcodebuild -scheme Nook -configuration Release -arch arm64 -derivedDataPath $DD \
   ENABLE_CODE_COVERAGE=NO CLANG_COVERAGE_MAPPING=NO \
-  CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=VRFY7KFRYP CODE_SIGN_IDENTITY=$IDENTIDAD \
+  CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=$EQUIPO CODE_SIGN_IDENTITY=$IDENTIDAD \
   CODE_SIGN_ENTITLEMENTS="$REPO/Nook/Nook-CI.entitlements" \
   CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO OTHER_CODE_SIGN_FLAGS="--timestamp=none" \
   > /tmp/nook-kurth-build.log 2>&1 || { grep -E "error:" /tmp/nook-kurth-build.log | head -20; echo "❌ no compiló (log: /tmp/nook-kurth-build.log)"; exit 1; }
