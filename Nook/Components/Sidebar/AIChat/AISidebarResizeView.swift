@@ -93,6 +93,7 @@ struct AISidebarResizeView: View {
                         .onEnded { _ in
                             isResizing = false
                             dragLockManager.endDrag(ownerID: dragSessionID)
+                            KurthPrefs.shared.aiSidebarWidth = windowState.aiSidebarWidth // kurth: se recuerda entre reinicios
 
                             if isHovering {
                                 NSCursor.resizeLeftRight.set()

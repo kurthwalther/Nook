@@ -67,6 +67,7 @@ struct SidebarResizeView: View {
                     withAnimation(NookDesign.Motion.spring) {
                         browserManager.updateSidebarWidth(defaultWidth, for: windowState)
                     }
+                    browserManager.saveSidebarWidthToDefaults() // kurth
                 }
                 .onHoverTracking { hovering in
                     guard windowState.isSidebarVisible || kurthEnFlotante else { return } // kurth
@@ -115,6 +116,9 @@ struct SidebarResizeView: View {
                             isResizing = false
                             HoverSidebarManager.kurthRedimensionando = false // kurth
                             dragLockManager.endDrag(ownerID: dragSessionID)
+                            // kurth: upstream solo guardaba el ancho al ocultar o mostrar la barra; si
+                            // la redimensionabas y cerrabas Nook, volvía al de antes.
+                            browserManager.saveSidebarWidthToDefaults()
 
                             if isHovering {
                                 NSCursor.resizeLeftRight.set()

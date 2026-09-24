@@ -22,8 +22,17 @@ final class KurthPrefs {
         didSet { UserDefaults.standard.set(pageRadius, forKey: "kurth.pageRadius") }
     }
 
+    /// Ancho del panel del agente: el último que dejó Kurth al soltar el borde, 330 la primera vez.
+    /// Es un valor de usuario, no un ajuste: se lee al crear cada ventana (BrowserManager.setupWindowState)
+    /// y se escribe en AISidebarResizeView. Upstream lo traía fijo en 350 y lo olvidaba al reiniciar.
+    var aiSidebarWidth: Double {
+        didSet { UserDefaults.standard.set(aiSidebarWidth, forKey: "kurth.aiSidebarWidth") }
+    }
+
     private init() {
         let saved = UserDefaults.standard.double(forKey: "kurth.pageRadius")
         pageRadius = saved > 0 ? saved : 8
+        let ancho = UserDefaults.standard.double(forKey: "kurth.aiSidebarWidth")
+        aiSidebarWidth = ancho > 0 ? ancho : 330
     }
 }

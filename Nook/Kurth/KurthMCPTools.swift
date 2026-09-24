@@ -50,6 +50,8 @@ enum KurthMCPTools {
                 info: "Dejar que WebKit extienda el color del borde superior de la página bajo la barra"),
         Setting(key: "kurth.scrollPocket", type: "bool", defaultValue: false,
                 info: "Mostrar el scroll pocket de WebKit (el velo al hacer scroll bajo la barra)"),
+        Setting(key: "kurth.aiSidebarWidth", type: "number", defaultValue: 330.0,
+                info: "Ancho del panel del agente en pt (234–520). Es el último que dejó el usuario al soltar el borde; cambiarlo aquí aplica a las ventanas que se abran después"),
     ]
 
     static let tools: [AIToolDefinition] = [
@@ -122,6 +124,7 @@ enum KurthMCPTools {
         let defaults = UserDefaults.standard
         if value is NSNull {
             if key == "kurth.pageRadius" { KurthPrefs.shared.pageRadius = setting.defaultValue as? Double ?? 8 }
+            if key == "kurth.aiSidebarWidth" { KurthPrefs.shared.aiSidebarWidth = setting.defaultValue as? Double ?? 330 }
             defaults.removeObject(forKey: key)
             return nil
         }
@@ -131,7 +134,11 @@ enum KurthMCPTools {
             defaults.set(b, forKey: key)
         case "number":
             guard let n = (value as? NSNumber)?.doubleValue else { return "\(key): se espera un número" }
-            if key == "kurth.pageRadius" { KurthPrefs.shared.pageRadius = n } else { defaults.set(n, forKey: key) }
+            switch key {
+            case "kurth.pageRadius": KurthPrefs.shared.pageRadius = n
+            case "kurth.aiSidebarWidth": KurthPrefs.shared.aiSidebarWidth = n
+            default: defaults.set(n, forKey: key)
+            }
         default:
             guard let s = value as? String else { return "\(key): se espera texto" }
             if key == "kurth.windowMaterial", KurthVibrancy.materials[s] == nil { return "\(key): material desconocido" }

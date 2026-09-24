@@ -928,6 +928,7 @@ class BrowserManager: ObservableObject {
         windowState.sidebarContentWidth = max(sidebarWidth - 16, 0)
         windowState.isSidebarVisible = isSidebarVisible
         windowState.savedSidebarWidth = savedSidebarWidth
+        windowState.aiSidebarWidth = KurthPrefs.shared.aiSidebarWidth // kurth: el último ancho del panel del agente
         windowState.isCommandPaletteVisible = false
         windowState.sidebarPiPController = SidebarPiPController()
         // NSWindow reference is set by WindowFocusBridge.attach in ContentView
