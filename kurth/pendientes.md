@@ -5,15 +5,14 @@ Detalle de Zen en `kurth/plan-zen.md`.
 
 ## Ahora
 
-1. **Página sin pestañas** (bug visual, Kurth 24 sep): sin pestañas, el área de la página queda
-   transparente con "Ah, peace." y la barra muestra atrás/recargar sin página. Propuesta: la
-   tarjeta de página de siempre con un buscador al centro, y en la barra solo lo que sirve sin
-   página (sidebar y chat). Espera OK de Kurth.
-2. **Modelo y esfuerzo en el panel del agente**, como el CLI. El adaptador los da en
-   `configOptions` de `session/new`: mode (default/acceptEdits/plan/auto/bypassPermissions),
-   model (default, opus[1m], claude-fable-5-1[1m], sonnet, haiku), effort
-   (default/low/medium/high/xhigh/max), fast (on/off). Se cambian con
-   `session/set_config_option`.
+1. **Página sin pestañas** — hecho, falta que Kurth lo vea: "Ah, peace." de vuelta, la barra
+   lateral se queda a la vista aunque esté oculta, y el espacio de la URL es un campo listo para
+   escribir. Sin página, la barra ya no muestra atrás ni recargar. (Kurth descartó la tarjeta
+   con buscador al centro.)
+2. ✅ **Modelo y esfuerzo en el panel del agente** (`b12f15b`): menú "Opus 5.5 · xhigh" con
+   modelo, esfuerzo, permisos y rápido; se recuerdan salvo los permisos.
+3. **Sonido de error al enviar en el chat** — arreglo instalado (`b12f15b`, el campo ya no se
+   desactiva a media pulsación); falta que Kurth confirme que ya no suena.
 
 ## Agente (chat lateral por ACP)
 

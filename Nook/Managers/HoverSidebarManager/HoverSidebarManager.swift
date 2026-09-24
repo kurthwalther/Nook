@@ -106,7 +106,9 @@ final class HoverSidebarManager: ObservableObject {
               let activeState = registry.activeWindow else { return }
 
         // kurth: mientras se edita el tema, la barra se queda a la vista (se ve el tema aplicado).
-        if KurthThemeStore.shared.editingSpaceID != nil, !activeState.isSidebarVisible {
+        // Y sin pestañas también, como en Arc: de ahí sale lo siguiente (KurthEmptyPage.swift).
+        let sinPestañas = browserManager?.tabs.selectedSession(in: activeState) == nil
+        if KurthThemeStore.shared.editingSpaceID != nil || sinPestañas, !activeState.isSidebarVisible {
             reveal()
             return
         }

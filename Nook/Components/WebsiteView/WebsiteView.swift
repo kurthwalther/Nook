@@ -238,7 +238,7 @@ struct WebsiteView: View {
                     // Removed SwiftUI contextMenu - it intercepts ALL right-clicks
                     // WKWebView's willOpenMenu will handle context menus for images
                 } else {
-                    KurthEmptyPage() // kurth: transparente, el tema se ve continuo
+                    KurthEmptyPage() // kurth: "Ah, peace." con la barra lateral y la URL listas (KurthEmptyPage.swift)
                 }
             }
             VStack {

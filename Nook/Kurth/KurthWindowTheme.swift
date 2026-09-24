@@ -70,21 +70,3 @@ struct KurthHoverTheme: View {
         .allowsHitTesting(false)
     }
 }
-
-/// Página vacía (sin pestaña) transparente: el tema se ve continuo en vez de reiniciar un
-/// segundo degradado dentro de la tarjeta, que además iba a radio 12 contra 8 de la página.
-struct KurthEmptyPage: View {
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "moon.stars")
-                .font(NookDesign.Font.display)
-                .blendMode(.overlay)
-            Text("Ah, peace.")
-                .font(NookDesign.Font.title)
-                .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.7) : Color.black.opacity(0.6))
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}

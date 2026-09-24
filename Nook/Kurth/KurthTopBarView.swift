@@ -174,30 +174,33 @@ struct KurthTopBarView: View {
             }
             .kurthBarIcon(size: iconSize)
 
-            Button("Go Back", systemImage: "chevron.backward") {
-                if let webView = windowWebView { webView.goBack() } else { session?.goBack() }
-            }
-            .kurthBarIcon(size: iconSize)
-            .disabled(!(session?.canGoBack ?? false))
-            .contextMenu {
-                NavigationHistoryContextMenu(historyType: .back, windowState: windowState)
-            }
-
-            // Adelante solo existe cuando hay a dónde ir.
-            if session?.canGoForward == true {
-                Button("Go Forward", systemImage: "chevron.forward") {
-                    if let webView = windowWebView { webView.goForward() } else { session?.goForward() }
+            // Sin página no hay a dónde ir ni qué recargar: solo queda el botón del sidebar.
+            if hasPage {
+                Button("Go Back", systemImage: "chevron.backward") {
+                    if let webView = windowWebView { webView.goBack() } else { session?.goBack() }
                 }
                 .kurthBarIcon(size: iconSize)
+                .disabled(!(session?.canGoBack ?? false))
                 .contextMenu {
-                    NavigationHistoryContextMenu(historyType: .forward, windowState: windowState)
+                    NavigationHistoryContextMenu(historyType: .back, windowState: windowState)
                 }
-                .transition(.opacity.combined(with: .scale(scale: 0.8)))
-            }
 
-            // En "tinted" recargar va junto a las flechas; en "capsules", dentro de la cápsula.
-            if !isCapsules {
-                reloadButton.kurthBarIcon(size: iconSize)
+                // Adelante solo existe cuando hay a dónde ir.
+                if session?.canGoForward == true {
+                    Button("Go Forward", systemImage: "chevron.forward") {
+                        if let webView = windowWebView { webView.goForward() } else { session?.goForward() }
+                    }
+                    .kurthBarIcon(size: iconSize)
+                    .contextMenu {
+                        NavigationHistoryContextMenu(historyType: .forward, windowState: windowState)
+                    }
+                    .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                }
+
+                // En "tinted" recargar va junto a las flechas; en "capsules", dentro de la cápsula.
+                if !isCapsules {
+                    reloadButton.kurthBarIcon(size: iconSize)
+                }
             }
         }
         .animation(NookDesign.Motion.quick, value: session?.canGoForward)
@@ -229,6 +232,15 @@ struct KurthTopBarView: View {
                     hostText(tab)
                 }
                 .padding(.horizontal, NookDesign.Spacing.md)
+            }
+        } else {
+            // Sin pestaña, el espacio de la URL es un campo listo para escribir (KurthEmptyPage.swift).
+            // Además ocupa el centro: vacío, SwiftUI le ignoraba el .frame(maxWidth: .infinity) y los
+            // botones se juntaban en medio.
+            if isCapsules {
+                KurthAddressInput().modifier(KurthGlass(tint: glassTint))
+            } else {
+                KurthAddressInput().background(Color.primary.opacity(0.06), in: Capsule())
             }
         }
     }
