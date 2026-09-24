@@ -328,11 +328,8 @@ final class KurthACPClient {
 
     /// Abre la conversación. Tarda varios segundos: conviene llamarla al abrir la pestaña del
     /// agente, no al mandar el primer mensaje.
-    func newSession(cwd: URL, mcpServers: [KurthACPMCPServer] = []) async throws {
-        let result = try await request("session/new", params: .object([
-            "cwd": .string(cwd.path),
-            "mcpServers": .array(mcpServers.map(\.payload)),
-        ]), timeout: 120)
+    func newSession(cwd: URL, mcpServers: [KurthACPMCPServer] = [], instrucciones: String? = nil) async throws {
+        let result = try await request("session/new", params: .object(parametrosDeSesion(cwd: cwd, mcpServers: mcpServers, instrucciones: instrucciones)), timeout: 120)
 
         guard let id = result["sessionId"]?.stringValue else {
             throw KurthACPError.badResponse("session/new sin sessionId")
@@ -344,12 +341,10 @@ final class KurthACPClient {
     /// Retoma en un proceso nuevo del agente una conversación que ya existía, sin repetirla
     /// (`session/resume`; claude-agent-acp la anuncia en `sessionCapabilities.resume`). Probado
     /// el 24 sep: 3.8 s, cero mensajes repetidos y el agente conserva el contexto.
-    func resumeSession(_ id: String, cwd: URL, mcpServers: [KurthACPMCPServer] = []) async throws {
-        let result = try await request("session/resume", params: .object([
-            "sessionId": .string(id),
-            "cwd": .string(cwd.path),
-            "mcpServers": .array(mcpServers.map(\.payload)),
-        ]), timeout: 120)
+    func resumeSession(_ id: String, cwd: URL, mcpServers: [KurthACPMCPServer] = [], instrucciones: String? = nil) async throws {
+        var params = parametrosDeSesion(cwd: cwd, mcpServers: mcpServers, instrucciones: instrucciones)
+        params["sessionId"] = .string(id)
+        let result = try await request("session/resume", params: .object(params), timeout: 120)
         sessionId = id
         leerModos(result)
     }
@@ -370,6 +365,19 @@ final class KurthACPClient {
         }
         if id == "mode" { currentModeId = value }
         onEvent?(.configChanged(configOptions))
+    }
+
+    /// `instrucciones` se suman a las de Claude Code, no las reemplazan: claude-agent-acp lee
+    /// `_meta.systemPrompt` como opciones del preset "claude_code" (acp-agent.js, append).
+    private func parametrosDeSesion(cwd: URL, mcpServers: [KurthACPMCPServer], instrucciones: String?) -> [String: KurthJSON] {
+        var params: [String: KurthJSON] = [
+            "cwd": .string(cwd.path),
+            "mcpServers": .array(mcpServers.map(\.payload)),
+        ]
+        if let instrucciones {
+            params["_meta"] = .object(["systemPrompt": .object(["append": .string(instrucciones)])])
+        }
+        return params
     }
 
     private func leerModos(_ result: KurthJSON) {

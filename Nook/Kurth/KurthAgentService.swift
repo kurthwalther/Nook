@@ -237,10 +237,10 @@ final class KurthAgentService {
                 if let anterior = self.sesionParaRetomar, anterior.carpeta == self.carpetaDeTrabajo.path {
                     do {
                         try await self.cliente.resumeSession(anterior.id, cwd: self.carpetaDeTrabajo,
-                                                             mcpServers: Self.mcpDeNook())
+                                                             mcpServers: Self.mcpDeNook(), instrucciones: Self.instrucciones)
                     } catch {
                         try await self.cliente.newSession(cwd: self.carpetaDeTrabajo,
-                                                          mcpServers: Self.mcpDeNook())
+                                                          mcpServers: Self.mcpDeNook(), instrucciones: Self.instrucciones)
                         // Lo de arriba sigue en pantalla, pero el agente ya no lo recuerda: se dice.
                         if !self.mensajes.isEmpty {
                             self.mensajes.append(Mensaje(autor: .agente, texto: "No pude retomar la conversación anterior; desde aquí es una nueva y no recuerdo lo de arriba."))
@@ -248,7 +248,7 @@ final class KurthAgentService {
                     }
                 } else {
                     try await self.cliente.newSession(cwd: self.carpetaDeTrabajo,
-                                                      mcpServers: Self.mcpDeNook())
+                                                      mcpServers: Self.mcpDeNook(), instrucciones: Self.instrucciones)
                 }
                 self.sesionParaRetomar = nil
                 await self.aplicarOpcionesGuardadas()
@@ -483,6 +483,22 @@ final class KurthAgentService {
 
     /// El MCP de desarrollo de Nook, si el usuario lo tiene encendido. Es lo que le permite al
     /// agente manejar el propio navegador; sin el token, el servidor no está sirviendo.
+    /// Se suman a las instrucciones de Claude Code en cada sesión del panel. Sin esto, para "¿de qué
+    /// trata esta nota?" el agente buscaba en internet y descargaba la página con WebFetch (lento,
+    /// sin la sesión del usuario, y se colgaba en sitios con muro de pago) en vez de leer la pestaña
+    /// (Kurth, 24 sep, en robbreport.com).
+    static let instrucciones = """
+        Estás en el panel lateral de Nook, el navegador del usuario. Cada mensaje trae como \
+        resource_link la pestaña que está viendo. Cuando hable de "esta página", "esta nota" o \
+        "aquí", usa las herramientas del servidor MCP nook sobre esa pestaña: read_page para leerla \
+        (usa su sesión: sus logins y muros de pago), snapshot para ver qué se puede tocar, y click, \
+        type_text, press_key, hover, scroll y select_option para actuar; handle_dialog si aparece \
+        un diálogo. No uses WebFetch ni WebSearch para la página que ya tiene abierta: son más \
+        lentos y no tienen su sesión. Para trabajo que no deba interrumpirlo, abre tu propia \
+        pestaña con open_tab (queda en segundo plano) y ciérrala con close_tab al terminar. Antes \
+        de publicar, comprar, borrar o enviar datos personales, pregúntale.
+        """
+
     private static func mcpDeNook() -> [KurthACPMCPServer] {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let archivo = base.appendingPathComponent("com.gstudios.nook/dev-mcp-token")
