@@ -15,6 +15,10 @@ import NookWeb
 /// Uses a global mouse-move monitor to handle edge hover, including slight overshoot
 /// beyond the window's left boundary.
 final class HoverSidebarManager: ObservableObject {
+    /// kurth: mientras se arrastra la orilla de la barra flotante, no se esconde aunque el mouse
+    /// salga de su área (SidebarResizeView con kurthEnFlotante).
+    @MainActor static var kurthRedimensionando = false
+
     // MARK: - Published State
     @Published var isOverlayVisible: Bool = false
 
@@ -108,7 +112,8 @@ final class HoverSidebarManager: ObservableObject {
         // kurth: mientras se edita el tema, la barra se queda a la vista (se ve el tema aplicado).
         // Y sin pestañas también, como en Arc: de ahí sale lo siguiente (KurthEmptyPage.swift).
         let sinPestañas = browserManager?.tabs.selectedSession(in: activeState) == nil
-        if KurthThemeStore.shared.editingSpaceID != nil || sinPestañas, !activeState.isSidebarVisible {
+        if KurthThemeStore.shared.editingSpaceID != nil || sinPestañas || Self.kurthRedimensionando,
+           !activeState.isSidebarVisible {
             reveal()
             return
         }

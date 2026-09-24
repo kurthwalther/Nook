@@ -55,7 +55,15 @@ struct SidebarHoverOverlayView: View {
                         .background { KurthHoverTheme() }
                         .clipShape(KurthChrome.overlayShape)
                         .nookElevation(.floating)
-                        .alwaysArrowCursor()
+                        // kurth: la orilla se puede arrastrar para cambiar el ancho, como la fija.
+                        // La flecha forzada deja libre esa franja; si no, peleaba con el cursor.
+                        .alwaysArrowCursor(leavingFree: nookSettings.sidebarPosition == .left ? .maxXEdge : .minXEdge, width: 14)
+                        .overlay(alignment: nookSettings.sidebarPosition == .left ? .trailing : .leading) {
+                            SidebarResizeView(kurthEnFlotante: true)
+                                .frame(maxHeight: .infinity)
+                                .environmentObject(browserManager)
+                                .environment(windowState)
+                        }
                         .padding(nookSettings.sidebarPosition == .left ? .leading : .trailing, horizontalInset)
                         .padding(.vertical, verticalInset)
                         .transition(
