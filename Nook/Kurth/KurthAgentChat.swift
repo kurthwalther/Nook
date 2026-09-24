@@ -33,6 +33,9 @@ struct KurthAgentChat: View {
     @FocusState private var escribiendo: Bool
     /// Si este panel ya se contó como abierto en el servicio (ver onAppear / onDisappear).
     @State private var panelRegistrado = false
+    /// Alto del encabezado y de la caja de abajo, para desvanecer la conversación antes de ellos.
+    @State private var altoArriba: CGFloat = 0
+    @State private var altoAbajo: CGFloat = 0
 
     var body: some View {
         // El encabezado y la caja van como safeAreaInset, igual que el panel anterior: en un
@@ -42,16 +45,7 @@ struct KurthAgentChat: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .safeAreaInset(edge: .top) {
                 encabezado
-                    .padding(.bottom, 10)
-                    // Igual que la franja de abajo: lo que pasa por detrás al hacer scroll se difumina,
-                    // y se desvanece hacia abajo para no marcar un corte (Kurth, 24 sep).
-                    .background {
-                        Rectangle()
-                            .fill(.regularMaterial)
-                            .mask(LinearGradient(stops: [.init(color: .black, location: 0.88), .init(color: .clear, location: 1)],
-                                                 startPoint: .top, endPoint: .bottom))
-                            .ignoresSafeArea(edges: .top)
-                    }
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { altoArriba = $0 }
             }
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 8) {
@@ -64,15 +58,7 @@ struct KurthAgentChat: View {
                     cajaDeTexto
                 }
                 .padding(.top, 10)
-                // La franja de abajo difumina lo que pasa por detrás al hacer scroll, como las barras
-                // de las apps de Apple; se desvanece hacia arriba para no marcar un corte.
-                .background {
-                    Rectangle()
-                        .fill(.regularMaterial)
-                        .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.12)],
-                                             startPoint: .top, endPoint: .bottom))
-                        .ignoresSafeArea(edges: .bottom)
-                }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { altoAbajo = $0 }
             }
             .safeAreaPadding(.top, 8)
             .safeAreaPadding(.bottom, 8)
@@ -150,6 +136,19 @@ struct KurthAgentChat: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.top, 4)
+            }
+            // El texto se desvanece antes de llegar al encabezado y a la caja de abajo, en vez de pasar
+            // por detrás de ellos. Una franja con material se salía del marco redondeado de la
+            // ventana (Kurth, 24 sep); la máscara usa el alto real de cada uno.
+            .mask {
+                VStack(spacing: 0) {
+                    Color.clear.frame(height: altoArriba)
+                    LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: 16)
+                    Color.black
+                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 16)
+                    Color.clear.frame(height: altoAbajo)
+                }
+                .ignoresSafeArea()
             }
             // Al abrir el panel se ve lo último, no el principio de la conversación guardada.
             .defaultScrollAnchor(.bottom)
@@ -324,6 +323,7 @@ struct KurthAgentChat: View {
         .padding(12)
         .background(superficieOpaca)
         .clipShape(NookDesign.Radius.shape(NookDesign.Radius.lg))
+        .shadow(color: .black.opacity(0.08), radius: 6, y: 1)
         .overlay {
             NookDesign.Radius.shape(NookDesign.Radius.lg)
                 .stroke(Color.primary.opacity(0.12), lineWidth: 1)
@@ -385,16 +385,18 @@ struct KurthAgentChat: View {
         .padding(.vertical, 10)
         .background(superficieOpaca)
         .clipShape(NookDesign.Radius.shape(NookDesign.Radius.lg))
+        // Se separa del panel con una sombra suave y un borde apenas visible, como un campo que
+        // flota; antes lo separaba la franja de material, que se salía del marco de la ventana.
+        .overlay(NookDesign.Radius.shape(NookDesign.Radius.lg).strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.08), radius: 6, y: 1)
         .padding(.horizontal, 8)
     }
 
     /// Fondo de la caja de texto y de la tarjeta de permiso. Antes era Surface.fill (negro al 4.5 %)
-    /// y los mensajes se leían a través al hacer scroll (Kurth, 24 sep). Opaco, con el mismo tinte.
+    /// y los mensajes se leían a través al hacer scroll (Kurth, 24 sep). Opaco y blanco puro (oscuro
+    /// en modo oscuro): sobre el panel con tema blanco, un tinte gris lo dejaba casi invisible.
     private var superficieOpaca: some View {
-        ZStack {
-            Color(nsColor: .textBackgroundColor)
-            NookDesign.Surface.fill
-        }
+        Color(nsColor: .textBackgroundColor)
     }
 
     /// Dónde trabaja el agente. Se muestra siempre, no escondido en ajustes: es lo que decide
