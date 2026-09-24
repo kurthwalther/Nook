@@ -12,6 +12,10 @@ import WebKit
 
 extension AppDelegate {
     func applicationWillFinishLaunching(_ notification: Notification) {
+        // Sistema / Claro / Oscuro: el ajuste existía y nadie lo aplicaba (ver KurthAppearance).
+        // El delegado no está aislado al actor principal en modo Swift 5, y esto ya corre en él.
+        MainActor.assumeIsolated { KurthAppearance.start() }
+
         // Enciende el muestreo de color de la parte alta de la página (_sampledPageTopColor),
         // el mismo que usa Safari para su barra. Viene apagado (0). Cada pestaña copia esta
         // configuración al crearse, así que tiene que estar antes de la primera.
