@@ -102,6 +102,25 @@ enum KurthCopilot {
             parameters: ["type": "object", "properties": ["tabId": tabId], "required": ["tabId"]]
         ),
         AIToolDefinition(
+            name: "highlight",
+            description: "Señálale algo a Kurth en la página: resalta un texto (texto), un elemento (ref de snapshot) o una zona (caja {x,y,w,h} en px del viewport), con una nota corta opcional. Hace scroll hasta ahí y devuelve el id de la marca: enlázala en tu respuesta como [aquí](kurth-marca:ID) para que él la pueda tocar y verla. Las marcas se quedan en la página.",
+            parameters: ["type": "object", "properties": [
+                "tabId": tabId, "texto": ["type": "string"], "ref": ref,
+                "caja": ["type": "object", "properties": ["x": ["type": "number"], "y": ["type": "number"], "w": ["type": "number"], "h": ["type": "number"]]],
+                "nota": ["type": "string"],
+            ]]
+        ),
+        AIToolDefinition(
+            name: "point_to",
+            description: "Modo guía: pone un anillo que pulsa sobre un elemento para enseñarle a Kurth dónde dar clic, sin darlo tú. Con nota corta opcional.",
+            parameters: ["type": "object", "properties": ["tabId": tabId, "ref": ref, "nota": ["type": "string"]], "required": ["ref"]]
+        ),
+        AIToolDefinition(
+            name: "clear_highlights",
+            description: "Borra marcas de la página: autor \"agente\" (por defecto), \"tu\" (las de Kurth) o \"todas\".",
+            parameters: ["type": "object", "properties": ["tabId": tabId, "autor": ["type": "string", "enum": ["agente", "tu", "todas"]]]]
+        ),
+        AIToolDefinition(
             name: "list_tabs",
             description: "Todas las pestañas de todas las ventanas con su id, título, dirección, si están a la vista y si están cargadas.",
             parameters: ["type": "object", "properties": [:] as [String: Any]]
@@ -188,6 +207,16 @@ enum KurthCopilot {
                     return texto("No pude codificar la captura.", error: true)
                 }
                 return ["content": [["type": "image", "data": jpeg.base64EncodedString(), "mimeType": "image/jpeg"]]]
+            case "highlight":
+                return texto(try await marcar(args, destino, pulso: false))
+            case "point_to":
+                return texto(try await marcar(args, destino, pulso: true))
+            case "clear_highlights":
+                let autor = (args["autor"] as? String) ?? "agente"
+                let quien: String? = autor == "todas" ? nil : autor
+                let quedan = try await js(destino.webView, "return window.__kurth.marcas.limpiar(autor)", ["autor": quien ?? NSNull()])
+                KurthSenalar.shared.olvidarMarcas(url: destino.session.url, autor: quien)
+                return texto("Marcas borradas. Quedan \(quedan ?? 0) en la página.")
             case "read_page":
                 let max = (args["max"] as? NSNumber)?.intValue ?? 40_000
                 return texto(try await leer(destino.webView, url: destino.session.url, max: max))
@@ -462,6 +491,53 @@ enum KurthCopilot {
             if tipo == .keyDown { webView.keyDown(with: e) } else { webView.keyUp(with: e) }
         }
     }
+
+    // MARK: - Señalar (marcas del agente)
+
+    private static func marcar(_ args: [String: Any], _ d: Destino, pulso: Bool) async throws -> String {
+        let id = "a" + UUID().uuidString.prefix(6).lowercased()
+        let nota = (args["nota"] as? String) ?? ""
+        var guardar: [String: Any] = ["id": id, "autor": "agente", "nota": nota]
+        let señalado: Any?
+        if pulso {
+            let ref = try requerido(args, "ref")
+            señalado = try await js(d.webView, "return window.__kurth.marcas.elemento({id, autor: 'agente', ref, nota, pulso: true})",
+                                    ["id": id, "ref": ref, "nota": nota])
+        } else if let texto = args["texto"] as? String, !texto.isEmpty {
+            señalado = try await js(d.webView, "return window.__kurth.marcas.texto({id, autor: 'agente', texto, nota})",
+                                    ["id": id, "texto": texto, "nota": nota])
+            guardar.merge(["tipo": "texto", "cita": texto]) { $1 }
+        } else if let ref = args["ref"] as? String, !ref.isEmpty {
+            señalado = try await js(d.webView, "return window.__kurth.marcas.elemento({id, autor: 'agente', ref, nota})",
+                                    ["id": id, "ref": ref, "nota": nota])
+            // Un elemento se guarda como zona: su caja amarrada al contenedor que la envuelve.
+            let ancla = try? await js(d.webView, "return window.__kurth.marcas.anclaDe(ref)", ["ref": ref])
+            guardar.merge(["tipo": "caja", "ancla": ancla ?? [:]]) { $1 }
+        } else if let c = args["caja"] as? [String: Any] {
+            let v = { (k: String) in (c[k] as? NSNumber)?.doubleValue ?? 0 }
+            let datos = try await js(d.webView, """
+                const a = window.__kurth.marcas.contenido({x, y, w, h}).ancla;
+                window.__kurth.marcas.caja({id, autor: 'agente', x, y, w, h, nota});
+                return a;
+                """, ["id": id, "x": v("x"), "y": v("y"), "w": v("w"), "h": v("h"), "nota": nota])
+            señalado = "zona"
+            guardar.merge(["tipo": "caja", "ancla": datos ?? [:]]) { $1 }
+        } else {
+            throw KurthCopilotError("Dime qué señalar: texto, ref o caja.")
+        }
+        _ = try? await js(d.webView, "return window.__kurth.marcas.destellar(id)", ["id": id])
+        KurthSenalar.shared.registrarMarca(id, tab: d.itemID)
+        if !pulso, guardar["tipo"] != nil { KurthSenalar.shared.guardarMarca(url: d.session.url, guardar) }
+        return "Marca \(id) puesta en \(señalado ?? "la página"). Enlázala en tu respuesta como [aquí](kurth-marca:\(id))."
+    }
+
+    /// Para KurthSenalar: corre código en el mundo del copiloto, instalándolo si hace falta.
+    static func enMarcas(_ webView: WKWebView, _ codigo: String, _ args: [String: Any] = [:]) async throws -> Any? {
+        try await instalar(en: webView)
+        return try await js(webView, codigo, args)
+    }
+
+    static var fuenteDelScript: String? { fuente.isEmpty ? nil : fuente }
 
     // MARK: - Leer (Defuddle)
 

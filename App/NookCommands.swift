@@ -392,6 +392,11 @@ struct NookCommands: Commands {
                 }
                 .modifier(dynamicShortcut(.customizeSpaceGradient))
                 .disabled(windowRegistry.activeWindow?.spaceID == nil)
+                // kurth: "Señalar" — arrastrar una caja sobre la página para mostrársela al agente.
+                Button("Señalar en la página") {
+                    if let window = windowRegistry.activeWindow { KurthSenalar.shared.alternarModoCaja(en: window) }
+                }
+                .keyboardShortcut("m", modifiers: [.command, .shift])
                 Button("Space Settings...") {
                     browserManager.showSpaceSettings()
                 }

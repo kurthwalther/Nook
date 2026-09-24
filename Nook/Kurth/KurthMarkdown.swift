@@ -73,7 +73,10 @@ struct KurthMarkdownText: View {
     /// Negritas, itálicas, `código`, ~~tachado~~ y [enlaces](url) dentro de una línea.
     private func enLinea(_ s: String) -> Text {
         let opciones = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        let atribuido = (try? AttributedString(markdown: s, options: opciones)) ?? AttributedString(s)
+        var atribuido = (try? AttributedString(markdown: s, options: opciones)) ?? AttributedString(s)
+        // Las marcas del agente ([aquí](kurth-marca:ID)) llevan 📍: son chips que llevan a la página.
+        let marcas = atribuido.runs.compactMap { $0.link?.scheme == "kurth-marca" ? $0.range : nil }
+        for rango in marcas.reversed() { atribuido.insert(AttributedString("📍"), at: rango.lowerBound) }
         return Text(atribuido).font(.system(size: tamaño, weight: .regular))
     }
 

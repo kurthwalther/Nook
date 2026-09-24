@@ -14,6 +14,18 @@ final class FocusableWKWebView: WKWebView, SessionWebView {
         .jpeg, .png, .gif, .bmp, .tiff, .webP, .heic, .heif
     ]
 
+    // kurth: el script del copiloto y el canal de marcas (Señalar) antes de la primera carga.
+    // En layout no bastaba: una vista sin ventana (la pestaña del agente en segundo plano) nunca
+    // pasa por layout, y la página no podía pedir sus marcas guardadas.
+    override init(frame: CGRect, configuration: WKWebViewConfiguration) {
+        super.init(frame: frame, configuration: configuration)
+        KurthSenalar.instalar(en: self)
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+    }
+
     deinit {
         // MEMORY LEAK FIX: Detach bridge deterministically. The primary cleanup now
         // happens in PageSession.cleanupClone(_:), but this is a safety net.

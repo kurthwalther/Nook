@@ -277,6 +277,8 @@ struct WindowView: View {
                             }
                         }
                         .zIndex(2000)
+                    KurthSenalarOverlay() // kurth: modo caja de "Señalar" (⌘⇧M)
+                        .zIndex(2200)
                     KurthTopBarView()
                         .environmentObject(browserManager)
                         .environment(windowState)

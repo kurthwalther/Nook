@@ -160,7 +160,298 @@
     return role + (name ? ' ' + q(name) : '');
   }
 
+
+  // ── Señalar: marcas de Kurth (azul) y del agente (ámbar) ─────────────────────────────────
+  // Cajas, resaltados de texto, notas, pines numerados y el anillo de guía. Todo vive en un
+  // shadow root cerrado dentro de <kurth-capa>, en coordenadas del documento: se mueve con el
+  // scroll solo y la página no lo puede estilizar ni leer. El texto se resalta con la API de
+  // resaltado de CSS (CSS.highlights), que no toca el HTML. Diseño: kurth/diseño-señalar.md.
+  const COLOR = { tu: '#0A84FF', agente: '#FF9F0A' };
+  const registro = new Map();   // id → { autor, tipo, nodos: [], rango?, elemento?, caja?, nota }
+  let capa = null, sombra = null;
+
+  function asegurarCapa() {
+    if (capa && capa.isConnected) return sombra;
+    capa = document.createElement('kurth-capa');
+    capa.style.cssText = 'position:absolute;top:0;left:0;width:0;height:0;z-index:2147483647;pointer-events:none;';
+    sombra = capa.attachShadow({ mode: 'closed' });
+    const estilo = document.createElement('style');
+    estilo.textContent = `
+      .caja{position:absolute;border:2px solid var(--c);border-radius:8px;background:color-mix(in srgb,var(--c) 10%,transparent);box-sizing:border-box}
+      .nota{position:absolute;width:max-content;max-width:260px;font:500 12px -apple-system,system-ui;color:#fff;background:var(--c);
+            padding:5px 9px;border-radius:9px;box-shadow:0 2px 8px rgba(0,0,0,.18);line-height:1.35}
+      .pin{position:absolute;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:var(--c);color:#fff;
+           font:700 11px -apple-system,system-ui;display:flex;align-items:center;justify-content:center;
+           box-shadow:0 1px 4px rgba(0,0,0,.25);pointer-events:auto;cursor:pointer}
+      .pulso{position:absolute;border:3px solid var(--c);border-radius:12px;animation:pulso 1.2s ease-out infinite}
+      @keyframes pulso{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--c) 55%,transparent)}100%{box-shadow:0 0 0 14px transparent}}
+      .destello{animation:destello .9s ease-out 2}
+      @keyframes destello{0%,100%{opacity:1}50%{opacity:.25}}`;
+    sombra.appendChild(estilo);
+    document.documentElement.appendChild(capa);
+    // ::highlight tiene que vivir en el documento: el shadow root no pinta texto de afuera.
+    if (!document.getElementById('kurth-resaltados')) {
+      const h = document.createElement('style');
+      h.id = 'kurth-resaltados';
+      h.textContent = '::highlight(kurth-tu){background-color:rgba(10,132,255,.28)} ::highlight(kurth-agente){background-color:rgba(255,159,10,.38)}';
+      (document.head || document.documentElement).appendChild(h);
+    }
+    return sombra;
+  }
+
+  const docRect = (r) => ({ x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height });
+
+  function nodo(clase, autor, css) {
+    const n = document.createElement('div');
+    n.className = clase;
+    n.style.cssText = css;
+    n.style.setProperty('--c', COLOR[autor] || COLOR.agente);
+    asegurarCapa().appendChild(n);
+    return n;
+  }
+
+  function colocar(n, x, y, w, h) {
+    n.style.left = x + 'px'; n.style.top = y + 'px';
+    if (w !== undefined) { n.style.width = w + 'px'; n.style.height = h + 'px'; }
+  }
+
+  function repintarResaltados() {
+    if (typeof Highlight !== 'function' || !CSS.highlights) return;
+    for (const autor of ['tu', 'agente']) {
+      const rangos = [...registro.values()].filter((m) => m.autor === autor && m.rango).map((m) => m.rango);
+      if (rangos.length) CSS.highlights.set('kurth-' + autor, new Highlight(...rangos));
+      else CSS.highlights.delete('kurth-' + autor);
+    }
+  }
+
+  // Dibuja nota y pin junto a un rectángulo del documento.
+  function adornos(m, id, rect, numero, nota) {
+    if (numero) {
+      const pin = nodo('pin', m.autor, '');
+      pin.textContent = String(numero);
+      colocar(pin, rect.x - 10, rect.y - 10);
+      pin.addEventListener('click', () => destellar(id));
+      m.nodos.push(pin);
+    }
+    if (nota) {
+      const n = nodo('nota', m.autor, '');
+      n.textContent = nota;
+      colocar(n, rect.x, rect.y + rect.h + 6);
+      m.nodos.push(n);
+    }
+  }
+
+  // Busca un texto en la página (sin distinguir espacios ni mayúsculas) y devuelve un Range.
+  // Con prefijo/sufijo desempata entre apariciones repetidas.
+  function buscarTexto(exacto, prefijo, sufijo) {
+    const norm = (t) => t.replace(/\s+/g, ' ').toLowerCase();
+    const buscado = norm(clean(exacto));
+    if (!buscado) return null;
+    const nodos = [], tramos = [];
+    let todo = '';
+    const tw = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT);
+    for (let t = tw.nextNode(); t; t = tw.nextNode()) {
+      if (!t.parentElement || SKIP.has(t.parentElement.tagName) || t.parentElement.closest('kurth-capa')) continue;
+      const v = norm(t.nodeValue);
+      if (!v.trim()) continue;
+      nodos.push(t); tramos.push([todo.length, todo.length + v.length]); todo += v;
+    }
+    let mejor = -1, puntos = -1;
+    for (let i = todo.indexOf(buscado); i !== -1; i = todo.indexOf(buscado, i + 1)) {
+      let p = 0;
+      if (prefijo && todo.slice(Math.max(0, i - 60), i).includes(norm(prefijo).slice(-20))) p++;
+      if (sufijo && todo.slice(i + buscado.length, i + buscado.length + 60).includes(norm(sufijo).slice(0, 20))) p++;
+      if (p > puntos) { puntos = p; mejor = i; }
+    }
+    if (mejor < 0) return null;
+    const fin = mejor + buscado.length;
+    const ubicar = (pos) => {
+      for (let k = 0; k < nodos.length; k++) {
+        const [a, b] = tramos[k];
+        if (pos >= a && pos <= b) return [nodos[k], Math.min(pos - a, nodos[k].nodeValue.length)];
+      }
+      return null;
+    };
+    const ini = ubicar(mejor), fn = ubicar(fin);
+    if (!ini || !fn) return null;
+    const r = document.createRange();
+    r.setStart(ini[0], ini[1]); r.setEnd(fn[0], fn[1]);
+    return r;
+  }
+
+  function contexto(rango, n) {
+    const todo = (document.body && document.body.innerText) || '';
+    const exacto = clean(rango.toString());
+    const i = todo.replace(/\s+/g, ' ').indexOf(exacto);
+    const plano = todo.replace(/\s+/g, ' ');
+    return i < 0 ? { prefijo: '', sufijo: '' }
+      : { prefijo: plano.slice(Math.max(0, i - n), i), sufijo: plano.slice(i + exacto.length, i + exacto.length + n) };
+  }
+
+  // Selector CSS corto para volver a encontrar un contenedor.
+  function selectorDe(el) {
+    if (!el || el === document.body) return 'body';
+    if (el.id && /^[A-Za-z][\w-]*$/.test(el.id)) return '#' + el.id;
+    const partes = [];
+    for (let e = el; e && e !== document.body && partes.length < 6; e = e.parentElement) {
+      let s = e.tagName.toLowerCase();
+      if (e.id && /^[A-Za-z][\w-]*$/.test(e.id)) { partes.unshift('#' + e.id); break; }
+      const hermanos = e.parentElement ? Array.from(e.parentElement.children).filter((h) => h.tagName === e.tagName) : [];
+      if (hermanos.length > 1) s += ':nth-of-type(' + (hermanos.indexOf(e) + 1) + ')';
+      partes.unshift(s);
+    }
+    return partes.join(' > ');
+  }
+
+  function destellar(id) {
+    const m = registro.get(id);
+    if (!m) return false;
+    const objetivo = m.elemento || (m.rango && m.rango.startContainer.parentElement);
+    if (objetivo) objetivo.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    else if (m.caja) window.scrollTo({ top: Math.max(0, m.caja.y - innerHeight / 3), behavior: 'smooth' });
+    for (const n of m.nodos) { n.classList.remove('destello'); void n.offsetWidth; n.classList.add('destello'); }
+    return true;
+  }
+
+  const marcas = {
+    // Caja libre: x, y, w, h en coordenadas del viewport (px CSS).
+    caja(o) {
+      const rect = { x: o.x + scrollX, y: o.y + scrollY, w: o.w, h: o.h };
+      const m = { autor: o.autor, tipo: 'caja', nodos: [], caja: rect, nota: o.nota || '' };
+      registro.set(o.id, m);
+      const n = nodo('caja', o.autor, '');
+      colocar(n, rect.x, rect.y, rect.w, rect.h);
+      m.nodos.push(n);
+      adornos(m, o.id, rect, o.numero, o.nota);
+      return o.id;
+    },
+    elemento(o) {
+      const e = element(o.ref);
+      const r = docRect(e.getBoundingClientRect());
+      const pad = 4;
+      const rect = { x: r.x - pad, y: r.y - pad, w: r.w + pad * 2, h: r.h + pad * 2 };
+      const m = { autor: o.autor, tipo: o.pulso ? 'pulso' : 'elemento', nodos: [], elemento: e, caja: rect, nota: o.nota || '' };
+      registro.set(o.id, m);
+      const n = nodo(o.pulso ? 'pulso' : 'caja', o.autor, '');
+      colocar(n, rect.x, rect.y, rect.w, rect.h);
+      m.nodos.push(n);
+      adornos(m, o.id, rect, o.numero, o.nota);
+      return describe(e);
+    },
+    texto(o) {
+      const rango = buscarTexto(o.texto, o.prefijo, o.sufijo);
+      if (!rango) throw new Error('No encontré ese texto en la página: ' + q(cut(o.texto, 60)));
+      const m = { autor: o.autor, tipo: 'texto', nodos: [], rango, nota: o.nota || '' };
+      registro.set(o.id, m);
+      repintarResaltados();
+      const primero = rango.getClientRects()[0] || rango.getBoundingClientRect();
+      adornos(m, o.id, docRect(primero), o.numero, o.nota);
+      return clean(rango.toString());
+    },
+    destellar,
+    quitar(id) {
+      const m = registro.get(id);
+      if (!m) return false;
+      m.nodos.forEach((n) => n.remove());
+      registro.delete(id);
+      repintarResaltados();
+      return true;
+    },
+    limpiar(autor) {
+      for (const [id, m] of [...registro]) if (!autor || m.autor === autor) marcas.quitar(id);
+      return registro.size;
+    },
+    lista() { return [...registro].map(([id, m]) => ({ id, autor: m.autor, tipo: m.tipo, nota: m.nota })); },
+
+    // Ancla de un elemento (su caja en el viewport), para guardarlo como zona.
+    anclaDe(ref) {
+      const r = element(ref).getBoundingClientRect();
+      return marcas.contenido({ x: r.left - 4, y: r.top - 4, w: r.width + 8, h: r.height + 8 }).ancla;
+    },
+
+    // Lo que queda dentro de una caja del viewport: texto, elementos con referencia e imágenes,
+    // y un ancla para volver a encontrarla (contenedor + posición relativa + texto citado).
+    contenido(o) {
+      const dentro = (r) => {
+        const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+        return cx >= o.x && cx <= o.x + o.w && cy >= o.y && cy <= o.y + o.h;
+      };
+      const textos = [];
+      const tw = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT);
+      for (let t = tw.nextNode(); t && textos.length < 400; t = tw.nextNode()) {
+        const p = t.parentElement;
+        if (!p || SKIP.has(p.tagName) || p.closest('kurth-capa') || !clean(t.nodeValue)) continue;
+        const r = document.createRange(); r.selectNodeContents(t);
+        if (Array.from(r.getClientRects()).some(dentro)) textos.push(clean(t.nodeValue));
+      }
+      const elementos = [];
+      const imagenes = [];
+      for (const el of document.querySelectorAll('*')) {
+        if (elementos.length >= 40) break;
+        if (SKIP.has(el.tagName) || el.closest('kurth-capa')) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 1 || !dentro(r)) continue;
+        if (isInteractive(el) && visible(el)) elementos.push(line(el, roleOf(el) || 'elemento', refFor(el)));
+        else if (el.tagName === 'IMG' && imagenes.length < 10) imagenes.push(clean(el.alt) || cut(el.currentSrc || el.src, 80));
+      }
+      const centro = document.elementFromPoint(o.x + o.w / 2, o.y + o.h / 2);
+      let contenedor = centro;
+      while (contenedor && contenedor !== document.body) {
+        const r = contenedor.getBoundingClientRect();
+        if (r.left <= o.x && r.top <= o.y && r.right >= o.x + o.w && r.bottom >= o.y + o.h) break;
+        contenedor = contenedor.parentElement;
+      }
+      const rc = (contenedor || document.body).getBoundingClientRect();
+      const texto = cut(textos.join(' '), 2000);
+      return {
+        texto, elementos, imagenes,
+        ancla: { selector: selectorDe(contenedor || document.body),
+                 relativa: { x: o.x - rc.left, y: o.y - rc.top, w: o.w, h: o.h },
+                 cita: cut(texto, 120), documento: { x: o.x + scrollX, y: o.y + scrollY, w: o.w, h: o.h } },
+      };
+    },
+
+    // Lo que el usuario tiene seleccionado, con contexto para re-anclarlo.
+    seleccion() {
+      const sel = getSelection();
+      if (!sel || sel.isCollapsed || !clean(sel.toString())) return null;
+      const r = sel.getRangeAt(0);
+      const c = contexto(r, 40);
+      return { texto: cut(clean(r.toString()), 2000), prefijo: c.prefijo, sufijo: c.sufijo };
+    },
+
+    // Vuelve a dibujar marcas guardadas (persistencia). Cajas: por su contenedor y posición
+    // relativa; si el contenedor ya no está, por su posición en el documento.
+    restaurar(lista) {
+      let n = 0;
+      for (const m of lista || []) {
+        if (registro.has(m.id)) continue;
+        try {
+          if (m.tipo === 'texto') { marcas.texto(Object.assign({}, m, { texto: m.cita })); n++; continue; }
+          const a = m.ancla || {};
+          let x, y;
+          const cont = a.selector && document.querySelector(a.selector);
+          if (cont && a.relativa) { const rc = cont.getBoundingClientRect(); x = rc.left + a.relativa.x; y = rc.top + a.relativa.y; }
+          else if (a.documento) { x = a.documento.x - scrollX; y = a.documento.y - scrollY; }
+          else continue;
+          const w = (a.relativa || a.documento).w, h = (a.relativa || a.documento).h;
+          marcas.caja({ id: m.id, autor: m.autor, x, y, w, h, nota: m.nota, numero: m.numero });
+          n++;
+        } catch (e) { /* la página cambió: esa marca ya no se ancla */ }
+      }
+      return n;
+    },
+  };
+
+  // Pide a Nook las marcas guardadas de esta dirección en cuanto carga la página.
+  try {
+    const h = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.kurthSenalar;
+    if (h && window.top === window) setTimeout(() => h.postMessage({ tipo: 'pedirMarcas', url: location.href }), 600);
+  } catch (e) { /* sin canal: marcas solo en vivo */ }
+
   window.__kurth = {
+    marcas,
+
     snapshot(max) {
       const out = { lines: [], max: max || 400 };
       visit(document.body || document.documentElement, out);

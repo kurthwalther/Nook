@@ -72,6 +72,11 @@ struct KurthAgentChat: View {
             .onDisappear {
                 if panelRegistrado { panelRegistrado = false; agente.panelCerrado() }
             }
+            // Si al entrar al campo hay texto seleccionado en la página, va como chip (Señalar).
+            .onChange(of: escribiendo) { _, enfocado in
+                guard enfocado else { return }
+                Task { await KurthSenalar.shared.adjuntarSeleccion(ventana: windowState, bm: browserManager) }
+            }
     }
 
     // MARK: - Encabezado
@@ -100,8 +105,24 @@ struct KurthAgentChat: View {
 
             Spacer()
 
+            if let pagina = browserManager.tabs.selectedSession(in: windowState),
+               !KurthSenalar.shared.marcasGuardadas(para: pagina.url).isEmpty {
+                Menu {
+                    Button("Borrar las del agente") { borrarMarcas("agente") }
+                    Button("Borrar las mías") { borrarMarcas("tu") }
+                    Button("Borrar todas") { borrarMarcas(nil) }
+                } label: {
+                    Image(systemName: "mappin.and.ellipse")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Marcas en esta página")
+            }
+
             Button("Limpiar", systemImage: "trash") {
                 agente.limpiar()
+                KurthSenalar.shared.reiniciarNumeros()
             }
             .labelStyle(.iconOnly)
             .buttonStyle(NookIconButtonStyle())
@@ -183,6 +204,13 @@ struct KurthAgentChat: View {
         case .usuario:
             HStack {
                 Spacer(minLength: 32)
+                VStack(alignment: .trailing, spacing: 4) {
+                ForEach(mensaje.señalados ?? [], id: \.self) { s in
+                    Label(s, systemImage: "viewfinder")
+                        .font(NookDesign.Font.caption)
+                        .foregroundStyle(Color(red: 0.04, green: 0.52, blue: 1))
+                        .lineLimit(1)
+                }
                 Text(mensaje.texto)
                     .font(.system(size: Self.tamañoDeTexto))
                     .foregroundStyle(Color.primary.opacity(0.9))
@@ -190,6 +218,7 @@ struct KurthAgentChat: View {
                     .padding(.vertical, 8)
                     .background(NookDesign.Surface.fill)
                     .clipShape(NookDesign.Radius.shape(NookDesign.Radius.md))
+                }
             }
         case .agente:
             VStack(alignment: .leading, spacing: 8) {
@@ -204,6 +233,11 @@ struct KurthAgentChat: View {
                         // flotante sobre la ventana), no en una pestaña nueva ni en el navegador del
                         // sistema (Kurth, 24 sep). Desde el Peek se puede abrir como pestaña.
                         .environment(\.openURL, OpenURLAction { url in
+                            if url.scheme == "kurth-marca" {
+                                let id = url.absoluteString.replacingOccurrences(of: "kurth-marca:", with: "")
+                                KurthSenalar.shared.irAMarca(id, ventana: windowState, bm: browserManager)
+                                return .handled
+                            }
                             browserManager.peekManager.presentExternalURL(
                                 url, from: browserManager.tabs.selectedSession(in: windowState))
                             return .handled
@@ -341,6 +375,7 @@ struct KurthAgentChat: View {
 
     private var cajaDeTexto: some View {
         VStack(spacing: 8) {
+            if !KurthSenalar.shared.referencias.isEmpty { chipsDeSeñalados }
             TextField(marcadorDeTexto, text: $texto, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(NookDesign.Font.body)
@@ -362,6 +397,16 @@ struct KurthAgentChat: View {
                 menuDeCarpeta
                 menuDeOpciones
                 Spacer()
+                Button {
+                    KurthSenalar.shared.alternarModoCaja(en: windowState)
+                } label: {
+                    Image(systemName: "viewfinder")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(KurthSenalar.shared.modoCaja == windowState.id ? Color.accentColor : Color.primary.opacity(0.5))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Señalar en la página (⌘⇧M): arrastra una caja sobre lo que quieras mostrarle")
                 if agente.estado == .trabajando {
                     Button(action: agente.cancelar) {
                         Image(systemName: "stop.circle.fill")
@@ -588,12 +633,55 @@ struct KurthAgentChat: View {
     }
 
     private var puedeEnviar: Bool {
-        agente.estado.puedeEscribir && !texto.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        agente.estado.puedeEscribir
+            && (!texto.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !KurthSenalar.shared.referencias.isEmpty)
+    }
+
+    /// Lo señalado que va con el próximo mensaje: número, resumen y × para quitarlo.
+    private var chipsDeSeñalados: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(KurthSenalar.shared.referencias) { ref in
+                    HStack(spacing: 5) {
+                        Text("\(ref.numero)")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(minWidth: 16, minHeight: 16)
+                            .background(Color(red: 0.04, green: 0.52, blue: 1), in: Circle())
+                        Image(systemName: ref.tipo == "texto" ? "text.quote" : "viewfinder")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                        Text(ref.resumen)
+                            .font(NookDesign.Font.caption)
+                            .lineLimit(1)
+                        Button {
+                            KurthSenalar.shared.quitarReferencia(ref, bm: browserManager)
+                        } label: {
+                            Image(systemName: "xmark").font(.system(size: 8, weight: .bold)).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(Color(red: 0.04, green: 0.52, blue: 1).opacity(0.10), in: Capsule())
+                }
+            }
+        }
+    }
+
+    private func borrarMarcas(_ autor: String?) {
+        guard let sesion = browserManager.tabs.selectedSession(in: windowState),
+              let webView = browserManager.getWebView(for: sesion.itemID, in: windowState.id) ?? sesion.webView else { return }
+        KurthSenalar.shared.olvidarMarcas(url: sesion.url, autor: autor)
+        Task { _ = try? await KurthCopilot.enMarcas(webView, "return window.__kurth.marcas.limpiar(autor)", ["autor": autor ?? NSNull()]) }
     }
 
     private func enviar() {
         guard puedeEnviar else { return }
-        let mensaje = texto
+        let escrito = texto.trimmingCharacters(in: .whitespacesAndNewlines)
+        let señalados = KurthSenalar.shared.tomarReferencias()
+        let mensaje = escrito.isEmpty ? "Mira lo que señalé." : escrito
         texto = ""
         let pagina = paginaActiva
         // La primera pregunta sobre una página lleva su contenido: el agente contesta sin
@@ -601,12 +689,12 @@ struct KurthAgentChat: View {
         guard let pagina, !agente.paginasConContenido.contains(pagina.uri),
               let sesion = browserManager.tabs.selectedSession(in: windowState),
               let webView = browserManager.getWebView(for: sesion.itemID, in: windowState.id) ?? sesion.webView else {
-            agente.enviar(mensaje, pagina: pagina)
+            agente.enviar(mensaje, pagina: pagina, señalados: señalados)
             return
         }
         Task {
             let contenido = await KurthCopilot.contenidoParaAgente(webView, url: sesion.url)
-            agente.enviar(mensaje, pagina: pagina, contenido: contenido)
+            agente.enviar(mensaje, pagina: pagina, contenido: contenido, señalados: señalados)
         }
     }
 }

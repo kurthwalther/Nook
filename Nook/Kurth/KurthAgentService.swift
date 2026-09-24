@@ -48,6 +48,8 @@ final class KurthAgentService {
         var herramientas: [Herramienta] = []
         var enCurso = false
         var hora = Date()
+        /// Lo que Kurth señaló con este mensaje (resúmenes para los chips del globo).
+        var señalados: [String]?
     }
 
     /// Una autorización esperando respuesta del usuario. Mientras exista, el agente está
@@ -390,11 +392,13 @@ final class KurthAgentService {
     /// misma página no lo repite. Se vacía con una sesión nueva o al limpiar.
     private(set) var paginasConContenido = Set<String>()
 
-    func enviar(_ texto: String, pagina: KurthACPResourceLink? = nil, contenido: String? = nil) {
+    func enviar(_ texto: String, pagina: KurthACPResourceLink? = nil, contenido: String? = nil,
+                señalados: [KurthSenalar.Referencia] = []) {
         let limpio = texto.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !limpio.isEmpty, estado == .listo else { return }
 
-        mensajes.append(Mensaje(autor: .usuario, texto: limpio))
+        mensajes.append(Mensaje(autor: .usuario, texto: limpio,
+                                señalados: señalados.isEmpty ? nil : señalados.map { "\($0.numero) \($0.resumen)" }))
         mensajes.append(Mensaje(autor: .agente, texto: "", enCurso: true))
         plan.removeAll()
         estado = .trabajando
@@ -404,7 +408,10 @@ final class KurthAgentService {
             do {
                 let adjuntos = contenido.flatMap { c in pagina.map { [(uri: $0.uri, texto: c)] } } ?? []
                 if let uri = pagina?.uri, contenido != nil { self.paginasConContenido.insert(uri) }
-                try await self.cliente.prompt(limpio, links: pagina.map { [$0] } ?? [], adjuntos: adjuntos)
+                let textoCompleto = señalados.isEmpty ? limpio
+                    : limpio + "\n\n" + señalados.map(KurthSenalar.descripcion).joined(separator: "\n\n")
+                try await self.cliente.prompt(textoCompleto, links: pagina.map { [$0] } ?? [], adjuntos: adjuntos,
+                                              imagenes: señalados.compactMap(\.recorte))
             } catch {
                 self.anexarAlAgente("\n\n⚠️ \(error.localizedDescription)")
             }
@@ -551,7 +558,12 @@ final class KurthAgentService {
         aparece un diálogo. Nunca uses WebFetch ni WebSearch para la página que ya tiene abierta. \
         Para trabajo que no deba interrumpirlo, abre tu propia pestaña con open_tab y ciérrala con \
         close_tab al terminar. Antes de publicar, comprar, borrar o enviar datos personales, \
-        pregúntale. Contesta muy breve: máximo unas 60 palabras, una frase de resumen y, si ayuda, \
+        pregúntale. Kurth puede señalarte cosas de la página: llegan como [Señalado N] con el \
+        texto, los elementos (@eN) y un recorte de captura. Tú también puedes señalarle: highlight \
+        marca un texto, un elemento o una zona con nota corta y te da un id; en tu respuesta \
+        enlázalo como [aquí](kurth-marca:ID) para que él lo toque y lo vea. point_to pone un \
+        anillo donde debe dar clic cuando le enseñes a hacer algo; clear_highlights borra marcas. \
+        Contesta muy breve: máximo unas 60 palabras, una frase de resumen y, si ayuda, \
         hasta 3 viñetas de una sola línea. Sin detalles técnicos, preámbulos ni cierre, salvo que \
         te pida más.
         """

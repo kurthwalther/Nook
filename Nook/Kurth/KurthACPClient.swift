@@ -395,7 +395,8 @@ final class KurthACPClient {
     @discardableResult
     /// `adjuntos`: textos que van con el mensaje como `resource` (uri + markdown). claude-agent-acp
     /// los pasa al modelo como <context ref="uri">…</context> junto con la pregunta.
-    func prompt(_ text: String, links: [KurthACPResourceLink] = [], adjuntos: [(uri: String, texto: String)] = []) async throws -> String {
+    func prompt(_ text: String, links: [KurthACPResourceLink] = [], adjuntos: [(uri: String, texto: String)] = [],
+                imagenes: [Data] = []) async throws -> String {
         guard let sessionId else { throw KurthACPError.notRunning }
         let recursos: [KurthJSON] = adjuntos.map { a in
             .object(["type": .string("resource"), "resource": .object([
@@ -403,7 +404,8 @@ final class KurthACPClient {
         }
         let result = try await request("session/prompt", params: .object([
             "sessionId": .string(sessionId),
-            "prompt": .array([.object(["type": .string("text"), "text": .string(text)])] + links.map(\.payload) + recursos),
+            "prompt": .array([.object(["type": .string("text"), "text": .string(text)])] + links.map(\.payload) + recursos
+                + imagenes.map { .object(["type": .string("image"), "mimeType": .string("image/jpeg"), "data": .string($0.base64EncodedString())]) }),
         ]), timeout: 3600)
         let reason = result["stopReason"]?.stringValue ?? "end_turn"
         onEvent?(.turnEnded(stopReason: reason))
