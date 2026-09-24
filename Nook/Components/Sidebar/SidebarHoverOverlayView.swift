@@ -50,8 +50,11 @@ struct SidebarHoverOverlayView: View {
                         .environmentObject(browserManager.gradientColorManager)
                         .environment(\.nookInsideGlass, true)
                         .frame(maxHeight: .infinity)
-                        .background { KurthHoverTheme() } // kurth: el tema también en la barra flotante
-                        .nookGlassEffect(in: KurthChrome.overlayShape) // kurth
+                        // kurth: el mismo material que la barra fija (KurthHoverTheme), no Liquid
+                        // Glass; la sombra flotante sí se queda, porque va encima de la página.
+                        .background { KurthHoverTheme() }
+                        .clipShape(KurthChrome.overlayShape)
+                        .nookElevation(.floating)
                         .alwaysArrowCursor()
                         .padding(nookSettings.sidebarPosition == .left ? .leading : .trailing, horizontalInset)
                         .padding(.vertical, verticalInset)

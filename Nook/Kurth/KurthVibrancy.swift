@@ -38,14 +38,22 @@ struct KurthVibrancy: NSViewRepresentable {
     /// Cuánto del color del material se conserva (0–1). Lo calcula `tint(forOpacity:)` desde la
     /// opacidad del tema; `kurth.windowMaterialTint`, si está definido, lo anula.
     var tint: Double = 1
+    /// .behindWindow para el fondo de la ventana (difumina lo que hay detrás de ella);
+    /// .withinWindow para la barra lateral flotante, que va encima de la página: con
+    /// .behindWindow se vería el escritorio atravesando la página.
+    var blending: NSVisualEffectView.BlendingMode = .behindWindow
 
     func makeNSView(context: Context) -> BlurredView {
         let view = BlurredView()
+        view.blendingMode = blending
         view.setTint(tint)
         return view
     }
 
-    func updateNSView(_ view: BlurredView, context: Context) { view.setTint(tint) }
+    func updateNSView(_ view: BlurredView, context: Context) {
+        if view.blendingMode != blending { view.blendingMode = blending }
+        view.setTint(tint)
+    }
 
     /// Cuánto vidrio queda debajo de la superficie, según la opacidad del tema. Una sola perilla
     /// que va de sólida (1) a vidrio claro a dejar ver lo de atrás (el mínimo), que es lo que

@@ -54,18 +54,26 @@ struct KurthWindowTheme: View {
 
 /// El tema dentro de la barra lateral que sale al pasar el mouse: la misma porción del degradado
 /// que se vería con la barra fija, porque se dibuja al tamaño de la ventana y se recorre a su
-/// posición. Va sobre el vidrio, así que la opacidad del tema también deja ver lo de atrás.
+/// posición. Debajo, el mismo material que el fondo fijo pero difuminando la página que tiene
+/// abajo (.withinWindow), así que la opacidad del tema deja ver la página, no el escritorio.
 struct KurthHoverTheme: View {
     @Environment(BrowserWindowState.self) private var windowState
     @Environment(TabsController.self) private var tabs
 
     var body: some View {
-        GeometryReader { geo in
-            let frame = geo.frame(in: .global)
-            let window = windowState.window?.contentView?.bounds.size ?? frame.size
-            KurthThemeBackground(theme: KurthWindowTheme.theme(window: windowState, tabs: tabs))
-                .frame(width: window.width, height: window.height)
-                .offset(x: -frame.minX, y: -frame.minY)
+        let theme = KurthWindowTheme.theme(window: windowState, tabs: tabs)
+        ZStack {
+            // El mismo material y el mismo vidrio que el fondo fijo (KurthWindowTheme), pero
+            // difuminando la página de abajo. Antes era Liquid Glass y no casaba con el fijo
+            // (Kurth, 24 sep: "que sea como el fijo").
+            KurthVibrancy(tint: KurthVibrancy.tint(forOpacity: theme.opacity), blending: .withinWindow)
+            GeometryReader { geo in
+                let frame = geo.frame(in: .global)
+                let window = windowState.window?.contentView?.bounds.size ?? frame.size
+                KurthThemeBackground(theme: theme)
+                    .frame(width: window.width, height: window.height)
+                    .offset(x: -frame.minX, y: -frame.minY)
+            }
         }
         .allowsHitTesting(false)
     }
