@@ -76,6 +76,8 @@ struct SpacesListItem: View {
     private var spaceDot: some View {
         Circle()
             .fill(isActive ? AnyShapeStyle(space.accentColor) : AnyShapeStyle(.tertiary))
+            // kurth: contorno tenue para que un acento blanco no desaparezca sobre un tema blanco
+            .overlay(Circle().strokeBorder(Color.primary.opacity(isActive ? 0.15 : 0), lineWidth: 0.5))
             .frame(width: isActive ? activeDotSize : dotSize, height: isActive ? activeDotSize : dotSize)
             .animation(NookDesign.Motion.standard, value: isActive)
     }
