@@ -36,9 +36,37 @@ struct KurthAgentChat: View {
     /// Alto del encabezado y de la caja de abajo, para desvanecer la conversación antes de ellos.
     @State private var altoArriba: CGFloat = 0
     @State private var altoAbajo: CGFloat = 0
-    /// Margen del panel arriba y abajo. La máscara de la conversación lo suma al alto del
-    /// encabezado y de la caja: sin él, el texto se asomaba 8 pt por detrás de "Agente".
+    /// Margen del panel abajo. La máscara de la conversación lo suma al alto de la caja: sin él,
+    /// el texto se asomaba 8 pt por detrás. Arriba ya no hay margen: el encabezado mide lo mismo
+    /// que la barra de la página y su fondo arranca en la orilla, como el de ella.
     private let margen: CGFloat = 8
+    /// La conversación ya pasó por debajo del encabezado (enciende la línea de 1 px, como en la barra).
+    @State private var desplazado = false
+    @State private var confirmaBorrar = false
+
+    // El encabezado copia la barra de la página y lee sus mismos ajustes (`kurth.*`, se cambian con
+    // clic derecho en la barra): cápsulas de vidrio aquí también, o bloque difuminado aquí también.
+    @AppStorage("kurth.barStyle") private var barStyle = "capsules"
+    @AppStorage("kurth.blurRadius") private var blurRadius = 9.0
+    @AppStorage("kurth.blurSaturation") private var blurSaturation = 1.6
+    @AppStorage("kurth.tintOpacity") private var tintOpacity = 0.72
+    @AppStorage("kurth.hairline") private var hairlineOpacity = 0.1
+    @AppStorage("kurth.capsuleBlur") private var capsuleBlur = false
+    @Environment(\.displayScale) private var displayScale
+
+    private var esCapsulas: Bool { barStyle != "tinted" }
+    /// Las alturas de KurthTopBarView: 44 deja 8 pt alrededor de cápsulas de 28; con tinte, 40.
+    private var altoDeBarra: CGFloat { esCapsulas ? 44 : KurthChrome.topBarHeight }
+    private var medidaDeIcono: CGFloat { esCapsulas ? 24 : NookDesign.Size.iconButton }
+    /// Como la barra: con tinte siempre difumina lo que pasa por detrás; con cápsulas, solo si se pidió.
+    private var conBlur: Bool { !esCapsulas || capsuleBlur }
+    /// Cuánto se ve del texto que pasa bajo el encabezado. La barra con tinte pone el color de la
+    /// página a `tintOpacity` sobre el blur; sobre el fondo liso del panel eso es lo mismo que dejar
+    /// pasar el texto a 1 − tintOpacity. Cápsulas con blur: pasa entero. Sin blur: se desvanece antes.
+    private var pasoBajoEncabezado: Double {
+        if !esCapsulas { return 1 - tintOpacity }
+        return capsuleBlur ? 1 : 0
+    }
 
     var body: some View {
         // El encabezado y la caja van como safeAreaInset, igual que el panel anterior: en un
@@ -63,8 +91,15 @@ struct KurthAgentChat: View {
                 .padding(.top, 10)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { altoAbajo = $0 }
             }
-            .safeAreaPadding(.top, margen)
             .safeAreaPadding(.bottom, margen)
+            // Borrar es empezar de cero (KurthAgentService.limpiar abre otra sesión), así que se
+            // confirma. Es la hoja del sistema: el panel es angosto y una tarjeta adentro no cabe bien.
+            .alert("¿Borrar la conversación?", isPresented: $confirmaBorrar) {
+                Button("Borrar", role: .destructive) { borrarConversacion() }
+                Button("Cancelar", role: .cancel) {}
+            } message: {
+                Text("Se borra lo que ves aquí y el agente empieza de cero: ya no recuerda esta plática.")
+            }
             .animation(NookDesign.Motion.standard, value: agente.permiso?.id)
             // Abrir y cerrar el panel enciende y apaga el agente (KurthAgentService.panelAbierto).
             // La marca evita contar dos veces si SwiftUI repite onAppear sin onDisappear.
@@ -84,30 +119,46 @@ struct KurthAgentChat: View {
 
     // MARK: - Encabezado
 
+    /// La misma fila que la barra de la página: título a la izquierda donde ella lleva el dominio,
+    /// acciones a la derecha donde ella lleva extensiones y chat, en su cápsula si la barra va en
+    /// cápsulas. El título va sin cápsula en los dos modos: en vidrio "como que no queda" (Kurth,
+    /// 24 sep); en negritas y un poco más grande se sostiene solo. Sin botón de cerrar: lo cierra
+    /// el mismo botón de chat de la barra que lo abrió.
     private var encabezado: some View {
         HStack(spacing: 8) {
-            Button("Cerrar", systemImage: "xmark") {
-                withAnimation(NookDesign.Motion.standard) {
-                    windowState.isSidebarAIChatVisible = false
-                }
+            titulo
+            Spacer(minLength: 0)
+            acciones
+                .modifier(KurthCapsule(active: esCapsulas))
+        }
+        .padding(.horizontal, esCapsulas ? 8 : NookDesign.Spacing.sm)
+        .frame(height: altoDeBarra)
+        .frame(maxWidth: .infinity)
+        .background(alignment: .top) { fondoDelEncabezado }
+        .animation(NookDesign.Motion.standard, value: barStyle)
+    }
+
+    private var titulo: some View {
+        HStack(spacing: 6) {
+            Text("Agente")
+                .font(NookDesign.Font.title.weight(.bold))
+                .foregroundStyle(Color.primary.opacity(0.9))
+            if let detalle = detalleDeEstado {
+                Text(detalle)
+                    .font(NookDesign.Font.caption)
+                    .foregroundStyle(Color.primary.opacity(0.45))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .transition(.opacity)
             }
-            .labelStyle(.iconOnly)
-            .buttonStyle(NookIconButtonStyle())
-            .foregroundStyle(Color.primary)
+        }
+        .padding(.horizontal, 4)
+        .frame(height: KurthTopBarView.capsuleHeight)
+        .animation(NookDesign.Motion.quick, value: detalleDeEstado)
+    }
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Agente")
-                    .font(NookDesign.Font.title)
-                    .foregroundStyle(Color.primary.opacity(0.9))
-                if let detalle = detalleDeEstado {
-                    Text(detalle)
-                        .font(NookDesign.Font.caption)
-                        .foregroundStyle(Color.primary.opacity(0.45))
-                }
-            }
-
-            Spacer()
-
+    private var acciones: some View {
+        HStack(spacing: NookDesign.Spacing.xxs) {
             if let pagina = browserManager.tabs.selectedSession(in: windowState),
                !KurthSenalar.shared.marcasGuardadas(para: pagina.url).isEmpty {
                 Menu {
@@ -116,6 +167,8 @@ struct KurthAgentChat: View {
                     Button("Borrar todas") { borrarMarcas(nil) }
                 } label: {
                     Image(systemName: "mappin.and.ellipse")
+                        .foregroundStyle(.secondary)
+                        .frame(width: medidaDeIcono, height: medidaDeIcono)
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
@@ -123,23 +176,51 @@ struct KurthAgentChat: View {
                 .help("Marcas en esta página")
             }
 
-            Button("Limpiar", systemImage: "trash") {
-                agente.limpiar()
-                KurthSenalar.shared.reiniciarNumeros()
+            Button("Borrar la conversación", systemImage: "trash") {
+                confirmaBorrar = true
             }
-            .labelStyle(.iconOnly)
-            .buttonStyle(NookIconButtonStyle())
-            .foregroundStyle(Color.primary)
+            .kurthBarIcon(size: medidaDeIcono)
             .disabled(agente.mensajes.isEmpty)
+            .help("Borrar la conversación")
         }
-        .padding(.horizontal, 8)
+    }
+
+    /// El fondo de la barra de la página, sin su capa de color: blur de lo que pasa por detrás y
+    /// la línea de 1 px al desplazarse. La esquina de arriba que toca la ventana va concéntrica
+    /// con ella; una franja cuadrada se salía del marco redondeado (Kurth, 24 sep).
+    private var fondoDelEncabezado: some View {
+        ZStack(alignment: .top) {
+            if conBlur {
+                KurthBackdropBlur(radius: blurRadius, saturation: blurSaturation, fade: 0)
+                    .frame(height: altoDeBarra)
+                    .clipShape(esquinasDeArriba)
+                    .allowsHitTesting(false)
+            }
+
+            Rectangle()
+                .fill(.primary.opacity(hairlineOpacity))
+                .frame(height: 1 / displayScale)
+                .frame(height: altoDeBarra, alignment: .bottom)
+                .opacity(desplazado && conBlur ? 1 : 0)
+                .allowsHitTesting(false)
+        }
+        .animation(.easeOut(duration: 0.18), value: desplazado)
+    }
+
+    private var esquinasDeArriba: ConcentricRectangle {
+        ConcentricRectangle(uniformTopCorners: .concentric(minimum: .fixed(0)), uniformBottomCorners: .fixed(0))
+    }
+
+    private func borrarConversacion() {
+        agente.limpiar()
+        KurthSenalar.shared.reiniciarNumeros()
     }
 
     private var detalleDeEstado: String? {
         switch agente.estado {
         case .apagado: return nil
         case .arrancando: return "abriendo sesión…"
-        case .listo: return agente.mensajes.isEmpty ? "tu suscripción, tus memorias" : nil
+        case .listo: return nil
         case .trabajando: return agente.permiso == nil ? "trabajando…" : "esperando tu respuesta"
         case .error(let motivo): return motivo
         }
@@ -161,18 +242,23 @@ struct KurthAgentChat: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 4)
             }
-            // El texto se desvanece antes de llegar al encabezado y a la caja de abajo, en vez de pasar
-            // por detrás de ellos. Una franja con material se salía del marco redondeado de la
-            // ventana (Kurth, 24 sep); la máscara usa el alto real de cada uno.
+            // Abajo, el texto se desvanece antes de llegar a la caja en vez de pasar por detrás.
+            // Arriba depende del estilo de la barra (`pasoBajoEncabezado`): con blur pasa por debajo
+            // del encabezado, atenuado como en la página; sin blur se desvanece antes, para que nada
+            // se asome tras "Agente". La máscara usa el alto real de cada uno.
             .mask {
                 VStack(spacing: 0) {
-                    Color.clear.frame(height: margen + altoArriba)
-                    LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: 16)
+                    Color.black.opacity(pasoBajoEncabezado).frame(height: altoArriba)
+                    LinearGradient(colors: [.black.opacity(pasoBajoEncabezado), .black], startPoint: .top, endPoint: .bottom).frame(height: 16)
                     Color.black
                     LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 16)
                     Color.clear.frame(height: altoAbajo + margen)
                 }
                 .ignoresSafeArea()
+            }
+            // Con el inset del encabezado, en reposo contentOffset.y es −contentInsets.top.
+            .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > 1 } action: { _, nuevo in
+                desplazado = nuevo
             }
             // Al abrir el panel se ve lo último, no el principio de la conversación guardada.
             .defaultScrollAnchor(.bottom)

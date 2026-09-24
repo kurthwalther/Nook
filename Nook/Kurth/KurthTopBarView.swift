@@ -356,7 +356,7 @@ struct KurthTopBarView: View {
     }
 }
 
-private extension View {
+extension View {
     func kurthBarIcon(size: CGFloat = NookDesign.Size.iconButton) -> some View {
         self
             .labelStyle(.iconOnly)
@@ -375,7 +375,7 @@ private extension View {
 }
 
 /// Como NookIconButtonStyle, con el label en el gris que le pone la barra.
-private struct KurthBarButtonStyle: ButtonStyle {
+struct KurthBarButtonStyle: ButtonStyle {
     var size: CGFloat = NookDesign.Size.iconButton
     @State private var isHovering = false
     @Environment(\.isEnabled) private var isEnabled
@@ -488,7 +488,8 @@ private struct KurthBarProbe: NSViewRepresentable {
 // MARK: - Cápsula de Liquid Glass
 
 /// En la variante tipo Safari, cada grupo de la barra va en su cápsula de vidrio.
-private struct KurthCapsule: ViewModifier {
+/// La comparte el encabezado del panel del agente (KurthAgentChat).
+struct KurthCapsule: ViewModifier {
     let active: Bool
     var minWidth: CGFloat = 0
     var tint: Color? = nil
@@ -511,7 +512,7 @@ private struct KurthCapsule: ViewModifier {
 
 /// nookGlassEffect con tinte opcional: el vidrio toma un poco del color del sitio sin volverse
 /// sólido. Sin tinte es idéntico al de Nook.
-private struct KurthGlass: ViewModifier {
+struct KurthGlass: ViewModifier {
     let tint: Color?
 
     func body(content: Content) -> some View {
