@@ -9,8 +9,9 @@
 //  Al cambiar de Space el tema cruza en 0.25 s sin rebote, como Zen (las dos capas ::before y
 //  ::after de zen-browser-ui.css); un solo Color no podía cruzar de 2 a 3 colores.
 //
-//  Debajo del tinte va lo de atrás de la ventana, difuminado y sin color propio (KurthVibrancy,
-//  la receta de gpui): la opacidad del tema decide cuánto se ve. Upstream quitó su blur en
+//  Debajo del tinte va lo de atrás de la ventana, difuminado (KurthVibrancy). La opacidad del
+//  tema decide dos cosas a la vez, y por eso es una sola perilla: cuánta superficie se pone
+//  encima y cuánto vidrio queda debajo (KurthVibrancy.tint(forOpacity:)). Upstream quitó su blur en
 //  60d0d34 porque cuesta más que un fondo plano (el servidor de ventanas difumina lo de atrás en
 //  cada cuadro que cambia); volvió por decisión de Kurth, 23 sep.
 //
@@ -31,7 +32,7 @@ struct KurthWindowTheme: View {
         let isActive = windowRegistry.activeWindowId == windowState.id
 
         ZStack {
-            KurthVibrancy()
+            KurthVibrancy(tint: KurthVibrancy.tint(forOpacity: theme.opacity))
             KurthThemeBackground(theme: theme, isActive: isActive)
                 .id(spaceID)
                 .transition(.opacity)

@@ -35,8 +35,31 @@ import AppKit
 import SwiftUI
 
 struct KurthVibrancy: NSViewRepresentable {
-    func makeNSView(context: Context) -> BlurredView { BlurredView() }
-    func updateNSView(_ view: BlurredView, context: Context) {}
+    /// Cuánto del color del material se conserva (0–1). Lo calcula `tint(forOpacity:)` desde la
+    /// opacidad del tema; `kurth.windowMaterialTint`, si está definido, lo anula.
+    var tint: Double = 1
+
+    func makeNSView(context: Context) -> BlurredView {
+        let view = BlurredView()
+        view.setTint(tint)
+        return view
+    }
+
+    func updateNSView(_ view: BlurredView, context: Context) { view.setTint(tint) }
+
+    /// Cuánto vidrio queda debajo de la superficie, según la opacidad del tema. Una sola perilla
+    /// que va de sólida (1) a vidrio claro a dejar ver lo de atrás (el mínimo), que es lo que
+    /// hace Superconductor: al abrirla no solo baja el alfa, también abre su vidrio.
+    /// Lineal entre `minTint` en `KurthTheme.minOpacity` y 1 en opacidad 1. Medido con superficie
+    /// blanca al 0.24 sobre negro: tinte 0 → #4D4D4D (el sidebar deja de leerse), 0.3 → #7D7D7D,
+    /// 0.45 → #939393, 1 → #DBDBDB. De ahí sale `minTint`.
+    static let minTint = 0.45
+
+    static func tint(forOpacity opacity: Double) -> Double {
+        let span = KurthTheme.maxOpacity - KurthTheme.minOpacity
+        let t = span > 0 ? (opacity - KurthTheme.minOpacity) / span : 1
+        return minTint + (1 - minTint) * min(1, max(0, t))
+    }
 
     static let materials: [String: NSVisualEffectView.Material] = [
         "sidebar": .sidebar, "underWindowBackground": .underWindowBackground,
@@ -47,6 +70,9 @@ struct KurthVibrancy: NSViewRepresentable {
     ]
 
     final class BlurredView: NSVisualEffectView {
+        /// El que pide el tema.
+        private var requestedTint = 1.0
+        /// El que está aplicado (el override de UserDefaults si existe, si no el del tema).
         private var tintAmount = 1.0
         nonisolated(unsafe) private var observer: NSObjectProtocol?
 
@@ -65,11 +91,18 @@ struct KurthVibrancy: NSViewRepresentable {
 
         deinit { observer.map(NotificationCenter.default.removeObserver) }
 
+        func setTint(_ tint: Double) {
+            guard tint != requestedTint else { return }
+            requestedTint = tint
+            applyPrefs()
+        }
+
         private func applyPrefs() {
             let defaults = UserDefaults.standard
             let chosen = KurthVibrancy.materials[defaults.string(forKey: "kurth.windowMaterial") ?? ""] ?? .sidebar
             // Un booleano de la versión anterior llega como NSNumber 0/1: mismo significado.
-            let tint = (defaults.object(forKey: "kurth.windowMaterialTint") as? NSNumber)?.doubleValue ?? 1
+            let override = (defaults.object(forKey: "kurth.windowMaterialTint") as? NSNumber)?.doubleValue
+            let tint = override ?? requestedTint
             guard chosen != material || tint != tintAmount else { return }
             material = chosen
             tintAmount = min(1, max(0, tint))

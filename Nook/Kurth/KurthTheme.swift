@@ -43,9 +43,11 @@ struct KurthTheme: Codable, Equatable {
 
     var primaryHex: String? { dots.first?.hex }
 
-    /// En el mínimo manda el difuminado de lo de atrás; en 1, sólida. En 0.10 la superficie
-    /// casi desaparecía y el sidebar no se leía (Kurth, 23 sep). (Zen: 0.30–0.80 sobre su material.)
-    static let minOpacity = 0.30
+    /// En el mínimo manda lo de atrás; en 1, sólida. En 0.10 la superficie casi desaparecía y el
+    /// sidebar no se leía (Kurth, 23 sep). Bajado de 0.30 a 0.24 por petición suya el 23 sep, ya
+    /// con el vidrio ligado a esta misma perilla: en el mínimo mide #939393 sobre negro, que
+    /// todavía se lee. (Zen: 0.30–0.80 sobre su material.)
+    static let minOpacity = 0.24
     static let maxOpacity = 1.0
 
     /// Tema de 1 color a partir del acento de siempre del Space.
