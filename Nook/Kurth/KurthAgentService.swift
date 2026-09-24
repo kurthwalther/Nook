@@ -28,7 +28,7 @@ final class KurthAgentService {
 
     // MARK: - Lo que la vista pinta
 
-    struct Herramienta: Identifiable, Equatable {
+    struct Herramienta: Identifiable, Equatable, Codable {
         let id: String
         var titulo: String
         /// "read", "edit", "execute", "search", "fetch", "think", "other".
@@ -40,14 +40,14 @@ final class KurthAgentService {
         var falló: Bool { estado == "failed" }
     }
 
-    struct Mensaje: Identifiable {
-        enum Autor { case usuario, agente }
-        let id = UUID()
+    struct Mensaje: Identifiable, Codable {
+        enum Autor: String, Codable { case usuario, agente }
+        var id = UUID()
         let autor: Autor
         var texto: String
         var herramientas: [Herramienta] = []
         var enCurso = false
-        let hora = Date()
+        var hora = Date()
     }
 
     /// Una autorización esperando respuesta del usuario. Mientras exista, el agente está
@@ -207,6 +207,7 @@ final class KurthAgentService {
         // A media respuesta o esperando un permiso no se corta: cerrarTurno lo vuelve a intentar.
         guard estado != .trabajando, permiso == nil else { return }
         if let id = cliente.sessionId { sesionParaRetomar = (id, carpetaDeTrabajo.path) }
+        guardarConversacion()
         apagar()
     }
 
@@ -290,6 +291,51 @@ final class KurthAgentService {
         mensajes.removeAll()
         plan.removeAll()
         sesionParaRetomar = nil
+        try? FileManager.default.removeItem(at: Self.archivoGuardado)
+    }
+
+    // MARK: - Conversación guardada
+
+    /// Lo que se ve en el chat y la sesión del agente, para que cerrar Nook no borre la plática:
+    /// al abrir se pinta lo de antes y la primera sesión se retoma con session/resume, así que el
+    /// agente también lo recuerda (Kurth lo pidió el 24 sep).
+    private struct Guardado: Codable {
+        var carpeta: String
+        var sessionId: String?
+        var mensajes: [Mensaje]
+    }
+
+    private static let archivoGuardado: URL = {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return base.appendingPathComponent("com.gstudios.nook/Kurth/agente.json")
+    }()
+
+    init() {
+        cargarConversacion()
+        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.guardarConversacion() }
+        }
+    }
+
+    private func cargarConversacion() {
+        guard let datos = try? Data(contentsOf: Self.archivoGuardado),
+              let guardado = try? JSONDecoder().decode(Guardado.self, from: datos) else { return }
+        // Un turno que se cortó a la mitad al cerrar Nook ya no está en curso.
+        mensajes = guardado.mensajes.map { var m = $0; m.enCurso = false; return m }
+        if let id = guardado.sessionId, guardado.carpeta == carpetaDeTrabajo.path {
+            sesionParaRetomar = (id, guardado.carpeta)
+        }
+    }
+
+    private func guardarConversacion() {
+        guard !mensajes.isEmpty else { return }
+        let guardado = Guardado(carpeta: carpetaDeTrabajo.path,
+                                sessionId: cliente.sessionId ?? sesionParaRetomar?.id,
+                                mensajes: mensajes)
+        guard let datos = try? JSONEncoder().encode(guardado) else { return }
+        try? FileManager.default.createDirectory(at: Self.archivoGuardado.deletingLastPathComponent(),
+                                                 withIntermediateDirectories: true)
+        try? datos.write(to: Self.archivoGuardado, options: .atomic)
     }
 
     // MARK: - Conversación
@@ -426,6 +472,7 @@ final class KurthAgentService {
         if case .error = estado {} else if cliente.isRunning {
             estado = .listo
         }
+        guardarConversacion()
         // Si el panel se cerró mientras trabajaba, el apagado quedó pendiente.
         programarApagado()
     }
