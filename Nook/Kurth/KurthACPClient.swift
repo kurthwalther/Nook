@@ -203,6 +203,27 @@ struct KurthACPAgent: Sendable, Equatable {
                       command: npx,
                       arguments: ["-y", "@agentclientprotocol/claude-agent-acp"])
     }
+
+    /// El mismo adaptador, corrido con `node` directo desde la copia que dejó `npx` en su caché.
+    /// `npx` se queda vivo como proceso padre todo el tiempo (59 MB medidos el 24 sep) solo para
+    /// lanzar al adaptador. Si la copia no está (primera vez, caché borrada), se usa `npx`.
+    static func claudeCodeEnCache(npx: String) -> KurthACPAgent? {
+        let fm = FileManager.default
+        let node = (npx as NSString).deletingLastPathComponent + "/node"
+        guard fm.isExecutableFile(atPath: node) else { return nil }
+        let cache = fm.homeDirectoryForCurrentUser.appendingPathComponent(".npm/_npx")
+        let copias = (try? fm.contentsOfDirectory(at: cache, includingPropertiesForKeys: nil)) ?? []
+        let script = copias
+            .map { $0.appendingPathComponent("node_modules/@agentclientprotocol/claude-agent-acp/dist/index.js") }
+            .filter { fm.fileExists(atPath: $0.path) }
+            .max { a, b in
+                let fa = (try? fm.attributesOfItem(atPath: a.path)[.modificationDate] as? Date) ?? .distantPast
+                let fb = (try? fm.attributesOfItem(atPath: b.path)[.modificationDate] as? Date) ?? .distantPast
+                return fa < fb
+            }
+        guard let script else { return nil }
+        return KurthACPAgent(name: "Claude Code", command: node, arguments: [script.path])
+    }
 }
 
 /// Un servidor MCP que Nook le presta al agente. Los pone el cliente, no el agente: así el
@@ -369,15 +390,23 @@ final class KurthACPClient {
 
     /// `instrucciones` se suman a las de Claude Code, no las reemplazan: claude-agent-acp lee
     /// `_meta.systemPrompt` como opciones del preset "claude_code" (acp-agent.js, append).
+    ///
+    /// `strictMcpConfig`: el agente usa solo los MCP que le pasa Nook. Sin eso Claude Code arranca
+    /// todos los del usuario aunque no los use: medido el 24 sep, 12 procesos y 967 MB (Google Ads
+    /// dos veces en Python, Xcode, Figma, Lazyweb) contra 3 procesos y 270 MB, y la sesión abre en
+    /// 1.7 s en vez de 7.1. Las APIs las llama bajo demanda, con comandos que terminan al contestar.
     private func parametrosDeSesion(cwd: URL, mcpServers: [KurthACPMCPServer], instrucciones: String?) -> [String: KurthJSON] {
-        var params: [String: KurthJSON] = [
-            "cwd": .string(cwd.path),
-            "mcpServers": .array(mcpServers.map(\.payload)),
+        var meta: [String: KurthJSON] = [
+            "claudeCode": .object(["options": .object(["strictMcpConfig": .bool(true)])]),
         ]
         if let instrucciones {
-            params["_meta"] = .object(["systemPrompt": .object(["append": .string(instrucciones)])])
+            meta["systemPrompt"] = .object(["append": .string(instrucciones)])
         }
-        return params
+        return [
+            "cwd": .string(cwd.path),
+            "mcpServers": .array(mcpServers.map(\.payload)),
+            "_meta": .object(meta),
+        ]
     }
 
     private func leerModos(_ result: KurthJSON) {
