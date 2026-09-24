@@ -15,6 +15,7 @@ extension AppDelegate {
         // Sistema / Claro / Oscuro: el ajuste existía y nadie lo aplicaba (ver KurthAppearance).
         // El delegado no está aislado al actor principal en modo Swift 5, y esto ya corre en él.
         MainActor.assumeIsolated { KurthAppearance.start() }
+        KurthBeepProbe.install() // TEMPORAL: busca el origen del aviso de error en el chat
 
         // Enciende el muestreo de color de la parte alta de la página (_sampledPageTopColor),
         // el mismo que usa Safari para su barra. Viene apagado (0). Cada pestaña copia esta

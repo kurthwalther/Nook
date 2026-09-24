@@ -3,16 +3,25 @@
 Una sola lista para las dos Macs. Quien avance, la actualiza en el mismo commit.
 Detalle de Zen en `kurth/plan-zen.md`.
 
-## Ahora
+## Para mañana (25 sep)
 
-1. **Sonido de error al enviar en el chat** — arreglo instalado (`b12f15b`); falta que Kurth
-   confirme que ya no suena.
+1. **Sonido de error en el chat** — sigue sonando; mi teoría del campo desactivado era falsa.
+   `KurthBeepProbe` (temporal) intercepta `noResponderFor:`: hasta las 10:53 no hubo ningún
+   keyDown sin destinatario (solo keyUp y mouse, que no suenan). Si vuelve a sonar, viene de un
+   NSBeep directo. Siguiente paso: depurador con `get-task-allow` en nuestro build (en la Air
+   SIP está activo) y `b NSBeep`, o interceptar NSBeep. Pedirle a Kurth que diga cuándo suena.
+2. **Verificar con Kurth:** el agente responde "¿qué estamos viendo?" con la pestaña activa
+   (se manda como `resource_link`), y la caja de texto ya no se sale del panel.
+3. Guardar la conversación del chat al cerrar Nook.
+4. Memoria (Zen motor-02 → motor-03), después iCloud fase 1.
 
 ## Hecho el 24 sep
 
 - ✅ Sin pestañas: "Ah, peace.", barra lateral a la vista y la URL lista para escribir (`bf01f69`).
 - ✅ Modelo, esfuerzo, permisos y rápido en el chat del agente (`b12f15b`).
 - ✅ Barra lateral flotante con el mismo material que la fija (`865b4dc`) y redimensionable (`42e7f34`).
+- El agente recibe la pestaña activa con cada mensaje; el menú de modelo ya no desborda la caja
+  (instalado, falta que Kurth lo vea).
 
 ## Agente (chat lateral por ACP)
 

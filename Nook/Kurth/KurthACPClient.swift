@@ -150,6 +150,21 @@ struct KurthACPConfigOption: Sendable, Identifiable, Equatable {
     }
 }
 
+/// Un enlace que acompaña al mensaje (ACP `resource_link`): el agente sabe de qué se habla sin
+/// que se le mande el contenido. Nook lo usa para decirle qué pestaña está viendo el usuario;
+/// probado el 24 sep: "¿qué página estoy viendo?" → "Spotify Web Player (open.spotify.com)".
+struct KurthACPResourceLink: Sendable {
+    let uri: String
+    let name: String
+    var title: String?
+
+    var payload: KurthJSON {
+        var campos: [String: KurthJSON] = ["type": .string("resource_link"), "uri": .string(uri), "name": .string(name)]
+        if let title { campos["title"] = .string(title) }
+        return .object(campos)
+    }
+}
+
 /// Un comando de los que el agente publica. Se manda como texto del prompt, tal cual.
 struct KurthACPCommand: Sendable, Identifiable, Equatable {
     var name: String
@@ -370,11 +385,11 @@ final class KurthACPClient {
     /// Manda un mensaje y espera a que el agente termine el turno. Las respuestas parciales van
     /// llegando por `onEvent`.
     @discardableResult
-    func prompt(_ text: String) async throws -> String {
+    func prompt(_ text: String, links: [KurthACPResourceLink] = []) async throws -> String {
         guard let sessionId else { throw KurthACPError.notRunning }
         let result = try await request("session/prompt", params: .object([
             "sessionId": .string(sessionId),
-            "prompt": .array([.object(["type": .string("text"), "text": .string(text)])]),
+            "prompt": .array([.object(["type": .string("text"), "text": .string(text)])] + links.map(\.payload)),
         ]), timeout: 3600)
         let reason = result["stopReason"]?.stringValue ?? "end_turn"
         onEvent?(.turnEnded(stopReason: reason))

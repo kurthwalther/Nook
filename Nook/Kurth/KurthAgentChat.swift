@@ -27,6 +27,7 @@ import NookUI
 struct KurthAgentChat: View {
     @Environment(BrowserWindowState.self) private var windowState
     @Environment(KurthAgentService.self) private var agente
+    @EnvironmentObject private var browserManager: BrowserManager
 
     @State private var texto = ""
     @FocusState private var escribiendo: Bool
@@ -438,10 +439,14 @@ struct KurthAgentChat: View {
             Text(resumenDeOpciones)
                 .font(NookDesign.Font.caption)
                 .foregroundStyle(Color.primary.opacity(0.4))
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
-        .fixedSize()
+        // Sin .fixedSize: con él, "Default (recommended) · xhigh" empujaba la caja de texto fuera
+        // del panel. Que se recorte antes que romper el renglón.
+        .layoutPriority(-1)
         .disabled(agente.opciones.isEmpty)
         .help("Modelo, esfuerzo y modo del agente")
     }
@@ -449,7 +454,9 @@ struct KurthAgentChat: View {
     private var resumenDeOpciones: String {
         func opcion(_ id: String) -> KurthACPConfigOption? { agente.opciones.first { $0.id == id } }
         var partes: [String] = []
-        if let modelo = opcion("model") { partes.append(modelo.currentName) }
+        if let modelo = opcion("model"), let eleccion = modelo.choices.first(where: { $0.value == modelo.currentValue }) {
+            partes.append(nombreDeEleccion("model", eleccion))
+        }
         if let esfuerzo = opcion("effort") { partes.append(esfuerzo.currentValue) }
         if let modo = opcion("mode"), modo.currentValue != "default",
            let eleccion = modo.choices.first(where: { $0.value == modo.currentValue }) {
@@ -473,7 +480,7 @@ struct KurthAgentChat: View {
     /// ("xhigh"); los modos y "rápido" en español.
     private func nombreDeEleccion(_ id: String, _ eleccion: KurthACPConfigOption.Choice) -> String {
         switch (id, eleccion.value) {
-        case ("effort", "default"), ("model", "default"): return "Por defecto"
+        case ("effort", "default"), ("model", "default"): return "Por defecto" // no "Default (recommended)"
         case ("effort", _): return eleccion.value
         case ("mode", "default"): return "Manual"
         case ("mode", "acceptEdits"): return "Aceptar ediciones"
@@ -528,13 +535,20 @@ struct KurthAgentChat: View {
         .padding(.horizontal, 8)
     }
 
+    /// La pestaña de esta ventana, como enlace para el agente (KurthACPResourceLink).
+    private var paginaActiva: KurthACPResourceLink? {
+        guard let pagina = browserManager.tabs.selectedSession(in: windowState) else { return nil }
+        let titulo = pagina.title.isEmpty ? (pagina.url.host() ?? pagina.url.absoluteString) : pagina.title
+        return KurthACPResourceLink(uri: pagina.url.absoluteString, name: titulo, title: "Pestaña que el usuario está viendo en Nook")
+    }
+
     private var puedeEnviar: Bool {
         agente.estado.puedeEscribir && !texto.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func enviar() {
         guard puedeEnviar else { return }
-        agente.enviar(texto)
+        agente.enviar(texto, pagina: paginaActiva)
         texto = ""
     }
 }

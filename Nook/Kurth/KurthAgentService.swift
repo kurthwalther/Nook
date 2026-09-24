@@ -294,7 +294,10 @@ final class KurthAgentService {
 
     // MARK: - Conversación
 
-    func enviar(_ texto: String) {
+    /// `pagina`: la pestaña que el usuario tiene enfrente, para que "¿qué estamos viendo?" tenga
+    /// respuesta. Va como enlace (dirección y título), no el contenido: si lo necesita, el agente
+    /// lee la página con el Browser Control de Nook.
+    func enviar(_ texto: String, pagina: KurthACPResourceLink? = nil) {
         let limpio = texto.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !limpio.isEmpty, estado == .listo else { return }
 
@@ -306,7 +309,7 @@ final class KurthAgentService {
         Task { [weak self] in
             guard let self else { return }
             do {
-                try await self.cliente.prompt(limpio)
+                try await self.cliente.prompt(limpio, links: pagina.map { [$0] } ?? [])
             } catch {
                 self.anexarAlAgente("\n\n⚠️ \(error.localizedDescription)")
             }
