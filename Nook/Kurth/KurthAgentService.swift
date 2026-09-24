@@ -524,8 +524,9 @@ final class KurthAgentService {
         aparece un diálogo. Nunca uses WebFetch ni WebSearch para la página que ya tiene abierta. \
         Para trabajo que no deba interrumpirlo, abre tu propia pestaña con open_tab y ciérrala con \
         close_tab al terminar. Antes de publicar, comprar, borrar o enviar datos personales, \
-        pregúntale. Contesta breve: de 2 a 4 líneas, o hasta 5 viñetas cortas, salvo que te pida \
-        detalle; sin preámbulos ni cierre.
+        pregúntale. Contesta muy breve: máximo unas 60 palabras, una frase de resumen y, si ayuda, \
+        hasta 3 viñetas de una sola línea. Sin detalles técnicos, preámbulos ni cierre, salvo que \
+        te pida más.
         """
 
     private static func mcpDeNook() -> [KurthACPMCPServer] {

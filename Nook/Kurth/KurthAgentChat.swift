@@ -150,8 +150,8 @@ struct KurthAgentChat: View {
         .padding(.vertical, 24)
     }
 
-    /// 2 pt menos que el cuerpo de Nook (13), por pedido de Kurth el 24 sep.
-    static let tamañoDeTexto: CGFloat = 11
+    /// 1 pt menos que el cuerpo de Nook (13): Kurth lo pidió en 11 y luego un punto más (24 sep).
+    static let tamañoDeTexto: CGFloat = 12
 
     @ViewBuilder
     private func burbuja(_ mensaje: KurthAgentService.Mensaje) -> some View {
@@ -387,14 +387,14 @@ struct KurthAgentChat: View {
                     .font(.system(size: 9))
                 Text(nombreCorto(agente.carpetaDeTrabajo))
                     .lineLimit(1)
-                    .truncationMode(.head)
+                    .truncationMode(.tail)
             }
             .font(NookDesign.Font.caption)
             .foregroundStyle(Color.primary.opacity(0.4))
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
-        .fixedSize()
+        .layoutPriority(-1) // kurth: que se recorte parejo con el menú de modelo, no que lo tape
         .help("Desde dónde trabaja el agente: decide qué memorias tiene y qué archivos puede tocar")
     }
 
