@@ -8,8 +8,16 @@ color, ventana isOpaque = false; superficie del tema = base blanca + tinte + gra
 0.30–1), blanco alcanzable (clic en lienzo = modo libre, blanco en la página 1), ajustes en vivo
 por MCP (KurthMCPTools, kurth/mcp.sh), herramientas en kurth/diagnostico.
 
-**Abierto (bug):** tema blanco con opacidad baja se ve casi como modo oscuro; Superconductor con
-alfa bajo se ve claro. Ver la nota en la bitácora de José del 23 sep y el mensaje de handoff.
+**Cerrado (bug del tema claro que se veía oscuro), 23 sep 21:50, en la Pro:** la causa era que
+KurthVibrancy le quitaba al material TODA su capa de color, que es justo lo que hace que el vidrio
+de Apple se vea claro sobre cualquier fondo. `kurth.windowMaterialTint` ahora es un número 0–1 con
+default 1. Medido con el material aislado (superficie blanca al 0.30, fondo negro / blanco):
+tinte 0 → #5E5E5E / #F8F8F8; tinte 1 → #DDDDDD / #ECECEC; el sidebar de Superconductor → #EFEFEF /
+#F4F4F4. Dato que cambia el encuadre: **la referencia de Kurth casi no transmite lo de atrás**
+(cambia 5 de 255 entre fondo negro y blanco, contra 154 de como lo teníamos): es vidrio que aclara
+y difumina, no transparencia. Falta que Kurth elija dónde quiere la perilla.
+**Ojo en la Mac del trabajo:** si ahí quedó guardado `kurth.windowMaterialTint = false`, se lee
+como 0 y el bug sigue; hay que borrar la clave o ponerla en 1.
 
 **Pendiente:** el resto de la segunda y tercera tanda (§3) y el motor (§4), en el orden que
 propone §4 para memoria: motor-02 → motor-03 (con una semana solo registrando).
