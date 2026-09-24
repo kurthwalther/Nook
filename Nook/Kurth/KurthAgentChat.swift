@@ -30,6 +30,8 @@ struct KurthAgentChat: View {
 
     @State private var texto = ""
     @FocusState private var escribiendo: Bool
+    /// Si este panel ya se contó como abierto en el servicio (ver onAppear / onDisappear).
+    @State private var panelRegistrado = false
 
     var body: some View {
         // El encabezado y la caja van como safeAreaInset, igual que el panel anterior: en un
@@ -52,9 +54,14 @@ struct KurthAgentChat: View {
             .safeAreaPadding(.top, 8)
             .safeAreaPadding(.bottom, 8)
             .animation(NookDesign.Motion.standard, value: agente.permiso?.id)
+            // Abrir y cerrar el panel enciende y apaga el agente (KurthAgentService.panelAbierto).
+            // La marca evita contar dos veces si SwiftUI repite onAppear sin onDisappear.
             .onAppear {
-                agente.arrancar()
+                if !panelRegistrado { panelRegistrado = true; agente.panelAbierto() }
                 escribiendo = true
+            }
+            .onDisappear {
+                if panelRegistrado { panelRegistrado = false; agente.panelCerrado() }
             }
     }
 

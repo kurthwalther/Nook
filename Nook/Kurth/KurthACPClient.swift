@@ -292,6 +292,23 @@ final class KurthACPClient {
             throw KurthACPError.badResponse("session/new sin sessionId")
         }
         sessionId = id
+        leerModos(result)
+    }
+
+    /// Retoma en un proceso nuevo del agente una conversación que ya existía, sin repetirla
+    /// (`session/resume`; claude-agent-acp la anuncia en `sessionCapabilities.resume`). Probado
+    /// el 24 sep: 3.8 s, cero mensajes repetidos y el agente conserva el contexto.
+    func resumeSession(_ id: String, cwd: URL, mcpServers: [KurthACPMCPServer] = []) async throws {
+        let result = try await request("session/resume", params: .object([
+            "sessionId": .string(id),
+            "cwd": .string(cwd.path),
+            "mcpServers": .array(mcpServers.map(\.payload)),
+        ]), timeout: 120)
+        sessionId = id
+        leerModos(result)
+    }
+
+    private func leerModos(_ result: KurthJSON) {
         currentModeId = result["modes"]?["currentModeId"]?.stringValue
         availableModes = (result["modes"]?["availableModes"]?.arrayValue ?? []).compactMap {
             guard let id = $0["id"]?.stringValue, let name = $0["name"]?.stringValue else { return nil }

@@ -125,12 +125,56 @@ final class KurthAgentService {
         UserDefaults.standard.set(Array(recientes.prefix(6)), forKey: Self.claveRecientes)
         carpetasRecientes = Self.recientesGuardadas()
 
+        sesionParaRetomar = nil
         apagar()
         arrancar()
     }
 
     private let cliente = KurthACPClient()
     private var arrancando: Task<Void, Never>?
+
+    // MARK: - Apagado cuando nadie lo usa
+
+    /// Paneles del agente abiertos, sumando todas las ventanas (el servicio es uno para la app).
+    /// Con cero, el agente se apaga tras `esperaAntesDeApagar`: pesa ~420 MB, 1.3 GB con los MCP
+    /// de Kurth, y en la Air de 8 GB eso no puede quedarse vivo con el panel cerrado.
+    private var panelesAbiertos = 0
+    private var apagadoProgramado: Task<Void, Never>?
+    /// La conversación que se apagó por inactividad, para retomarla (session/resume) al reabrir.
+    /// Solo vale para la misma carpeta: el cwd se fija al abrir la sesión.
+    private var sesionParaRetomar: (id: String, carpeta: String)?
+    /// Abrir y cerrar el panel seguido no debe reiniciar el agente cada vez.
+    static let esperaAntesDeApagar: Duration = .seconds(30)
+
+    func panelAbierto() {
+        panelesAbiertos += 1
+        apagadoProgramado?.cancel()
+        apagadoProgramado = nil
+        arrancar()
+    }
+
+    func panelCerrado() {
+        panelesAbiertos = max(0, panelesAbiertos - 1)
+        programarApagado()
+    }
+
+    private func programarApagado() {
+        guard panelesAbiertos == 0, estado != .apagado else { return }
+        apagadoProgramado?.cancel()
+        apagadoProgramado = Task { [weak self] in
+            try? await Task.sleep(for: Self.esperaAntesDeApagar)
+            guard !Task.isCancelled else { return }
+            self?.apagarSiNadieLoUsa()
+        }
+    }
+
+    private func apagarSiNadieLoUsa() {
+        guard panelesAbiertos == 0 else { return }
+        // A media respuesta o esperando un permiso no se corta: cerrarTurno lo vuelve a intentar.
+        guard estado != .trabajando, permiso == nil else { return }
+        if let id = cliente.sessionId { sesionParaRetomar = (id, carpetaDeTrabajo.path) }
+        apagar()
+    }
 
     // MARK: - Ciclo de vida
 
@@ -150,8 +194,23 @@ final class KurthAgentService {
                     return
                 }
                 try await self.cliente.start(agent: .claudeCode(npx: ejecutable))
-                try await self.cliente.newSession(cwd: self.carpetaDeTrabajo,
-                                                  mcpServers: Self.mcpDeNook())
+                if let anterior = self.sesionParaRetomar, anterior.carpeta == self.carpetaDeTrabajo.path {
+                    do {
+                        try await self.cliente.resumeSession(anterior.id, cwd: self.carpetaDeTrabajo,
+                                                             mcpServers: Self.mcpDeNook())
+                    } catch {
+                        try await self.cliente.newSession(cwd: self.carpetaDeTrabajo,
+                                                          mcpServers: Self.mcpDeNook())
+                        // Lo de arriba sigue en pantalla, pero el agente ya no lo recuerda: se dice.
+                        if !self.mensajes.isEmpty {
+                            self.mensajes.append(Mensaje(autor: .agente, texto: "No pude retomar la conversación anterior; desde aquí es una nueva y no recuerdo lo de arriba."))
+                        }
+                    }
+                } else {
+                    try await self.cliente.newSession(cwd: self.carpetaDeTrabajo,
+                                                      mcpServers: Self.mcpDeNook())
+                }
+                self.sesionParaRetomar = nil
                 self.modos = self.cliente.availableModes
                 self.modoActual = self.cliente.currentModeId
                 self.estado = .listo
@@ -186,6 +245,7 @@ final class KurthAgentService {
     func limpiar() {
         mensajes.removeAll()
         plan.removeAll()
+        sesionParaRetomar = nil
     }
 
     // MARK: - Conversación
@@ -315,6 +375,8 @@ final class KurthAgentService {
         if case .error = estado {} else if cliente.isRunning {
             estado = .listo
         }
+        // Si el panel se cerró mientras trabajaba, el apagado quedó pendiente.
+        programarApagado()
     }
 
     private var esError: Bool { if case .error = estado { return true }; return false }
