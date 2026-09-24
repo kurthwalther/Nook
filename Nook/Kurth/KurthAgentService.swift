@@ -52,6 +52,28 @@ final class KurthAgentService {
         var señalados: [String]?
     }
 
+    /// Algo que Kurth agregó con «+» o arrastrando a la caja: va con el próximo mensaje y se
+    /// vacía al enviar, como lo señalado. Los archivos van como enlace (el agente los lee con sus
+    /// herramientas); las imágenes, ya en JPEG, van dentro del mensaje para que las vea directo.
+    struct Adjunto: Identifiable, Equatable {
+        enum Tipo: Equatable { case archivo(URL), enlace(URL), imagen(Data) }
+        let id = UUID()
+        let tipo: Tipo
+        let nombre: String
+        let detalle: String
+    }
+
+    private(set) var adjuntos: [Adjunto] = []
+
+    func adjuntar(_ adjunto: Adjunto) {
+        guard !adjuntos.contains(where: { $0.tipo == adjunto.tipo }) else { return }
+        adjuntos.append(adjunto)
+    }
+
+    func quitarAdjunto(_ adjunto: Adjunto) {
+        adjuntos.removeAll { $0.id == adjunto.id }
+    }
+
     /// Una autorización esperando respuesta del usuario. Mientras exista, el agente está
     /// detenido: no hay tiempo límite del lado del protocolo.
     struct Permiso: Identifiable {
@@ -396,9 +418,12 @@ final class KurthAgentService {
                 señalados: [KurthSenalar.Referencia] = []) {
         let limpio = texto.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !limpio.isEmpty, estado == .listo else { return }
+        let adjuntados = adjuntos
+        adjuntos.removeAll()
 
-        mensajes.append(Mensaje(autor: .usuario, texto: limpio,
-                                señalados: señalados.isEmpty ? nil : señalados.map { "\($0.numero) \($0.resumen)" }))
+        // En el globo, lo adjuntado va con «📎» para que se pinte con clip y no con el visor.
+        let chips = señalados.map { "\($0.numero) \($0.resumen)" } + adjuntados.map { "📎 " + $0.nombre }
+        mensajes.append(Mensaje(autor: .usuario, texto: limpio, señalados: chips.isEmpty ? nil : chips))
         mensajes.append(Mensaje(autor: .agente, texto: "", enCurso: true))
         plan.removeAll()
         estado = .trabajando
@@ -406,12 +431,23 @@ final class KurthAgentService {
         Task { [weak self] in
             guard let self else { return }
             do {
-                let adjuntos = contenido.flatMap { c in pagina.map { [(uri: $0.uri, texto: c)] } } ?? []
+                let recursos = contenido.flatMap { c in pagina.map { [(uri: $0.uri, texto: c)] } } ?? []
                 if let uri = pagina?.uri, contenido != nil { self.paginasConContenido.insert(uri) }
                 let textoCompleto = señalados.isEmpty ? limpio
                     : limpio + "\n\n" + señalados.map(KurthSenalar.descripcion).joined(separator: "\n\n")
-                try await self.cliente.prompt(textoCompleto, links: pagina.map { [$0] } ?? [], adjuntos: adjuntos,
-                                              imagenes: señalados.compactMap(\.recorte))
+                var enlaces = pagina.map { [$0] } ?? []
+                var imagenes = señalados.compactMap(\.recorte)
+                for a in adjuntados {
+                    switch a.tipo {
+                    case .archivo(let url):
+                        enlaces.append(KurthACPResourceLink(uri: url.absoluteString, name: a.nombre, title: "Archivo que adjuntó el usuario"))
+                    case .enlace(let url):
+                        enlaces.append(KurthACPResourceLink(uri: url.absoluteString, name: a.nombre, title: "Enlace que adjuntó el usuario"))
+                    case .imagen(let jpeg):
+                        imagenes.append(jpeg)
+                    }
+                }
+                try await self.cliente.prompt(textoCompleto, links: enlaces, adjuntos: recursos, imagenes: imagenes)
             } catch {
                 self.anexarAlAgente("\n\n⚠️ \(error.localizedDescription)")
             }

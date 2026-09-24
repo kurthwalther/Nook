@@ -86,7 +86,9 @@ struct KurthAgentChat: View {
                     } else if !sugerencias.isEmpty {
                         listaDeComandos
                     }
-                    cajaDeTexto
+                    // La caja con el acomodo de Aside vive en KurthAgentInput.swift.
+                    KurthAgentInput(texto: $texto, escribiendo: $escribiendo, puedeEnviar: puedeEnviar,
+                                    sugerencias: sugerencias, enviar: enviar)
                 }
                 .padding(.top, 10)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { altoAbajo = $0 }
@@ -295,7 +297,9 @@ struct KurthAgentChat: View {
                 Spacer(minLength: 32)
                 VStack(alignment: .trailing, spacing: 4) {
                 ForEach(mensaje.señalados ?? [], id: \.self) { s in
-                    Label(s, systemImage: "viewfinder")
+                    // Lo adjuntado llega con «📎» (KurthAgentService.enviar): se pinta con clip.
+                    Label(s.hasPrefix("📎 ") ? String(s.dropFirst(2)) : s,
+                          systemImage: s.hasPrefix("📎 ") ? "paperclip" : "viewfinder")
                         .font(NookDesign.Font.caption)
                         .foregroundStyle(Color(red: 0.04, green: 0.52, blue: 1))
                         .lineLimit(1)
@@ -460,216 +464,12 @@ struct KurthAgentChat: View {
         opcion.kind.hasPrefix("allow") ? Color.primary.opacity(0.10) : Color.primary.opacity(0.04)
     }
 
-    // MARK: - Caja de texto
-
-    private var cajaDeTexto: some View {
-        VStack(spacing: 8) {
-            if !KurthSenalar.shared.referencias.isEmpty { chipsDeSeñalados }
-            TextField(marcadorDeTexto, text: $texto, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(NookDesign.Font.body)
-                .foregroundStyle(Color.primary.opacity(0.9))
-                .lineLimit(1...5)
-                .focused($escribiendo)
-                // Sin .disabled mientras el agente trabaja: el Enter que envía desactivaba el campo
-                // a media pulsación, el resto del evento se quedaba sin quién lo recibiera y macOS
-                // sonaba el aviso de error. Se puede escribir el siguiente mensaje; lo que se
-                // bloquea es enviar (puedeEnviar), como en el CLI.
-                .onSubmit(enviar)
-                .onKeyPress(.tab) {
-                    guard let primero = sugerencias.first else { return .ignored }
-                    texto = "/" + primero.name + " "
-                    return .handled
-                }
-
-            HStack(spacing: 8) {
-                menuDeCarpeta
-                menuDeOpciones
-                Spacer()
-                Button {
-                    KurthSenalar.shared.alternarModoCaja(en: windowState)
-                } label: {
-                    Image(systemName: "viewfinder")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(KurthSenalar.shared.modoCaja == windowState.id ? Color.accentColor : Color.primary.opacity(0.5))
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("Señalar en la página (⌘⇧M): arrastra una caja sobre lo que quieras mostrarle")
-                if agente.estado == .trabajando {
-                    Button(action: agente.cancelar) {
-                        Image(systemName: "stop.circle.fill")
-                            .font(NookDesign.Font.titleLarge)
-                            .foregroundStyle(Color.primary.opacity(0.75))
-                    }
-                    .buttonStyle(.plain)
-                    .help("Detener")
-                } else {
-                    Button(action: enviar) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(NookDesign.Font.titleLarge)
-                            .foregroundStyle(Color.primary.opacity(puedeEnviar ? 0.9 : 0.3))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!puedeEnviar)
-                }
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(superficieOpaca)
-        .clipShape(NookDesign.Radius.shape(NookDesign.Radius.lg))
-        // Se separa del panel con una sombra suave y un borde apenas visible, como un campo que
-        // flota; antes lo separaba la franja de material, que se salía del marco de la ventana.
-        .overlay(NookDesign.Radius.shape(NookDesign.Radius.lg).strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
-        .shadow(color: .black.opacity(0.08), radius: 6, y: 1)
-        .padding(.horizontal, 8)
-    }
-
-    /// Fondo de la caja de texto y de la tarjeta de permiso. Antes era Surface.fill (negro al 4.5 %)
-    /// y los mensajes se leían a través al hacer scroll (Kurth, 24 sep). Opaco y blanco puro (oscuro
-    /// en modo oscuro): sobre el panel con tema blanco, un tinte gris lo dejaba casi invisible.
+    /// Fondo de la tarjeta de permiso (la caja de texto usa el mismo, en KurthAgentInput). Antes era
+    /// Surface.fill (negro al 4.5 %) y los mensajes se leían a través al hacer scroll (Kurth, 24 sep).
+    /// Opaco y blanco puro (oscuro en modo oscuro): sobre el panel con tema blanco, un tinte gris lo
+    /// dejaba casi invisible.
     private var superficieOpaca: some View {
         Color(nsColor: .textBackgroundColor)
-    }
-
-    /// Dónde trabaja el agente. Se muestra siempre, no escondido en ajustes: es lo que decide
-    /// qué memorias tiene y sobre qué archivos puede actuar, así que el usuario debería poder
-    /// leerlo de un vistazo antes de pedirle algo.
-    private var menuDeCarpeta: some View {
-        Menu {
-            ForEach(agente.carpetasRecientes, id: \.path) { carpeta in
-                Button {
-                    agente.cambiarCarpeta(carpeta)
-                } label: {
-                    if carpeta.path == agente.carpetaDeTrabajo.path {
-                        Label(nombreCorto(carpeta), systemImage: "checkmark")
-                    } else {
-                        Text(nombreCorto(carpeta))
-                    }
-                }
-            }
-            Divider()
-            Button("Elegir carpeta…") { elegirCarpeta() }
-        } label: {
-            HStack(spacing: 3) {
-                Image(systemName: "folder")
-                    .font(.system(size: 9))
-                Text(nombreCorto(agente.carpetaDeTrabajo))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
-            .font(NookDesign.Font.caption)
-            .foregroundStyle(Color.primary.opacity(0.4))
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .layoutPriority(-1) // kurth: que se recorte parejo con el menú de modelo, no que lo tape
-        .help("Desde dónde trabaja el agente: decide qué memorias tiene y qué archivos puede tocar")
-    }
-
-    private func nombreCorto(_ url: URL) -> String {
-        url.path == FileManager.default.homeDirectoryForCurrentUser.path
-            ? "Carpeta personal"
-            : url.lastPathComponent
-    }
-
-    private func elegirCarpeta() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.directoryURL = agente.carpetaDeTrabajo
-        panel.prompt = "Trabajar aquí"
-        panel.message = "El agente leerá las memorias de esta carpeta y podrá actuar sobre sus archivos."
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        agente.cambiarCarpeta(url)
-    }
-
-    private var marcadorDeTexto: String {
-        switch agente.estado {
-        case .arrancando: return "Abriendo sesión…"
-        case .error: return "El agente no arrancó"
-        default: return "Pídele algo…"
-        }
-    }
-
-    // MARK: - Modelo, esfuerzo, modo y rápido
-
-    /// Como la línea de estado del CLI: "Opus 5.5 · xhigh", y el modo y "rápido" solo cuando no
-    /// están en su valor de siempre. Al tocarlo se cambian (session/set_config_option).
-    private var menuDeOpciones: some View {
-        Menu {
-            ForEach(agente.opciones) { opcion in
-                Section(tituloDeOpcion(opcion.id)) {
-                    Picker(tituloDeOpcion(opcion.id), selection: Binding(
-                        get: { opcion.currentValue },
-                        set: { agente.cambiarOpcion(opcion.id, a: $0) }
-                    )) {
-                        ForEach(opcion.choices) { eleccion in
-                            Text(nombreDeEleccion(opcion.id, eleccion)).tag(eleccion.value)
-                        }
-                    }
-                    .pickerStyle(.inline)
-                    .labelsHidden()
-                }
-            }
-        } label: {
-            Text(resumenDeOpciones)
-                .font(NookDesign.Font.caption)
-                .foregroundStyle(Color.primary.opacity(0.4))
-                .lineLimit(1)
-                .truncationMode(.tail)
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        // Sin .fixedSize: con él, "Default (recommended) · xhigh" empujaba la caja de texto fuera
-        // del panel. Que se recorte antes que romper el renglón.
-        .layoutPriority(-1)
-        .disabled(agente.opciones.isEmpty)
-        .help("Modelo, esfuerzo y modo del agente")
-    }
-
-    private var resumenDeOpciones: String {
-        func opcion(_ id: String) -> KurthACPConfigOption? { agente.opciones.first { $0.id == id } }
-        var partes: [String] = []
-        if let modelo = opcion("model"), let eleccion = modelo.choices.first(where: { $0.value == modelo.currentValue }) {
-            partes.append(nombreDeEleccion("model", eleccion))
-        }
-        if let esfuerzo = opcion("effort") { partes.append(esfuerzo.currentValue) }
-        if let modo = opcion("mode"), modo.currentValue != "default",
-           let eleccion = modo.choices.first(where: { $0.value == modo.currentValue }) {
-            partes.append(nombreDeEleccion("mode", eleccion).lowercased())
-        }
-        if opcion("fast")?.currentValue == "on" { partes.append("rápido") }
-        return partes.isEmpty ? "Modelo" : partes.joined(separator: " · ")
-    }
-
-    private func tituloDeOpcion(_ id: String) -> String {
-        switch id {
-        case "model": return "Modelo"
-        case "effort": return "Esfuerzo"
-        case "mode": return "Permisos"
-        case "fast": return "Modo rápido"
-        default: return id
-        }
-    }
-
-    /// Los modelos con el nombre del agente ("Opus 5.5"); el esfuerzo con la palabra del CLI
-    /// ("xhigh"); los modos y "rápido" en español.
-    private func nombreDeEleccion(_ id: String, _ eleccion: KurthACPConfigOption.Choice) -> String {
-        switch (id, eleccion.value) {
-        case ("effort", "default"), ("model", "default"): return "Por defecto" // no "Default (recommended)"
-        case ("effort", _): return eleccion.value
-        case ("mode", "default"): return "Manual"
-        case ("mode", "acceptEdits"): return "Aceptar ediciones"
-        case ("mode", "plan"): return "Plan"
-        case ("mode", "auto"): return "Auto"
-        case ("mode", "bypassPermissions"): return "Sin permisos"
-        case ("fast", "on"): return "Encendido"
-        case ("fast", "off"): return "Apagado"
-        default: return eleccion.name
-        }
     }
 
     /// Lo que se ofrece al escribir «/»: los comandos del agente y las skills del usuario.
@@ -723,40 +523,8 @@ struct KurthAgentChat: View {
 
     private var puedeEnviar: Bool {
         agente.estado.puedeEscribir
-            && (!texto.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !KurthSenalar.shared.referencias.isEmpty)
-    }
-
-    /// Lo señalado que va con el próximo mensaje: número, resumen y × para quitarlo.
-    private var chipsDeSeñalados: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(KurthSenalar.shared.referencias) { ref in
-                    HStack(spacing: 5) {
-                        Text("\(ref.numero)")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(minWidth: 16, minHeight: 16)
-                            .background(Color(red: 0.04, green: 0.52, blue: 1), in: Circle())
-                        Image(systemName: ref.tipo == "texto" ? "text.quote" : "viewfinder")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                        Text(ref.resumen)
-                            .font(NookDesign.Font.caption)
-                            .lineLimit(1)
-                        Button {
-                            KurthSenalar.shared.quitarReferencia(ref, bm: browserManager)
-                        } label: {
-                            Image(systemName: "xmark").font(.system(size: 8, weight: .bold)).contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                    }
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 4)
-                    .background(Color(red: 0.04, green: 0.52, blue: 1).opacity(0.10), in: Capsule())
-                }
-            }
-        }
+            && (!texto.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !KurthSenalar.shared.referencias.isEmpty
+                || !agente.adjuntos.isEmpty)
     }
 
     private func borrarMarcas(_ autor: String?) {
@@ -770,7 +538,7 @@ struct KurthAgentChat: View {
         guard puedeEnviar else { return }
         let escrito = texto.trimmingCharacters(in: .whitespacesAndNewlines)
         let señalados = KurthSenalar.shared.tomarReferencias()
-        let mensaje = escrito.isEmpty ? "Mira lo que señalé." : escrito
+        let mensaje = escrito.isEmpty ? (señalados.isEmpty ? "Mira lo que te adjunté." : "Mira lo que señalé.") : escrito
         texto = ""
         let pagina = paginaActiva
         // La primera pregunta sobre una página lleva su contenido: el agente contesta sin
