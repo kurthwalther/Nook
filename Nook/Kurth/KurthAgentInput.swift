@@ -8,13 +8,13 @@
 //    ┌──────────────────────────────────────────┐
 //    │ [adjuntos y lo señalado]                 │
 //    │ (+)  Pídele algo…              ⛶   (↑)   │
+//    │  🗀 ⌄   🛡 ⌄          ✳ Opus 5.5  medium ⌄ │
 //    └──────────────────────────────────────────┘
-//      🗀 ⌄   🛡 ⌄                  ✳ Opus 5.5  medium ⌄
 //
 //  «+» agrega archivos, imágenes o una captura de la pestaña; también se pueden soltar encima
 //  archivos del Finder, enlaces o imágenes. Enviar y Señalar van en el renglón del texto. Abajo,
-//  fuera de la caja: carpeta y permisos a la izquierda; modelo y esfuerzo a la derecha, con la
-//  marca del proveedor.
+//  dentro del mismo bloque blanco (Kurth: "como antes se veía bien"): carpeta y permisos a la
+//  izquierda; modelo y esfuerzo a la derecha, con el logo del proveedor.
 //
 
 import SwiftUI
@@ -45,10 +45,7 @@ struct KurthAgentInput: View {
     private var forma: RoundedRectangle { RoundedRectangle(cornerRadius: 20, style: .continuous) }
 
     var body: some View {
-        VStack(spacing: 6) {
-            caja
-            filaDeOpciones
-        }
+        caja
     }
 
     // MARK: - La caja
@@ -64,6 +61,7 @@ struct KurthAgentInput: View {
                 botonSeñalar
                 botonEnviar
             }
+            filaDeOpciones
         }
         .padding(holgura)
         .background(Color(nsColor: .textBackgroundColor), in: forma)
@@ -264,7 +262,9 @@ struct KurthAgentInput: View {
             Spacer(minLength: 8)
             menuDeModelo
         }
-        .padding(.horizontal, 16)
+        // El icono de carpeta queda bajo el centro del «+» (6 + 8 ≈ 14 del borde, «+» centrado en 20).
+        .padding(.horizontal, 8)
+        .padding(.bottom, 2)
     }
 
     /// Dónde trabaja el agente: decide qué memorias tiene y qué archivos puede tocar. Solo el icono;
@@ -359,7 +359,9 @@ struct KurthAgentInput: View {
         } label: {
             etiquetaDeMenu {
                 HStack(spacing: 5) {
-                    KurthMarcaDelProveedor()
+                    Image("kurth-claude-mark")
+                        .renderingMode(.template)
+                        .resizable()
                         .frame(width: 11, height: 11)
                     Text(nombreDelModelo)
                         .foregroundStyle(Color.primary.opacity(0.75))
@@ -532,27 +534,5 @@ struct KurthAgentInput: View {
         contexto.draw(cg, in: CGRect(x: 0, y: 0, width: ancho, height: alto))
         guard let final = contexto.makeImage() else { return nil }
         return NSBitmapImageRep(cgImage: final).representation(using: .jpeg, properties: [.compressionFactor: 0.8])
-    }
-}
-
-/// La marca del proveedor junto al modelo, como la de Aside: un destello de rayos, en el gris de
-/// los controles. Dibujada aquí para no cargar un logo de terceros como imagen.
-struct KurthMarcaDelProveedor: View {
-    var body: some View {
-        Canvas { contexto, tamaño in
-            let centro = CGPoint(x: tamaño.width / 2, y: tamaño.height / 2)
-            let radio = min(tamaño.width, tamaño.height) / 2
-            var rayos = Path()
-            for i in 0..<12 {
-                let angulo = Double(i) * .pi / 6
-                // Largos alternados, como el destello de Claude.
-                let largo = radio * (i.isMultiple(of: 2) ? 1 : 0.72)
-                rayos.move(to: CGPoint(x: centro.x + cos(angulo) * radio * 0.18, y: centro.y + sin(angulo) * radio * 0.18))
-                rayos.addLine(to: CGPoint(x: centro.x + cos(angulo) * largo, y: centro.y + sin(angulo) * largo))
-            }
-            contexto.stroke(rayos, with: .color(Color.primary.opacity(0.7)),
-                            style: StrokeStyle(lineWidth: max(1, radio * 0.2), lineCap: .round))
-        }
-        .accessibilityLabel("Claude")
     }
 }
