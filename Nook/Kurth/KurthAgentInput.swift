@@ -8,7 +8,7 @@
 //    ┌──────────────────────────────────────────┐
 //    │ [adjuntos y lo señalado]                 │
 //    │ (+)  Pídele algo…              ⛶   (↑)   │
-//    │  🗀 ⌄   🛡 ⌄          ✳ Opus 5.5  medium ⌄ │
+//    │  🗀   🛡               ✳ Opus 5.5  medium  │
 //    └──────────────────────────────────────────┘
 //
 //  «+» agrega archivos, imágenes o una captura de la pestaña; también se pueden soltar encima
@@ -312,22 +312,30 @@ struct KurthAgentInput: View {
             }
         } label: {
             etiquetaDeMenu {
-                HStack(spacing: 4) {
-                    Image(systemName: iconoDePermisos(modo?.currentValue))
-                    // Fuera de Manual se dice cuál: es lo que cambia qué hace sin preguntar.
-                    if let modo, modo.currentValue != "default",
-                       let eleccion = modo.choices.first(where: { $0.value == modo.currentValue }) {
-                        Text(nombreDeEleccion("mode", eleccion))
+                // Fuera de Manual se dice cuál, porque cambia qué hace sin preguntar; si el panel es
+                // angosto, queda el icono (cada uno tiene el suyo).
+                ViewThatFits(in: .horizontal) {
+                    if let nombre = nombreDelModo(modo) {
+                        HStack(spacing: 4) {
+                            Image(systemName: iconoDePermisos(modo?.currentValue))
+                            Text(nombre)
+                        }
                     }
+                    Image(systemName: iconoDePermisos(modo?.currentValue))
                 }
             }
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
-        .fixedSize()
         .disabled(modo == nil)
         .help("Permisos: qué puede hacer el agente sin preguntarte")
+    }
+
+    private func nombreDelModo(_ modo: KurthACPConfigOption?) -> String? {
+        guard let modo, modo.currentValue != "default",
+              let eleccion = modo.choices.first(where: { $0.value == modo.currentValue }) else { return nil }
+        return nombreDeEleccion("mode", eleccion)
     }
 
     private func iconoDePermisos(_ modo: String?) -> String {
@@ -339,8 +347,9 @@ struct KurthAgentInput: View {
         }
     }
 
-    /// Modelo, esfuerzo y rápido. Como el de Aside: la marca del proveedor, el modelo y el esfuerzo
-    /// en gris más claro.
+    /// Modelo, esfuerzo y rápido. Como el de Aside: el logo del proveedor, el modelo y el esfuerzo
+    /// en gris más claro. Al angostar el panel se quita primero el esfuerzo y luego el modelo; el
+    /// logo siempre queda (Kurth, 24 sep: "que se haga pequeño armoniosamente").
     private var menuDeModelo: some View {
         Menu {
             ForEach(agente.opciones.filter { $0.id != "mode" }) { opcion in
@@ -359,19 +368,24 @@ struct KurthAgentInput: View {
             }
         } label: {
             etiquetaDeMenu {
-                HStack(spacing: 5) {
-                    Image("kurth-claude-mark")
-                        .renderingMode(.template)
-                        .resizable()
-                        .frame(width: 11, height: 11)
-                    Text(nombreDelModelo)
-                        .foregroundStyle(Color.primary.opacity(0.75))
-                    if let esfuerzo = opcion("effort")?.currentValue {
-                        Text(esfuerzo == "default" ? "por defecto" : esfuerzo)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 5) {
+                        logoDelProveedor
+                        Text(nombreDelModelo)
+                            .foregroundStyle(Color.primary.opacity(0.75))
+                        if let esfuerzo = opcion("effort")?.currentValue {
+                            Text(esfuerzo == "default" ? "por defecto" : esfuerzo)
+                        }
+                        if opcion("fast")?.currentValue == "on" {
+                            Image(systemName: "bolt.fill").font(.system(size: 9))
+                        }
                     }
-                    if opcion("fast")?.currentValue == "on" {
-                        Image(systemName: "bolt.fill").font(.system(size: 9))
+                    HStack(spacing: 5) {
+                        logoDelProveedor
+                        Text(nombreDelModelo)
+                            .foregroundStyle(Color.primary.opacity(0.75))
                     }
+                    logoDelProveedor
                 }
                 .lineLimit(1)
             }
@@ -379,23 +393,25 @@ struct KurthAgentInput: View {
         .menuStyle(.button)
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
-        .fixedSize()
         .disabled(agente.opciones.isEmpty)
         .help("Modelo y esfuerzo del agente")
     }
 
-    /// Icono o texto del menú + la flechita hacia abajo, en el gris de los controles secundarios.
+    private var logoDelProveedor: some View {
+        Image("kurth-claude-mark")
+            .renderingMode(.template)
+            .resizable()
+            .frame(width: 11, height: 11)
+    }
+
+    /// Icono o texto del menú en el gris de los controles secundarios. Sin flechita hacia abajo:
+    /// no sumaba (Kurth, 24 sep); que son menús se entiende al tocarlos.
     private func etiquetaDeMenu<Contenido: View>(@ViewBuilder _ contenido: () -> Contenido) -> some View {
-        HStack(spacing: 4) {
-            contenido()
-            Image(systemName: "chevron.down")
-                .font(.system(size: 8, weight: .semibold))
-                .foregroundStyle(Color.primary.opacity(0.35))
-        }
-        .font(NookDesign.Font.caption)
-        .foregroundStyle(Color.primary.opacity(0.5))
-        .padding(.vertical, 4)
-        .contentShape(Rectangle())
+        contenido()
+            .font(NookDesign.Font.caption)
+            .foregroundStyle(Color.primary.opacity(0.5))
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
     }
 
     private func opcion(_ id: String) -> KurthACPConfigOption? {
