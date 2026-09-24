@@ -36,6 +36,9 @@ struct KurthAgentChat: View {
     /// Alto del encabezado y de la caja de abajo, para desvanecer la conversación antes de ellos.
     @State private var altoArriba: CGFloat = 0
     @State private var altoAbajo: CGFloat = 0
+    /// Margen del panel arriba y abajo. La máscara de la conversación lo suma al alto del
+    /// encabezado y de la caja: sin él, el texto se asomaba 8 pt por detrás de "Agente".
+    private let margen: CGFloat = 8
 
     var body: some View {
         // El encabezado y la caja van como safeAreaInset, igual que el panel anterior: en un
@@ -60,8 +63,8 @@ struct KurthAgentChat: View {
                 .padding(.top, 10)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { altoAbajo = $0 }
             }
-            .safeAreaPadding(.top, 8)
-            .safeAreaPadding(.bottom, 8)
+            .safeAreaPadding(.top, margen)
+            .safeAreaPadding(.bottom, margen)
             .animation(NookDesign.Motion.standard, value: agente.permiso?.id)
             // Abrir y cerrar el panel enciende y apaga el agente (KurthAgentService.panelAbierto).
             // La marca evita contar dos veces si SwiftUI repite onAppear sin onDisappear.
@@ -163,11 +166,11 @@ struct KurthAgentChat: View {
             // ventana (Kurth, 24 sep); la máscara usa el alto real de cada uno.
             .mask {
                 VStack(spacing: 0) {
-                    Color.clear.frame(height: altoArriba)
+                    Color.clear.frame(height: margen + altoArriba)
                     LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: 16)
                     Color.black
                     LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 16)
-                    Color.clear.frame(height: altoAbajo)
+                    Color.clear.frame(height: altoAbajo + margen)
                 }
                 .ignoresSafeArea()
             }

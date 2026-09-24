@@ -263,10 +263,10 @@ struct WindowView: View {
 
         // kurth: barra flotante sobre la página (Nook/Kurth/KurthTopBarView.swift).
         if hasTopBar && KurthChrome.floatingTopBar {
-            VStack(spacing: 0) {
-                // Ocupa sus 8 pt como en el original: ese es el margen gris sobre la tarjeta.
-                WebsiteLoadingIndicator()
-                    .zIndex(3000)
+            // La página va de arriba abajo, pegada a las orillas de la ventana, como Aside: el tema
+            // solo se ve a los lados, donde viven la barra lateral y el agente (Kurth, 24 sep).
+            // Antes la rodeaba un marco de 8 pt arriba y abajo.
+            ZStack(alignment: .top) {
                 ZStack(alignment: .top) {
                     WebsiteView()
                         // Sombra ligera bajo la página (KurthPageEdge); en split cada panel va aparte.
@@ -284,6 +284,11 @@ struct WindowView: View {
                         .environment(windowState)
                         .zIndex(2500)
                 }
+                // El indicador de carga ya no tiene franja propia: va sobre la orilla de arriba de
+                // la barra, sin quitarle clics ni el arrastre de la ventana.
+                WebsiteLoadingIndicator()
+                    .allowsHitTesting(false)
+                    .zIndex(3000)
             }
             .overlay {
                 if aiService.isExecutingTools {
@@ -292,7 +297,6 @@ struct WindowView: View {
                         .allowsHitTesting(false)
                 }
             }
-            .padding(.bottom, 8)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
         ZStack(alignment: .top) {
