@@ -51,6 +51,16 @@ struct KurthAgentChat: View {
                     }
                     cajaDeTexto
                 }
+                .padding(.top, 10)
+                // La franja de abajo difumina lo que pasa por detrás al hacer scroll, como las barras
+                // de las apps de Apple; se desvanece hacia arriba para no marcar un corte.
+                .background {
+                    Rectangle()
+                        .fill(.regularMaterial)
+                        .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.12)],
+                                             startPoint: .top, endPoint: .bottom))
+                        .ignoresSafeArea(edges: .bottom)
+                }
             }
             .safeAreaPadding(.top, 8)
             .safeAreaPadding(.bottom, 8)
@@ -129,6 +139,9 @@ struct KurthAgentChat: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 4)
             }
+            // Al abrir el panel se ve lo último, no el principio de la conversación guardada.
+            .defaultScrollAnchor(.bottom)
+            .onAppear { scroll.scrollTo("final", anchor: .bottom) }
             .onChange(of: agente.mensajes.last?.texto) { _, _ in
                 withAnimation(NookDesign.Motion.standard) { scroll.scrollTo("final", anchor: .bottom) }
             }
@@ -297,7 +310,7 @@ struct KurthAgentChat: View {
             }
         }
         .padding(12)
-        .background(NookDesign.Surface.fill)
+        .background(superficieOpaca)
         .clipShape(NookDesign.Radius.shape(NookDesign.Radius.lg))
         .overlay {
             NookDesign.Radius.shape(NookDesign.Radius.lg)
@@ -358,9 +371,18 @@ struct KurthAgentChat: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(NookDesign.Surface.fill)
+        .background(superficieOpaca)
         .clipShape(NookDesign.Radius.shape(NookDesign.Radius.lg))
         .padding(.horizontal, 8)
+    }
+
+    /// Fondo de la caja de texto y de la tarjeta de permiso. Antes era Surface.fill (negro al 4.5 %)
+    /// y los mensajes se leían a través al hacer scroll (Kurth, 24 sep). Opaco, con el mismo tinte.
+    private var superficieOpaca: some View {
+        ZStack {
+            Color(nsColor: .textBackgroundColor)
+            NookDesign.Surface.fill
+        }
     }
 
     /// Dónde trabaja el agente. Se muestra siempre, no escondido en ajustes: es lo que decide

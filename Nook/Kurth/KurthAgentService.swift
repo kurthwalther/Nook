@@ -302,12 +302,31 @@ final class KurthAgentService {
             }
     }
 
+    /// Conversación nueva de verdad: antes solo se borraba lo visible y el agente seguía en la misma
+    /// sesión, con su contexto y con las instrucciones con que se creó (24 sep: Kurth limpiaba y
+    /// las respuestas seguían largas). Si el agente está corriendo, abre otra sesión en el mismo
+    /// proceso; si no, la próxima vez arranca con una nueva.
     func limpiar() {
         mensajes.removeAll()
         plan.removeAll()
         sesionParaRetomar = nil
         paginasConContenido.removeAll()
         try? FileManager.default.removeItem(at: Self.archivoGuardado)
+        guard estado == .listo, cliente.isRunning else { return }
+        estado = .arrancando
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.cliente.newSession(cwd: self.carpetaDeTrabajo, mcpServers: Self.mcpDeNook(),
+                                                  instrucciones: Self.instrucciones)
+                await self.aplicarOpcionesGuardadas()
+                self.modos = self.cliente.availableModes
+                self.modoActual = self.cliente.currentModeId
+                self.estado = .listo
+            } catch {
+                self.estado = .error(error.localizedDescription)
+            }
+        }
     }
 
     // MARK: - Conversación guardada
@@ -319,6 +338,10 @@ final class KurthAgentService {
         var carpeta: String
         var sessionId: String?
         var mensajes: [Mensaje]
+        /// Con qué instrucciones se creó la sesión. Al retomar, Claude Code conserva las de su
+        /// creación e ignora las nuevas (medido el 24 sep: 302 palabras retomada contra 63 nueva),
+        /// así que si cambiaron no se retoma: se abre otra.
+        var instrucciones: String?
     }
 
     private static let archivoGuardado: URL = {
@@ -338,8 +361,11 @@ final class KurthAgentService {
               let guardado = try? JSONDecoder().decode(Guardado.self, from: datos) else { return }
         // Un turno que se cortó a la mitad al cerrar Nook ya no está en curso.
         mensajes = guardado.mensajes.map { var m = $0; m.enCurso = false; return m }
-        if let id = guardado.sessionId, guardado.carpeta == carpetaDeTrabajo.path {
+        guard let id = guardado.sessionId, guardado.carpeta == carpetaDeTrabajo.path else { return }
+        if guardado.instrucciones == Self.instrucciones {
             sesionParaRetomar = (id, guardado.carpeta)
+        } else if !mensajes.isEmpty {
+            mensajes.append(Mensaje(autor: .agente, texto: "Actualicé mis instrucciones del panel: desde aquí es una conversación nueva y no recuerdo lo de arriba."))
         }
     }
 
@@ -347,7 +373,8 @@ final class KurthAgentService {
         guard !mensajes.isEmpty else { return }
         let guardado = Guardado(carpeta: carpetaDeTrabajo.path,
                                 sessionId: cliente.sessionId ?? sesionParaRetomar?.id,
-                                mensajes: mensajes)
+                                mensajes: mensajes,
+                                instrucciones: Self.instrucciones)
         guard let datos = try? JSONEncoder().encode(guardado) else { return }
         try? FileManager.default.createDirectory(at: Self.archivoGuardado.deletingLastPathComponent(),
                                                  withIntermediateDirectories: true)
