@@ -3,16 +3,21 @@
 //  KurthVibrancy.swift
 //  Nook (rama kurth)
 //
-//  Difuminado puro de lo que hay detrás de la ventana, sin el color del material. Es la receta
-//  de `BlurredView` en gpui de Zed (crates/gpui/src/platform/mac/window.rs, Apache-2.0),
-//  reescrita en Swift: un NSVisualEffectView .behindWindow al que se le quita el fondo de cada
-//  capa, la capa que tiñe con el fondo de pantalla (CAChameleonLayer) y el filtro que sube la
-//  saturación ("colorSaturate"). El color lo pone el tema encima, así que su opacidad es la
-//  transparencia real. Con .sidebar el material traía su propio blanco y un rojo puro detrás
-//  apenas movía el color un 6 % (medido el 23 sep).
+//  Difuminado de lo que hay detrás de la ventana, bajo la superficie del tema
+//  (KurthThemeBackground), cuya opacidad decide cuánto se ve.
+//
+//  En macOS 27 el difuminado de un NSVisualEffectView .behindWindow no vive en su árbol de
+//  capas: lo pone el servidor de ventanas según el material, y la vista solo lleva una capa con
+//  el color del material (volcado del 23 sep: NSViewBackingLayer > CALayer con fondo, sin
+//  filtros). Por eso la receta de gpui (`BlurredView`: material .selection y quitar colores) aquí
+//  dejaba transparencia literal: .selection no pide difuminado. Lo que sirve es un material que
+//  sí difumine y quitarle solo esa capa de color (kurth.windowMaterialTint = false).
 //
 //  La ventana principal de Nook llega con isOpaque = true: así el servidor de ventanas no
 //  compone lo de atrás y el efecto sale gris plano. Se marca no opaca al entrar.
+//
+//  Ajustes en vivo (UserDefaults, también por el MCP de desarrollo, ver KurthMCPTools):
+//  kurth.windowMaterial (nombre del material, por defecto "sidebar") y kurth.windowMaterialTint.
 //
 
 import AppKit
@@ -22,17 +27,42 @@ struct KurthVibrancy: NSViewRepresentable {
     func makeNSView(context: Context) -> BlurredView { BlurredView() }
     func updateNSView(_ view: BlurredView, context: Context) {}
 
+    static let materials: [String: NSVisualEffectView.Material] = [
+        "sidebar": .sidebar, "underWindowBackground": .underWindowBackground,
+        "windowBackground": .windowBackground, "contentBackground": .contentBackground,
+        "hudWindow": .hudWindow, "fullScreenUI": .fullScreenUI, "menu": .menu, "popover": .popover,
+        "headerView": .headerView, "titlebar": .titlebar, "sheet": .sheet,
+        "underPageBackground": .underPageBackground, "toolTip": .toolTip, "selection": .selection,
+    ]
+
     final class BlurredView: NSVisualEffectView {
+        private var keepsTint = false
+        nonisolated(unsafe) private var observer: NSObjectProtocol?
+
         override init(frame: NSRect) {
             super.init(frame: frame)
-            // Material semántico sin color propio (el que usa gpui); activo aunque la ventana no
-            // lo esté, como Arc y Zen: el tema no se apaga a gris al cambiar de app.
-            material = .selection
             blendingMode = .behindWindow
+            // Activo aunque la ventana no lo esté, como Arc y Zen.
             state = .active
+            applyPrefs()
+            observer = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.applyPrefs() }
+            }
         }
 
         required init?(coder: NSCoder) { fatalError("init(coder:) no se usa") }
+
+        deinit { observer.map(NotificationCenter.default.removeObserver) }
+
+        private func applyPrefs() {
+            let defaults = UserDefaults.standard
+            let chosen = KurthVibrancy.materials[defaults.string(forKey: "kurth.windowMaterial") ?? ""] ?? .sidebar
+            let tint = defaults.bool(forKey: "kurth.windowMaterialTint")
+            guard chosen != material || tint != keepsTint else { return }
+            material = chosen
+            keepsTint = tint
+            needsDisplay = true
+        }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
@@ -41,23 +71,12 @@ struct KurthVibrancy: NSViewRepresentable {
 
         override func updateLayer() {
             super.updateLayer()
-            if let layer { Self.stripTint(layer) }
+            // super vuelve a poner el color del material en cada pasada; se quita después.
+            if !keepsTint, let layer { Self.stripTint(layer) }
         }
 
         private static func stripTint(_ layer: CALayer) {
             layer.backgroundColor = nil
-            if String(describing: type(of: layer)) == "CAChameleonLayer" {
-                layer.isHidden = true
-                return
-            }
-            // CAFilter es privado: se reconoce por su descripción ("colorSaturate"; si algún día
-            // fuera CIFilter, diría "inputSaturation"). Por eso se busca "Saturat".
-            if let filters = layer.filters,
-               let i = filters.firstIndex(where: { String(describing: $0).contains("Saturat") }) {
-                var kept = filters
-                kept.remove(at: i)
-                layer.filters = kept
-            }
             layer.sublayers?.forEach(stripTint)
         }
     }

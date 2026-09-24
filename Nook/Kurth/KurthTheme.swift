@@ -41,8 +41,9 @@ struct KurthTheme: Codable, Equatable {
 
     var primaryHex: String? { dots.first?.hex }
 
-    /// En 0.10 casi todo es lo de atrás; en 1, sólida. (Zen: 0.30–0.80 sobre su material.)
-    static let minOpacity = 0.10
+    /// En el mínimo manda el difuminado de lo de atrás; en 1, sólida. En 0.10 la superficie
+    /// casi desaparecía y el sidebar no se leía (Kurth, 23 sep). (Zen: 0.30–0.80 sobre su material.)
+    static let minOpacity = 0.30
     static let maxOpacity = 1.0
 
     /// Tema de 1 color a partir del acento de siempre del Space.
@@ -146,6 +147,16 @@ final class KurthThemeStore {
         draft.accent = editingTabs?.space(id)?.accentHex
         saved[id] = draft
         write()
+    }
+
+    /// Cambia y guarda el tema de un Space desde fuera del selector (MCP de desarrollo).
+    func setTheme(_ theme: KurthTheme, for spaceID: UUID, tabs: TabsController?) {
+        var t = theme
+        t.accent = nil
+        saved[spaceID] = t
+        if editingSpaceID == spaceID { drafts[spaceID] = t }
+        write()
+        if let hex = t.primaryHex { tabs?.updateSpace(spaceID, name: nil, icon: nil, accentHex: hex) }
     }
 
     // MARK: - Archivo
