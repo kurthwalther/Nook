@@ -87,6 +87,11 @@ enum KurthCopilot {
             parameters: ["type": "object", "properties": ["tabId": tabId, "codigo": ["type": "string"], "mundo": ["type": "string", "enum": ["pagina", "aislado"]]], "required": ["codigo"]]
         ),
         AIToolDefinition(
+            name: "screenshot_tab",
+            description: "Captura de cómo se ve la pestaña (imagen JPEG). Úsala cuando importa lo visual: diseño, imágenes, gráficas, dónde está algo. Para leer texto es mejor read_page.",
+            parameters: ["type": "object", "properties": ["tabId": tabId, "maxWidth": ["type": "integer", "description": "Ancho máximo en pixeles (por defecto 1200)."]]]
+        ),
+        AIToolDefinition(
             name: "read_page",
             description: "Lee el contenido principal de la página en markdown, sin menús ni anuncios (Defuddle), con título, autor y fecha si los hay. Para leer; para actuar usa snapshot.",
             parameters: ["type": "object", "properties": ["tabId": tabId, "max": ["type": "integer", "description": "Máximo de caracteres (por defecto 40000)."]]]
@@ -172,9 +177,20 @@ enum KurthCopilot {
                     return texto(String(String(decoding: data, as: UTF8.self).dropFirst().dropLast()))
                 }
                 return texto(valor.map { String(describing: $0) } ?? "undefined")
+            case "screenshot_tab":
+                let maxWidth = (args["maxWidth"] as? NSNumber)?.doubleValue ?? 1200
+                let config = WKSnapshotConfiguration()
+                let escala = destino.webView.window?.backingScaleFactor ?? 2
+                config.snapshotWidth = NSNumber(value: min(destino.webView.bounds.width, maxWidth / escala))
+                let imagen = try await destino.webView.takeSnapshot(configuration: config)
+                guard let tiff = imagen.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
+                      let jpeg = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.7]) else {
+                    return texto("No pude codificar la captura.", error: true)
+                }
+                return ["content": [["type": "image", "data": jpeg.base64EncodedString(), "mimeType": "image/jpeg"]]]
             case "read_page":
                 let max = (args["max"] as? NSNumber)?.intValue ?? 40_000
-                return texto(try await leer(destino, max: max))
+                return texto(try await leer(destino.webView, url: destino.session.url, max: max))
             case "close_tab":
                 bm.tabs.close(destino.itemID)
                 return texto("Pestaña cerrada.")
@@ -457,11 +473,20 @@ enum KurthCopilot {
         return js
     }()
 
-    private static func leer(_ d: Destino, max: Int) async throws -> String {
+    /// El contenido de una pestaña para mandarlo junto con la pregunta del panel (KurthAgentChat):
+    /// así el agente contesta sin usar herramientas. Medido el 24 sep: con el contenido en el
+    /// mensaje y esfuerzo bajo, 5–7 s; buscando la herramienta y leyendo, 14–17 s. nil si falla.
+    static func contenidoParaAgente(_ webView: WKWebView, url: URL, max: Int = 12_000) async -> String? {
+        guard KurthDialogs.pendiente(webView) == nil else { return nil }
+        return try? await leer(webView, url: url, max: max)
+    }
+
+    private static func leer(_ webView: WKWebView, url: URL, max: Int) async throws -> String {
         guard !defuddle.isEmpty else { throw KurthCopilotError("Falta Defuddle en la app.") }
-        let hay = try await js(d.webView, "return typeof self.Defuddle === 'function'") as? Bool ?? false
-        if !hay { _ = try await d.webView.callAsyncJavaScript(defuddle + "\nreturn true", arguments: [:], in: nil, contentWorld: mundo) }
-        let r = try await js(d.webView, """
+        try await instalar(en: webView)
+        let hay = try await js(webView, "return typeof self.Defuddle === 'function'") as? Bool ?? false
+        if !hay { _ = try await webView.callAsyncJavaScript(defuddle + "\nreturn true", arguments: [:], in: nil, contentWorld: mundo) }
+        let r = try await js(webView, """
             const r = new self.Defuddle(document, { markdown: true, url: location.href }).parse();
             return { titulo: r.title || document.title, autor: r.author || '', fecha: r.published || '',
                      sitio: r.site || '', palabras: r.wordCount || 0, contenido: r.content || '' };
@@ -472,7 +497,7 @@ enum KurthCopilot {
         let meta = [("Título", r["titulo"]), ("Autor", r["autor"]), ("Fecha", r["fecha"]), ("Sitio", r["sitio"])]
             .compactMap { clave, valor in (valor as? String).flatMap { $0.isEmpty ? nil : "\(clave): \($0)" } }
             .joined(separator: "\n")
-        return meta + "\nDirección: \(d.session.url.absoluteString)\nPalabras: \(r["palabras"] ?? 0)\n\n" + contenido
+        return meta + "\nDirección: \(url.absoluteString)\nPalabras: \(r["palabras"] ?? 0)\n\n" + contenido
     }
 
     // MARK: - Diálogos a media acción

@@ -393,11 +393,17 @@ final class KurthACPClient {
     /// Manda un mensaje y espera a que el agente termine el turno. Las respuestas parciales van
     /// llegando por `onEvent`.
     @discardableResult
-    func prompt(_ text: String, links: [KurthACPResourceLink] = []) async throws -> String {
+    /// `adjuntos`: textos que van con el mensaje como `resource` (uri + markdown). claude-agent-acp
+    /// los pasa al modelo como <context ref="uri">…</context> junto con la pregunta.
+    func prompt(_ text: String, links: [KurthACPResourceLink] = [], adjuntos: [(uri: String, texto: String)] = []) async throws -> String {
         guard let sessionId else { throw KurthACPError.notRunning }
+        let recursos: [KurthJSON] = adjuntos.map { a in
+            .object(["type": .string("resource"), "resource": .object([
+                "uri": .string(a.uri), "mimeType": .string("text/markdown"), "text": .string(a.texto)])])
+        }
         let result = try await request("session/prompt", params: .object([
             "sessionId": .string(sessionId),
-            "prompt": .array([.object(["type": .string("text"), "text": .string(text)])] + links.map(\.payload)),
+            "prompt": .array([.object(["type": .string("text"), "text": .string(text)])] + links.map(\.payload) + recursos),
         ]), timeout: 3600)
         let reason = result["stopReason"]?.stringValue ?? "end_turn"
         onEvent?(.turnEnded(stopReason: reason))

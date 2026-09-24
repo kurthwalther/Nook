@@ -106,7 +106,10 @@ final class KurthAgentService {
     }
 
     private func aplicarOpcionesGuardadas() async {
-        let elegidas = UserDefaults.standard.dictionary(forKey: Self.claveOpciones) as? [String: String] ?? [:]
+        var elegidas = UserDefaults.standard.dictionary(forKey: Self.claveOpciones) as? [String: String] ?? [:]
+        // Si el usuario no ha elegido esfuerzo en el panel, arranca en bajo: el panel es para
+        // preguntas rápidas y en xhigh Opus se pone a verificar (24 sep: 17 s para resumir una nota).
+        if elegidas["effort"] == nil { elegidas["effort"] = "low" }
         // El modelo primero: de él dependen las demás (con Sonnet no existe "fast").
         for id in ["model", "effort", "fast"] {
             guard let valor = elegidas[id], let opcion = cliente.configOptions.first(where: { $0.id == id }),
@@ -247,6 +250,7 @@ final class KurthAgentService {
                         }
                     }
                 } else {
+                    self.paginasConContenido.removeAll()
                     try await self.cliente.newSession(cwd: self.carpetaDeTrabajo,
                                                       mcpServers: Self.mcpDeNook(), instrucciones: Self.instrucciones)
                 }
@@ -291,6 +295,7 @@ final class KurthAgentService {
         mensajes.removeAll()
         plan.removeAll()
         sesionParaRetomar = nil
+        paginasConContenido.removeAll()
         try? FileManager.default.removeItem(at: Self.archivoGuardado)
     }
 
@@ -343,7 +348,11 @@ final class KurthAgentService {
     /// `pagina`: la pestaña que el usuario tiene enfrente, para que "¿qué estamos viendo?" tenga
     /// respuesta. Va como enlace (dirección y título), no el contenido: si lo necesita, el agente
     /// lee la página con el Browser Control de Nook.
-    func enviar(_ texto: String, pagina: KurthACPResourceLink? = nil) {
+    /// Páginas cuyo contenido ya se le mandó al agente en esta sesión: la segunda pregunta sobre la
+    /// misma página no lo repite. Se vacía con una sesión nueva o al limpiar.
+    private(set) var paginasConContenido = Set<String>()
+
+    func enviar(_ texto: String, pagina: KurthACPResourceLink? = nil, contenido: String? = nil) {
         let limpio = texto.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !limpio.isEmpty, estado == .listo else { return }
 
@@ -355,7 +364,9 @@ final class KurthAgentService {
         Task { [weak self] in
             guard let self else { return }
             do {
-                try await self.cliente.prompt(limpio, links: pagina.map { [$0] } ?? [])
+                let adjuntos = contenido.flatMap { c in pagina.map { [(uri: $0.uri, texto: c)] } } ?? []
+                if let uri = pagina?.uri, contenido != nil { self.paginasConContenido.insert(uri) }
+                try await self.cliente.prompt(limpio, links: pagina.map { [$0] } ?? [], adjuntos: adjuntos)
             } catch {
                 self.anexarAlAgente("\n\n⚠️ \(error.localizedDescription)")
             }
@@ -488,15 +499,18 @@ final class KurthAgentService {
     /// sin la sesión del usuario, y se colgaba en sitios con muro de pago) en vez de leer la pestaña
     /// (Kurth, 24 sep, en robbreport.com).
     static let instrucciones = """
-        Estás en el panel lateral de Nook, el navegador del usuario. Cada mensaje trae como \
-        resource_link la pestaña que está viendo. Cuando hable de "esta página", "esta nota" o \
-        "aquí", usa las herramientas del servidor MCP nook sobre esa pestaña: read_page para leerla \
-        (usa su sesión: sus logins y muros de pago), snapshot para ver qué se puede tocar, y click, \
-        type_text, press_key, hover, scroll y select_option para actuar; handle_dialog si aparece \
-        un diálogo. No uses WebFetch ni WebSearch para la página que ya tiene abierta: son más \
-        lentos y no tienen su sesión. Para trabajo que no deba interrumpirlo, abre tu propia \
-        pestaña con open_tab (queda en segundo plano) y ciérrala con close_tab al terminar. Antes \
-        de publicar, comprar, borrar o enviar datos personales, pregúntale.
+        Estás en el panel lateral de Nook, el navegador del usuario. Cada mensaje trae la pestaña \
+        que está viendo: su dirección y, la primera vez que pregunta por ella, su contenido en \
+        markdown (un resource). Cuando hable de "esta página", "esta nota" o "aquí", contesta \
+        directo con ese contenido, que ya viene en <context>: no llames read_page para esa misma \
+        dirección ni la busques en internet. Usa las herramientas del servidor MCP nook solo si \
+        hace falta algo que no viene en el mensaje: read_page para leerla otra vez, snapshot para \
+        ver qué se puede tocar, screenshot_tab para ver cómo se ve (diseño, imágenes, gráficas), y \
+        click, type_text, press_key, hover, scroll y select_option para actuar; handle_dialog si \
+        aparece un diálogo. Nunca uses WebFetch ni WebSearch para la página que ya tiene abierta. \
+        Para trabajo que no deba interrumpirlo, abre tu propia pestaña con open_tab y ciérrala con \
+        close_tab al terminar. Antes de publicar, comprar, borrar o enviar datos personales, \
+        pregúntale. Sé breve.
         """
 
     private static func mcpDeNook() -> [KurthACPMCPServer] {

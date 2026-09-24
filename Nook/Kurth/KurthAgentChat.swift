@@ -548,7 +548,20 @@ struct KurthAgentChat: View {
 
     private func enviar() {
         guard puedeEnviar else { return }
-        agente.enviar(texto, pagina: paginaActiva)
+        let mensaje = texto
         texto = ""
+        let pagina = paginaActiva
+        // La primera pregunta sobre una página lleva su contenido: el agente contesta sin
+        // herramientas (KurthCopilot.contenidoParaAgente). Leerla toma menos de un segundo.
+        guard let pagina, !agente.paginasConContenido.contains(pagina.uri),
+              let sesion = browserManager.tabs.selectedSession(in: windowState),
+              let webView = browserManager.getWebView(for: sesion.itemID, in: windowState.id) ?? sesion.webView else {
+            agente.enviar(mensaje, pagina: pagina)
+            return
+        }
+        Task {
+            let contenido = await KurthCopilot.contenidoParaAgente(webView, url: sesion.url)
+            agente.enviar(mensaje, pagina: pagina, contenido: contenido)
+        }
     }
 }
