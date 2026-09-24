@@ -40,7 +40,19 @@ struct KurthAgentChat: View {
         // que los botones se ven pero no responden.
         conversacion
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .safeAreaInset(edge: .top) { encabezado }
+            .safeAreaInset(edge: .top) {
+                encabezado
+                    .padding(.bottom, 10)
+                    // Igual que la franja de abajo: lo que pasa por detrás al hacer scroll se difumina,
+                    // y se desvanece hacia abajo para no marcar un corte (Kurth, 24 sep).
+                    .background {
+                        Rectangle()
+                            .fill(.regularMaterial)
+                            .mask(LinearGradient(stops: [.init(color: .black, location: 0.88), .init(color: .clear, location: 1)],
+                                                 startPoint: .top, endPoint: .bottom))
+                            .ignoresSafeArea(edges: .top)
+                    }
+            }
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 8) {
                     if let permiso = agente.permiso {
