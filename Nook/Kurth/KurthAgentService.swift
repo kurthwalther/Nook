@@ -193,7 +193,12 @@ final class KurthAgentService {
                     self.estado = .error("No encontré npx. El agente necesita Node instalado.")
                     return
                 }
-                try await self.cliente.start(agent: .claudeCode(npx: ejecutable))
+                var agente = KurthACPAgent.claudeCode(npx: ejecutable)
+                if let path = await Task.detached(operation: { Self.pathDeInicioDeSesion() }).value {
+                    agente.environment["PATH"] = path
+                }
+                self.ultimoDiagnostico = nil
+                try await self.cliente.start(agent: agente)
                 if let anterior = self.sesionParaRetomar, anterior.carpeta == self.carpetaDeTrabajo.path {
                     do {
                         try await self.cliente.resumeSession(anterior.id, cwd: self.carpetaDeTrabajo,
@@ -215,7 +220,11 @@ final class KurthAgentService {
                 self.modoActual = self.cliente.currentModeId
                 self.estado = .listo
             } catch {
-                self.estado = .error(error.localizedDescription)
+                // Si el proceso murió, su último mensaje de error dice por qué; "el agente no está
+                // corriendo" solo dice que ya no está (así se escondió el PATH el 24 sep).
+                if case .error = self.estado { return }
+                let causa = self.ultimoDiagnostico.map { "\(error.localizedDescription) \($0)" }
+                self.estado = .error(causa ?? error.localizedDescription)
             }
         }
     }
@@ -398,6 +407,25 @@ final class KurthAgentService {
     /// Una app lanzada desde el Finder no hereda el PATH del shell, así que `npx` no aparece
     /// donde aparecería en una terminal. Se busca donde suele estar y, si no, se le pregunta al
     /// shell de inicio de sesión, que es lo único que conoce los cambios de PATH del usuario.
+    /// El PATH del shell de inicio de sesión del usuario. Una app abierta desde el Finder recibe
+    /// solo /usr/bin:/bin:/usr/sbin:/sbin: ahí `npx` no encuentra `node` ("env: node: No such file
+    /// or directory", medido en la Air el 24 sep) y los MCP del usuario no encuentran uvx ni
+    /// python. (En la Pro no se vio; no sé por qué: no lo verifiqué.)
+    nonisolated private static func pathDeInicioDeSesion() -> String? {
+        let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+        let proceso = Process()
+        proceso.executableURL = URL(fileURLWithPath: shell)
+        proceso.arguments = ["-lc", "printf %s \"$PATH\""]
+        let salida = Pipe()
+        proceso.standardOutput = salida
+        proceso.standardError = FileHandle.nullDevice
+        guard (try? proceso.run()) != nil else { return nil }
+        proceso.waitUntilExit()
+        let path = String(decoding: salida.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return path.isEmpty ? nil : path
+    }
+
     private static func buscarNpx() -> String? {
         let candidatos = ["/opt/homebrew/bin/npx", "/usr/local/bin/npx", "/usr/bin/npx"]
         let fm = FileManager.default
