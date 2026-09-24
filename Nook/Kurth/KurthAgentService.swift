@@ -82,6 +82,40 @@ final class KurthAgentService {
     private(set) var comandos: [KurthACPCommand] = []
     private(set) var modos: [(id: String, name: String)] = []
     private(set) var modoActual: String?
+    /// Modelo, esfuerzo, modo y rápido, tal como los publica el agente (ver KurthACPConfigOption).
+    private(set) var opciones: [KurthACPConfigOption] = []
+
+    /// Lo que el usuario eligió de modelo, esfuerzo y rápido; se vuelve a aplicar en cada sesión.
+    /// El modo de permisos NO se guarda a propósito: vuelve a Manual, como en el CLI. Un "sin
+    /// permisos" pegado entre sesiones es justo lo que aprovecharía una página con instrucciones
+    /// escondidas para el agente.
+    private static let claveOpciones = "kurth.agentOptions"
+    private static let opcionesQueSeRecuerdan: Set<String> = ["model", "effort", "fast"]
+
+    func cambiarOpcion(_ id: String, a valor: String) {
+        if Self.opcionesQueSeRecuerdan.contains(id) {
+            var elegidas = UserDefaults.standard.dictionary(forKey: Self.claveOpciones) as? [String: String] ?? [:]
+            elegidas[id] = valor
+            UserDefaults.standard.set(elegidas, forKey: Self.claveOpciones)
+        }
+        Task {
+            do { try await cliente.setConfigOption(id, value: valor) } catch { ultimoDiagnostico = error.localizedDescription }
+            opciones = cliente.configOptions
+            modoActual = cliente.currentModeId
+        }
+    }
+
+    private func aplicarOpcionesGuardadas() async {
+        let elegidas = UserDefaults.standard.dictionary(forKey: Self.claveOpciones) as? [String: String] ?? [:]
+        // El modelo primero: de él dependen las demás (con Sonnet no existe "fast").
+        for id in ["model", "effort", "fast"] {
+            guard let valor = elegidas[id], let opcion = cliente.configOptions.first(where: { $0.id == id }),
+                  opcion.currentValue != valor,
+                  opcion.choices.contains(where: { $0.value == valor }) else { continue }
+            try? await cliente.setConfigOption(id, value: valor)
+        }
+        opciones = cliente.configOptions
+    }
 
     /// Carpeta desde la que trabaja el agente: la elige el usuario y se recuerda entre
     /// arranques. Decide dos cosas que se notan enseguida — qué memorias lee (el CLAUDE.md que
@@ -216,6 +250,7 @@ final class KurthAgentService {
                                                       mcpServers: Self.mcpDeNook())
                 }
                 self.sesionParaRetomar = nil
+                await self.aplicarOpcionesGuardadas()
                 self.modos = self.cliente.availableModes
                 self.modoActual = self.cliente.currentModeId
                 self.estado = .listo
@@ -326,6 +361,10 @@ final class KurthAgentService {
             case .failed(let motivo):
                 self.estado = .error(motivo)
                 self.cerrarTurno()
+
+            case .configChanged(let nuevas):
+                self.opciones = nuevas
+                self.modoActual = self.cliente.currentModeId
             }
         }
 

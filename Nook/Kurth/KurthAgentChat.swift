@@ -312,7 +312,10 @@ struct KurthAgentChat: View {
                 .foregroundStyle(Color.primary.opacity(0.9))
                 .lineLimit(1...5)
                 .focused($escribiendo)
-                .disabled(!agente.estado.puedeEscribir)
+                // Sin .disabled mientras el agente trabaja: el Enter que envía desactivaba el campo
+                // a media pulsación, el resto del evento se quedaba sin quién lo recibiera y macOS
+                // sonaba el aviso de error. Se puede escribir el siguiente mensaje; lo que se
+                // bloquea es enviar (puedeEnviar), como en el CLI.
                 .onSubmit(enviar)
                 .onKeyPress(.tab) {
                     guard let primero = sugerencias.first else { return .ignored }
@@ -322,11 +325,7 @@ struct KurthAgentChat: View {
 
             HStack(spacing: 8) {
                 menuDeCarpeta
-                if let modo = nombreDelModo {
-                    Text(modo)
-                        .font(NookDesign.Font.caption)
-                        .foregroundStyle(Color.primary.opacity(0.4))
-                }
+                menuDeOpciones
                 Spacer()
                 if agente.estado == .trabajando {
                     Button(action: agente.cancelar) {
@@ -415,9 +414,76 @@ struct KurthAgentChat: View {
         }
     }
 
-    private var nombreDelModo: String? {
-        guard let id = agente.modoActual else { return nil }
-        return agente.modos.first(where: { $0.id == id })?.name
+    // MARK: - Modelo, esfuerzo, modo y rápido
+
+    /// Como la línea de estado del CLI: "Opus 5.5 · xhigh", y el modo y "rápido" solo cuando no
+    /// están en su valor de siempre. Al tocarlo se cambian (session/set_config_option).
+    private var menuDeOpciones: some View {
+        Menu {
+            ForEach(agente.opciones) { opcion in
+                Section(tituloDeOpcion(opcion.id)) {
+                    Picker(tituloDeOpcion(opcion.id), selection: Binding(
+                        get: { opcion.currentValue },
+                        set: { agente.cambiarOpcion(opcion.id, a: $0) }
+                    )) {
+                        ForEach(opcion.choices) { eleccion in
+                            Text(nombreDeEleccion(opcion.id, eleccion)).tag(eleccion.value)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                }
+            }
+        } label: {
+            Text(resumenDeOpciones)
+                .font(NookDesign.Font.caption)
+                .foregroundStyle(Color.primary.opacity(0.4))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .disabled(agente.opciones.isEmpty)
+        .help("Modelo, esfuerzo y modo del agente")
+    }
+
+    private var resumenDeOpciones: String {
+        func opcion(_ id: String) -> KurthACPConfigOption? { agente.opciones.first { $0.id == id } }
+        var partes: [String] = []
+        if let modelo = opcion("model") { partes.append(modelo.currentName) }
+        if let esfuerzo = opcion("effort") { partes.append(esfuerzo.currentValue) }
+        if let modo = opcion("mode"), modo.currentValue != "default",
+           let eleccion = modo.choices.first(where: { $0.value == modo.currentValue }) {
+            partes.append(nombreDeEleccion("mode", eleccion).lowercased())
+        }
+        if opcion("fast")?.currentValue == "on" { partes.append("rápido") }
+        return partes.isEmpty ? "Modelo" : partes.joined(separator: " · ")
+    }
+
+    private func tituloDeOpcion(_ id: String) -> String {
+        switch id {
+        case "model": return "Modelo"
+        case "effort": return "Esfuerzo"
+        case "mode": return "Permisos"
+        case "fast": return "Modo rápido"
+        default: return id
+        }
+    }
+
+    /// Los modelos con el nombre del agente ("Opus 5.5"); el esfuerzo con la palabra del CLI
+    /// ("xhigh"); los modos y "rápido" en español.
+    private func nombreDeEleccion(_ id: String, _ eleccion: KurthACPConfigOption.Choice) -> String {
+        switch (id, eleccion.value) {
+        case ("effort", "default"), ("model", "default"): return "Por defecto"
+        case ("effort", _): return eleccion.value
+        case ("mode", "default"): return "Manual"
+        case ("mode", "acceptEdits"): return "Aceptar ediciones"
+        case ("mode", "plan"): return "Plan"
+        case ("mode", "auto"): return "Auto"
+        case ("mode", "bypassPermissions"): return "Sin permisos"
+        case ("fast", "on"): return "Encendido"
+        case ("fast", "off"): return "Apagado"
+        default: return eleccion.name
+        }
     }
 
     /// Lo que se ofrece al escribir «/»: los comandos del agente y las skills del usuario.

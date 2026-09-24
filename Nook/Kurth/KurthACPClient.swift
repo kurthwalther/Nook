@@ -118,6 +118,36 @@ enum KurthACPEvent: Sendable {
     case turnEnded(stopReason: String)
     /// Se murió el subproceso o el protocolo se rompió.
     case failed(String)
+    /// Cambiaron las opciones de la sesión (modelo, esfuerzo, modo, rápido).
+    case configChanged([KurthACPConfigOption])
+}
+
+/// Una opción de la sesión que el agente deja cambiar: claude-agent-acp publica "mode", "model",
+/// "effort" y "fast" en `configOptions` de session/new, y se cambian con
+/// session/set_config_option. Así se ven y se eligen como en el CLI (/model, /effort).
+struct KurthACPConfigOption: Sendable, Identifiable, Equatable {
+    struct Choice: Sendable, Identifiable, Equatable {
+        let value: String
+        let name: String
+        var id: String { value }
+    }
+    let id: String
+    let name: String
+    var currentValue: String
+    let choices: [Choice]
+
+    var currentName: String { choices.first(where: { $0.value == currentValue })?.name ?? currentValue }
+
+    static func parse(_ json: KurthJSON?) -> [KurthACPConfigOption] {
+        (json?.arrayValue ?? []).compactMap { o in
+            guard let id = o["id"]?.stringValue, let current = o["currentValue"]?.stringValue else { return nil }
+            let choices = (o["options"]?.arrayValue ?? []).compactMap { c -> Choice? in
+                guard let value = c["value"]?.stringValue else { return nil }
+                return Choice(value: value, name: c["name"]?.stringValue ?? value)
+            }
+            return KurthACPConfigOption(id: id, name: o["name"]?.stringValue ?? id, currentValue: current, choices: choices)
+        }
+    }
 }
 
 /// Un comando de los que el agente publica. Se manda como texto del prompt, tal cual.
@@ -208,6 +238,7 @@ final class KurthACPClient {
     /// Modos que ofrece la sesión ("default" manual, "acceptEdits", "plan") y el activo.
     private(set) var availableModes: [(id: String, name: String)] = []
     private(set) var currentModeId: String?
+    private(set) var configOptions: [KurthACPConfigOption] = []
 
     private var process: Process?
     private var toAgent: FileHandle?
@@ -308,7 +339,27 @@ final class KurthACPClient {
         leerModos(result)
     }
 
+    /// Cambia una opción de la sesión (p. ej. "model" → "sonnet", "effort" → "high").
+    func setConfigOption(_ id: String, value: String) async throws {
+        guard let sessionId else { throw KurthACPError.notRunning }
+        let result = try await request("session/set_config_option", params: .object([
+            "sessionId": .string(sessionId),
+            "configId": .string(id),
+            "value": .string(value),
+        ]), timeout: 30)
+        let nuevas = KurthACPConfigOption.parse(result["configOptions"])
+        if !nuevas.isEmpty {
+            configOptions = nuevas
+        } else if let i = configOptions.firstIndex(where: { $0.id == id }) {
+            configOptions[i].currentValue = value
+        }
+        if id == "mode" { currentModeId = value }
+        onEvent?(.configChanged(configOptions))
+    }
+
     private func leerModos(_ result: KurthJSON) {
+        let opciones = KurthACPConfigOption.parse(result["configOptions"])
+        if !opciones.isEmpty { configOptions = opciones }
         currentModeId = result["modes"]?["currentModeId"]?.stringValue
         availableModes = (result["modes"]?["availableModes"]?.arrayValue ?? []).compactMap {
             guard let id = $0["id"]?.stringValue, let name = $0["name"]?.stringValue else { return nil }
@@ -461,6 +512,15 @@ final class KurthACPClient {
         case "plan":
             let pasos = (update["entries"]?.arrayValue ?? []).compactMap { $0["content"]?.stringValue }
             if !pasos.isEmpty { onEvent?(.plan(pasos)) }
+        case "config_option_update":
+            let opciones = KurthACPConfigOption.parse(update["configOptions"])
+            if !opciones.isEmpty { configOptions = opciones; onEvent?(.configChanged(opciones)) }
+        case "current_mode_update":
+            if let modo = update["currentModeId"]?.stringValue {
+                currentModeId = modo
+                if let i = configOptions.firstIndex(where: { $0.id == "mode" }) { configOptions[i].currentValue = modo }
+                onEvent?(.configChanged(configOptions))
+            }
         default:
             break
         }
