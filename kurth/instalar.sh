@@ -14,13 +14,17 @@ if [[ -z ${DEVELOPER_DIR:-} ]]; then
   done
 fi
 
-# Firma: cualquier Apple Development válida de esta Mac (los equipos no son los mismos
-# en las dos máquinas). Se puede forzar con IDENTIDAD=<hash> EQUIPO=<team>.
+# Firma: cualquier Apple Development válida de esta Mac. El hash cambia de máquina a máquina
+# aunque el equipo sea el mismo (VRFY7KFRYP). El equipo sale del OU del certificado, NO del
+# paréntesis del nombre, que en un Apple Development es el id del miembro, no el del equipo.
+# Se puede forzar con IDENTIDAD=<hash> EQUIPO=<team>.
 if [[ -z ${IDENTIDAD:-} ]]; then
   LINEA=$(security find-identity -v -p codesigning | grep "Apple Development" | grep -v CSSMERR | head -1)
   [[ -n $LINEA ]] || { echo "❌ no hay ningún certificado Apple Development válido en esta Mac"; exit 1 }
   IDENTIDAD=$(echo $LINEA | awk '{print $2}')
-  EQUIPO=$(echo $LINEA | sed -E 's/.*\(([A-Z0-9]+)\)".*/\1/')
+  NOMBRE=$(echo $LINEA | sed -E 's/^[^"]*"([^"]+)".*/\1/')
+  EQUIPO=$(security find-certificate -c "$NOMBRE" -p | openssl x509 -noout -subject \
+           | sed -E 's/.*OU=([A-Z0-9]+).*/\1/')
 fi
 
 cd $REPO
