@@ -83,9 +83,51 @@ final class KurthAgentService {
     private(set) var modos: [(id: String, name: String)] = []
     private(set) var modoActual: String?
 
-    /// Carpeta desde la que trabaja el agente. Decide qué memorias lee (su CLAUDE.md) y sobre
-    /// qué archivos puede actuar. El home es lo que hace que traiga las memorias del usuario.
-    var carpetaDeTrabajo: URL = FileManager.default.homeDirectoryForCurrentUser
+    /// Carpeta desde la que trabaja el agente: la elige el usuario y se recuerda entre
+    /// arranques. Decide dos cosas que se notan enseguida — qué memorias lee (el CLAUDE.md que
+    /// haya ahí y los de encima) y sobre qué archivos actúa. Por eso apuntarla a un proyecto
+    /// hace que el agente "sepa" de ese proyecto, y apuntarla a la carpeta personal deja un
+    /// agente genérico con las memorias del usuario.
+    private(set) var carpetaDeTrabajo: URL = KurthAgentService.carpetaGuardada()
+
+    /// Las últimas carpetas usadas, para el menú. La personal siempre va primero.
+    private(set) var carpetasRecientes: [URL] = KurthAgentService.recientesGuardadas()
+
+    private static let claveCarpeta = "kurth.agentFolder"
+    private static let claveRecientes = "kurth.agentRecentFolders"
+
+    static func carpetaGuardada() -> URL {
+        let personal = FileManager.default.homeDirectoryForCurrentUser
+        guard let ruta = UserDefaults.standard.string(forKey: claveCarpeta) else { return personal }
+        var esDirectorio: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: ruta, isDirectory: &esDirectorio), esDirectorio.boolValue
+        else { return personal }   // la carpeta pudo borrarse o moverse desde la última vez
+        return URL(fileURLWithPath: ruta)
+    }
+
+    static func recientesGuardadas() -> [URL] {
+        let personal = FileManager.default.homeDirectoryForCurrentUser
+        let guardadas = (UserDefaults.standard.array(forKey: claveRecientes) as? [String] ?? [])
+            .map { URL(fileURLWithPath: $0) }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
+        return ([personal] + guardadas.filter { $0.path != personal.path }).prefix(6).map { $0 }
+    }
+
+    /// Cambia dónde trabaja el agente. El cwd se fija al abrir la sesión, así que hay que
+    /// rehacerla; la conversación se conserva aunque el agente ya no la recuerde.
+    func cambiarCarpeta(_ url: URL) {
+        guard url.path != carpetaDeTrabajo.path else { return }
+        carpetaDeTrabajo = url
+        UserDefaults.standard.set(url.path, forKey: Self.claveCarpeta)
+
+        var recientes = carpetasRecientes.map(\.path).filter { $0 != url.path }
+        recientes.insert(url.path, at: 0)
+        UserDefaults.standard.set(Array(recientes.prefix(6)), forKey: Self.claveRecientes)
+        carpetasRecientes = Self.recientesGuardadas()
+
+        apagar()
+        arrancar()
+    }
 
     private let cliente = KurthACPClient()
     private var arrancando: Task<Void, Never>?

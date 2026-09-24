@@ -18,6 +18,7 @@
 //     un turno quieto no se confunda con uno lento.
 //
 
+import AppKit
 import SwiftUI
 import NookDesign
 import NookWeb
@@ -313,6 +314,7 @@ struct KurthAgentChat: View {
                 }
 
             HStack(spacing: 8) {
+                menuDeCarpeta
                 if let modo = nombreDelModo {
                     Text(modo)
                         .font(NookDesign.Font.caption)
@@ -343,6 +345,59 @@ struct KurthAgentChat: View {
         .background(NookDesign.Surface.fill)
         .clipShape(NookDesign.Radius.shape(NookDesign.Radius.lg))
         .padding(.horizontal, 8)
+    }
+
+    /// Dónde trabaja el agente. Se muestra siempre, no escondido en ajustes: es lo que decide
+    /// qué memorias tiene y sobre qué archivos puede actuar, así que el usuario debería poder
+    /// leerlo de un vistazo antes de pedirle algo.
+    private var menuDeCarpeta: some View {
+        Menu {
+            ForEach(agente.carpetasRecientes, id: \.path) { carpeta in
+                Button {
+                    agente.cambiarCarpeta(carpeta)
+                } label: {
+                    if carpeta.path == agente.carpetaDeTrabajo.path {
+                        Label(nombreCorto(carpeta), systemImage: "checkmark")
+                    } else {
+                        Text(nombreCorto(carpeta))
+                    }
+                }
+            }
+            Divider()
+            Button("Elegir carpeta…") { elegirCarpeta() }
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: "folder")
+                    .font(.system(size: 9))
+                Text(nombreCorto(agente.carpetaDeTrabajo))
+                    .lineLimit(1)
+                    .truncationMode(.head)
+            }
+            .font(NookDesign.Font.caption)
+            .foregroundStyle(Color.primary.opacity(0.4))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Desde dónde trabaja el agente: decide qué memorias tiene y qué archivos puede tocar")
+    }
+
+    private func nombreCorto(_ url: URL) -> String {
+        url.path == FileManager.default.homeDirectoryForCurrentUser.path
+            ? "Carpeta personal"
+            : url.lastPathComponent
+    }
+
+    private func elegirCarpeta() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = agente.carpetaDeTrabajo
+        panel.prompt = "Trabajar aquí"
+        panel.message = "El agente leerá las memorias de esta carpeta y podrá actuar sobre sus archivos."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        agente.cambiarCarpeta(url)
     }
 
     private var marcadorDeTexto: String {
