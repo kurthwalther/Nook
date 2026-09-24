@@ -31,21 +31,30 @@ struct KurthAgentChat: View {
     @FocusState private var escribiendo: Bool
 
     var body: some View {
-        VStack(spacing: 8) {
-            encabezado
-            conversacion
-            if let permiso = agente.permiso {
-                tarjetaDePermiso(permiso)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+        // El encabezado y la caja van como safeAreaInset, igual que el panel anterior: en un
+        // VStack normal el área de mensajes se expande sobre ellos y se queda con los clics, así
+        // que los botones se ven pero no responden.
+        conversacion
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .safeAreaInset(edge: .top) { encabezado }
+            .safeAreaInset(edge: .bottom) {
+                VStack(spacing: 8) {
+                    if let permiso = agente.permiso {
+                        tarjetaDePermiso(permiso)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    } else if !sugerencias.isEmpty {
+                        listaDeComandos
+                    }
+                    cajaDeTexto
+                }
             }
-            cajaDeTexto
-        }
-        .padding(.vertical, 8)
-        .animation(NookDesign.Motion.standard, value: agente.permiso?.id)
-        .onAppear {
-            agente.arrancar()
-            escribiendo = true
-        }
+            .safeAreaPadding(.top, 8)
+            .safeAreaPadding(.bottom, 8)
+            .animation(NookDesign.Motion.standard, value: agente.permiso?.id)
+            .onAppear {
+                agente.arrancar()
+                escribiendo = true
+            }
     }
 
     // MARK: - Encabezado
@@ -297,6 +306,11 @@ struct KurthAgentChat: View {
                 .focused($escribiendo)
                 .disabled(!agente.estado.puedeEscribir)
                 .onSubmit(enviar)
+                .onKeyPress(.tab) {
+                    guard let primero = sugerencias.first else { return .ignored }
+                    texto = "/" + primero.name + " "
+                    return .handled
+                }
 
             HStack(spacing: 8) {
                 if let modo = nombreDelModo {
@@ -342,6 +356,48 @@ struct KurthAgentChat: View {
     private var nombreDelModo: String? {
         guard let id = agente.modoActual else { return nil }
         return agente.modos.first(where: { $0.id == id })?.name
+    }
+
+    /// Lo que se ofrece al escribir «/»: los comandos del agente y las skills del usuario.
+    /// Solo mientras la «/» abre el mensaje y no hay espacios: «/model» sí, «dime /algo» no.
+    private var sugerencias: [KurthACPCommand] {
+        guard texto.hasPrefix("/"), !texto.contains(" ") else { return [] }
+        let escrito = String(texto.dropFirst())
+        let encontrados = agente.comandos(queEmpiecenCon: escrito)
+        // Con el nombre completo escrito ya no hay nada que sugerir.
+        if encontrados.count == 1 && encontrados[0].name == escrito { return [] }
+        return Array(encontrados.prefix(6))
+    }
+
+    private var listaDeComandos: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(sugerencias) { comando in
+                Button {
+                    texto = "/" + comando.name + " "
+                } label: {
+                    HStack(spacing: 8) {
+                        Text("/" + comando.name)
+                            .font(NookDesign.Font.caption)
+                            .foregroundStyle(Color.primary.opacity(0.9))
+                        if !comando.description.isEmpty {
+                            Text(comando.description)
+                                .font(NookDesign.Font.caption)
+                                .foregroundStyle(Color.primary.opacity(0.4))
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.vertical, 4)
+        .background(NookDesign.Surface.fill)
+        .clipShape(NookDesign.Radius.shape(NookDesign.Radius.md))
+        .padding(.horizontal, 8)
     }
 
     private var puedeEnviar: Bool {

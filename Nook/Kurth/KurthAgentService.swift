@@ -78,6 +78,8 @@ final class KurthAgentService {
     private(set) var plan: [String] = []
     /// Última línea de diagnóstico del subproceso; sirve para saber por qué no arranca.
     private(set) var ultimoDiagnostico: String?
+    /// Lo que el agente ofrece con «/»: sus comandos y cada skill del usuario.
+    private(set) var comandos: [KurthACPCommand] = []
     private(set) var modos: [(id: String, name: String)] = []
     private(set) var modoActual: String?
 
@@ -124,6 +126,19 @@ final class KurthAgentService {
         permiso = nil
         cliente.stop()
         estado = .apagado
+    }
+
+    /// Los comandos que empatan con lo que se lleva escrito tras la «/».
+    func comandos(queEmpiecenCon prefijo: String) -> [KurthACPCommand] {
+        let busqueda = prefijo.lowercased()
+        return comandos
+            .filter { busqueda.isEmpty || $0.name.lowercased().contains(busqueda) }
+            .sorted { a, b in
+                // Primero los que empiezan igual: escribir "mo" debe ofrecer /model antes que
+                // cualquier skill que lleve "mo" en medio.
+                let ea = a.name.lowercased().hasPrefix(busqueda), eb = b.name.lowercased().hasPrefix(busqueda)
+                return ea == eb ? a.name.count < b.name.count : ea
+            }
     }
 
     func limpiar() {
@@ -187,6 +202,9 @@ final class KurthAgentService {
 
             case .plan(let pasos):
                 self.plan = pasos
+
+            case .commands(let lista):
+                self.comandos = lista
 
             case .diagnostic(let texto):
                 self.ultimoDiagnostico = texto

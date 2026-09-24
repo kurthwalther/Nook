@@ -109,12 +109,22 @@ enum KurthACPEvent: Sendable {
     case toolUpdated(id: String, status: String)
     /// El plan de trabajo que el agente publica y va actualizando.
     case plan([String])
+    /// Los comandos que el agente ofrece («/model», «/context», y cada skill del usuario).
+    /// Llegan poco después de abrir la sesión, no en la respuesta de session/new.
+    case commands([KurthACPCommand])
     /// Diagnóstico del subproceso (su salida de error). No es parte del protocolo.
     case diagnostic(String)
     /// El agente terminó el turno. `stopReason` suele ser "end_turn", "cancelled" o "refusal".
     case turnEnded(stopReason: String)
     /// Se murió el subproceso o el protocolo se rompió.
     case failed(String)
+}
+
+/// Un comando de los que el agente publica. Se manda como texto del prompt, tal cual.
+struct KurthACPCommand: Sendable, Identifiable, Equatable {
+    var name: String
+    var description: String
+    var id: String { name }
 }
 
 /// Una autorización que el agente pide antes de actuar.
@@ -425,6 +435,12 @@ final class KurthACPClient {
         case "tool_call_update":
             onEvent?(.toolUpdated(id: update["toolCallId"]?.stringValue ?? "",
                                   status: update["status"]?.stringValue ?? "unknown"))
+        case "available_commands_update":
+            let comandos = (update["availableCommands"]?.arrayValue ?? []).compactMap { c -> KurthACPCommand? in
+                guard let name = c["name"]?.stringValue else { return nil }
+                return KurthACPCommand(name: name, description: c["description"]?.stringValue ?? "")
+            }
+            if !comandos.isEmpty { onEvent?(.commands(comandos)) }
         case "plan":
             let pasos = (update["entries"]?.arrayValue ?? []).compactMap { $0["content"]?.stringValue }
             if !pasos.isEmpty { onEvent?(.plan(pasos)) }
