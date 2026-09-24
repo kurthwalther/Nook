@@ -15,6 +15,23 @@ Detalle de Zen en `kurth/plan-zen.md`.
 3. Guardar la conversación del chat al cerrar Nook.
 4. Memoria (Zen motor-02 → motor-03), después iCloud fase 1.
 
+## Copiloto en el navegador (24 sep) ✅
+
+Herramientas nuevas del MCP (KurthCopilot.swift + KurthCopilot.js + KurthDialogs.swift), todas con
+`tabId`: snapshot (foto con @e1…), click, type_text, press_key, hover, scroll, select_option,
+handle_dialog, run_js, read_page (Defuddle 0.19.4, MIT, en Nook/Kurth/Vendor), list_tabs, open_tab
+(en segundo plano por defecto), navigate_tab, close_tab. clickElement y getInteractiveElements se
+esconden del MCP (las reemplazan).
+- **Nativo** (pestaña a la vista): NSEvent directo a mouseDown/mouseUp del WKWebView, escritura con
+  `_executeEditCommand:InsertText`, hover con `_simulateMouseMove:`. Verificado en una página local
+  con React 18: click, hover y tecla con isTrusted=true, onChange de React, diálogo cancelado.
+- **JavaScript** (pestaña sin ventana): verificado igual en segundo plano, incluido React y el
+  diálogo aceptado. La pestaña del agente sin ventana se crea a 1280×800.
+- Un diálogo detiene el JS de la página: las acciones esperan "lo primero que pase" y avisan.
+- Pendiente: eventos nativos en segundo plano (necesitan una ventana invisible, como Bun.WebView);
+  `select` nativo (el menú es modal); evaluar la SPI de agentes de WebKit (`_performInteraction:`,
+  `_extractDebugTextWithConfiguration:`), macOS 26.4+. Informe del Researcher del 24 sep.
+
 ## Hecho el 24 sep
 
 - ✅ Sin pestañas: "Ah, peace.", barra lateral a la vista y la URL lista para escribir (`bf01f69`).

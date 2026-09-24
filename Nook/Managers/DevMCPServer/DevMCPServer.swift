@@ -285,7 +285,8 @@ final class DevMCPServer {
     /// `executeJavaScript` is not advertised: over this server it is only an old name for
     /// `evaluate` (see callTool), and the chat's description of it is wrong for that behaviour.
     /// The alias stays so an agent registered against the old name keeps working.
-    private static let toolList: [[String: Any]] = (BrowserTools.allTools.filter { $0.name != "executeJavaScript" } + devTools + KurthMCPTools.tools).map { // kurth: + ajustes de la capa
+    // kurth: + ajustes de la capa y el copiloto (KurthCopilot); sin las dos que el copiloto reemplaza.
+    private static let toolList: [[String: Any]] = (BrowserTools.allTools.filter { $0.name != "executeJavaScript" && !KurthCopilot.reemplazadas.contains($0.name) } + devTools + KurthMCPTools.tools + KurthCopilot.tools).map {
         ["name": $0.name, "description": $0.description, "inputSchema": $0.parameters]
     }
 
@@ -332,6 +333,7 @@ final class DevMCPServer {
 
         // kurth: ajustes y tema de la capa Kurth (Nook/Kurth/KurthMCPTools.swift)
         if let result = KurthMCPTools.call(name, args, window: window, tabs: bm.tabs) { return result }
+        if let result = await KurthCopilot.call(name, args, browserManager: bm) { return result }
 
         do {
             if BrowserTools.toolsByName[name] != nil {

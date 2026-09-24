@@ -253,8 +253,18 @@ extension BrowserManager: AlertPresenter {
     ) {
         let alert = pageDialog(
             host: host, fallbackTitle: "JavaScript Alert", message: message, suppressible: onSuppress != nil)
-        guard let window = webView.window else { return completion() }
+        guard let window = webView.window else {
+            // kurth: en la pestaña del agente sin ventana, el diálogo espera su respuesta (KurthDialogs).
+            if KurthDialogs.esDelAgente(webView) {
+                return KurthDialogs.esperarAlAgente(webView, tipo: "alert", mensaje: message) { _, _ in completion() }
+            }
+            return completion()
+        }
+        KurthDialogs.registrar(webView, .init(tipo: "alert", mensaje: message) { _, _ in // kurth
+            window.endSheet(alert.window, returnCode: .alertFirstButtonReturn)
+        })
         alert.beginSheetModal(for: window) { _ in
+            KurthDialogs.olvidar(webView) // kurth
             if alert.suppressionButton?.state == .on { onSuppress?() }
             completion()
         }
@@ -267,8 +277,17 @@ extension BrowserManager: AlertPresenter {
         let alert = pageDialog(
             host: host, fallbackTitle: "JavaScript Confirm", message: message, suppressible: onSuppress != nil)
         alert.addButton(withTitle: "Cancel")
-        guard let window = webView.window else { return completion(false) }
+        guard let window = webView.window else {
+            if KurthDialogs.esDelAgente(webView) { // kurth
+                return KurthDialogs.esperarAlAgente(webView, tipo: "confirm", mensaje: message) { aceptar, _ in completion(aceptar) }
+            }
+            return completion(false)
+        }
+        KurthDialogs.registrar(webView, .init(tipo: "confirm", mensaje: message) { aceptar, _ in // kurth
+            window.endSheet(alert.window, returnCode: aceptar ? .alertFirstButtonReturn : .alertSecondButtonReturn)
+        })
         alert.beginSheetModal(for: window) {
+            KurthDialogs.olvidar(webView) // kurth
             if alert.suppressionButton?.state == .on { onSuppress?() }
             completion($0 == .alertFirstButtonReturn)
         }
@@ -284,8 +303,20 @@ extension BrowserManager: AlertPresenter {
         let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
         textField.stringValue = defaultText ?? ""
         alert.accessoryView = textField
-        guard let window = webView.window else { return completion(nil) }
+        guard let window = webView.window else {
+            if KurthDialogs.esDelAgente(webView) { // kurth
+                return KurthDialogs.esperarAlAgente(webView, tipo: "prompt", mensaje: prompt) { aceptar, texto in
+                    completion(aceptar ? (texto ?? defaultText ?? "") : nil)
+                }
+            }
+            return completion(nil)
+        }
+        KurthDialogs.registrar(webView, .init(tipo: "prompt", mensaje: prompt) { aceptar, texto in // kurth
+            if let texto { textField.stringValue = texto }
+            window.endSheet(alert.window, returnCode: aceptar ? .alertFirstButtonReturn : .alertSecondButtonReturn)
+        })
         alert.beginSheetModal(for: window) {
+            KurthDialogs.olvidar(webView) // kurth
             if alert.suppressionButton?.state == .on { onSuppress?() }
             completion($0 == .alertFirstButtonReturn ? textField.stringValue : nil)
         }
