@@ -57,6 +57,10 @@ struct KurthTabStrip: View {
     @State private var segmentsWidth: CGFloat = 0
     @State private var plusWidth: CGFloat = 0
     @State private var slotWidth: CGFloat = 0
+    /// Margen entre el borde derecho de la tira y el de su ranura, medido en reposo. Mientras la X
+    /// de solo íconos está puesta, la tira se ancla por la derecha a ese margen: el lado derecho no
+    /// se mueve pase lo que pase con el ancho (Kurth, 25 sep).
+    @State private var margenDerecho: CGFloat = 0
 
     private var tabs: TabsController { browserManager.tabs }
     private var selectedID: UUID? { tabs.selectedItemID(in: windowState) }
@@ -98,12 +102,18 @@ struct KurthTabStrip: View {
         // La X de solo íconos suma 22 pt mientras está; no cuenta para pasar a modo scroll, o la tira
         // brincaba al ancho fijo y crecía a los dos lados (Kurth, 25 sep).
         let overflows = available > 0 && segmentsWidth - crecimientoDeX + plusWidth + 2 * Self.segmentInset > available
+        let anclada = !overflows && crecimientoDeX > 0
         Color.clear
             .frame(maxWidth: .infinity)
             .frame(height: KurthTopBarView.capsuleHeight)
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { slotWidth = $0 }
-            .overlay {
+            // Centrada en reposo; con la X puesta, pegada por la derecha a su margen de reposo.
+            .overlay(alignment: anclada ? .trailing : .center) {
                 capsule(overflows: overflows, width: available)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { ancho in
+                        if !anclada { margenDerecho = max(0, (slotWidth - ancho) / 2) }
+                    }
+                    .padding(.trailing, anclada ? margenDerecho : 0)
             }
     }
 
@@ -151,9 +161,6 @@ struct KurthTabStrip: View {
         .frame(width: overflows ? width : nil, height: KurthTopBarView.capsuleHeight)
         // Mide lo que mide su contenido: nada se estira para llenar la barra.
         .fixedSize(horizontal: !overflows, vertical: false)
-        // Centrada, la tira reparte el crecimiento a los dos lados: se corre la mitad a la
-        // izquierda para que el lado derecho no se mueva.
-        .offset(x: overflows ? 0 : -crecimientoDeX / 2)
         .clipShape(Capsule())
         .modifier(StripSurface(glass: glass, tint: tint))
         // Para deslizar entre pestañas sobre la tira (KurthGestosDePestanas), solo si todo cabe.
