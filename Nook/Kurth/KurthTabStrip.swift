@@ -271,16 +271,20 @@ struct KurthTabStrip: View {
                     // cambia de tamaño. Un hueco reservado "se ve feo" (Kurth, 25 sep).
                     let mostrarCopiar = url != nil && (isHovered || copiado)
                     let minimo = KurthTopBarView.addressMinWidth - 2 * KurthTopBarView.capsuleInset - 2 * (NookDesign.Size.favicon + 6)
+                    // El ícono mide 20 más 6 de separación: al dominio le queda el resto de su
+                    // ancho de reposo y se corta por el final ("ultrajewels.co…"), sin moverse.
+                    let anchoConIcono = max(anchoDominio - 26, 0)
                     HStack(spacing: 6) {
                         Text(url.map(KurthTopBarView.shortHost) ?? tabs.title(for: entry.item))
                             .font(NookDesign.Font.body)
                             .foregroundStyle(.primary)
                             .lineLimit(1)
-                            .truncationMode(.head)
+                            .truncationMode(.tail)
                             .frame(minWidth: mostrarCopiar ? nil : minimo)
+                            .frame(width: mostrarCopiar && anchoConIcono > 0 ? anchoConIcono : nil)
                         if mostrarCopiar, let url { copyButton(url).transition(.opacity) }
                     }
-                    .frame(width: mostrarCopiar && anchoDominio > 0 ? anchoDominio : nil, alignment: .trailing)
+                    .frame(width: mostrarCopiar && anchoDominio > 0 ? anchoDominio : nil, alignment: .leading)
                     .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { if !mostrarCopiar { anchoDominio = $0 } }
                     .animation(NookDesign.Motion.quick, value: mostrarCopiar)
                     reloadButton
