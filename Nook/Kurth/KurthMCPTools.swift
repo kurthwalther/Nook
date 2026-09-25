@@ -61,7 +61,7 @@ enum KurthMCPTools {
         Setting(key: "kurth.agentCardHeight", type: "number", defaultValue: 0.5,
                 info: "Alto de la tarjeta del agente que se asoma con hover, como fracción del alto de la ventana (0.5 = mitad). Se limita a 360 pt como mínimo y a no tapar la barra de arriba"),
         Setting(key: "kurth.panelMaterial", type: "string", defaultValue: "glass",
-                info: "Material de las cuatro barras (lateral y agente, fijas y con hover): glass (Liquid Glass; en las fijas, un panel separado de las orillas) o panel (el de antes: las fijas sin fondo propio y las flotantes con el material de la ventana)"),
+                info: "Material de las cuatro barras (lateral y agente, fijas y con hover): glass (Liquid Glass; en las fijas, el fondo de la ventana pasa a vidrio) o panel (el de antes: las fijas sin fondo propio y las flotantes con el material de la ventana)"),
         Setting(key: "kurth.agentCardPinned", type: "bool", defaultValue: false,
                 info: "Tarjeta del agente fijada: se queda abierta aunque el mouse se vaya (el pin de su encabezado)"),
         Setting(key: "kurth.aiSidebarWidth", type: "number", defaultValue: 330.0,

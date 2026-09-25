@@ -239,7 +239,6 @@ struct WindowView: View {
         if windowState.isSidebarVisible {
             SpacesSideBarView()
                 .frame(width: windowState.sidebarWidth)
-                .modifier(KurthMaterialFijo()) // kurth: panel de vidrio si kurth.panelMaterial = glass
                 .overlay(alignment: nookSettings.sidebarPosition == .left ? .trailing : .leading) {
                     SidebarResizeView()
                         .frame(maxHeight: .infinity)
@@ -358,7 +357,6 @@ struct WindowView: View {
         // montar, hasta que esto lleve tiempo probado: volver es cambiar esta línea.
         KurthAgentChat()
             .frame(width: windowState.aiSidebarWidth)
-            .modifier(KurthMaterialFijo()) // kurth: panel de vidrio si kurth.panelMaterial = glass
             .overlay(alignment: handleAlignment) {
                 AISidebarResizeView()
                     .frame(maxHeight: .infinity)

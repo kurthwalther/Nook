@@ -70,10 +70,10 @@ struct KurthAgentChat: View {
     private var conBlur: Bool { !esCapsulas || capsuleBlur }
     /// Cuánto se ve del texto que pasa bajo el encabezado. La barra con tinte pone el color de la
     /// página a `tintOpacity` sobre el blur; sobre el fondo liso del panel eso es lo mismo que dejar
-    /// pasar el texto a 1 − tintOpacity. Cápsulas con blur: pasa entero. Sin blur: se desvanece antes.
+    /// pasar el texto a 1 − tintOpacity. Con cápsulas pasa entero: sin el título "Agente" no hay
+    /// nada que tapar, y los botones llevan su propio vidrio (Kurth, 25 sep).
     private var pasoBajoEncabezado: Double {
-        if !esCapsulas { return 1 - tintOpacity }
-        return capsuleBlur ? 1 : 0
+        esCapsulas ? 1 : 1 - tintOpacity
     }
 
     var body: some View {
@@ -152,20 +152,22 @@ struct KurthAgentChat: View {
     }
 
     /// Sin "Agente" (Kurth, 25 sep: quítalo del fijo y del flotante): a la izquierda solo sale lo
-    /// que pide atención, un permiso esperando o un error.
+    /// que pide atención, un permiso esperando o un error. Con cápsulas va en la suya, como los
+    /// botones, porque la conversación ya pasa por debajo.
     private var titulo: some View {
-        HStack(spacing: 6) {
+        ZStack {
             if let detalle = detalleDeEstado {
                 Text(detalle)
                     .font(NookDesign.Font.caption)
-                    .foregroundStyle(Color.primary.opacity(0.45))
+                    .foregroundStyle(Color.primary.opacity(0.6))
                     .lineLimit(1)
                     .truncationMode(.tail)
+                    .padding(.horizontal, 4)
+                    .frame(height: KurthTopBarView.capsuleHeight)
+                    .modifier(KurthCapsule(active: esCapsulas, minWidth: 1))
                     .transition(.opacity)
             }
         }
-        .padding(.horizontal, 4)
-        .frame(height: KurthTopBarView.capsuleHeight)
         .animation(NookDesign.Motion.quick, value: detalleDeEstado)
     }
 
@@ -274,9 +276,8 @@ struct KurthAgentChat: View {
                 .padding(.top, 4)
             }
             // Abajo, el texto se desvanece antes de llegar a la caja en vez de pasar por detrás.
-            // Arriba depende del estilo de la barra (`pasoBajoEncabezado`): con blur pasa por debajo
-            // del encabezado, atenuado como en la página; sin blur se desvanece antes, para que nada
-            // se asome tras "Agente". La máscara usa el alto real de cada uno.
+            // Arriba pasa por debajo del encabezado: entero con cápsulas, atenuado con la barra con
+            // tinte (`pasoBajoEncabezado`). La máscara usa el alto real de cada uno.
             .mask {
                 VStack(spacing: 0) {
                     Color.black.opacity(pasoBajoEncabezado).frame(height: altoArriba)

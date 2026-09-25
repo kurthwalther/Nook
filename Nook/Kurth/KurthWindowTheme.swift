@@ -36,6 +36,7 @@ struct KurthWindowTheme: View {
             KurthThemeBackground(theme: theme, isActive: isActive)
                 .id(spaceID)
                 .transition(.opacity)
+            KurthVidrioDeVentana() // con kurth.panelMaterial = glass (KurthPanelMaterial.swift)
         }
         .animation(KurthMotion.respecting(reduceMotion, .smooth(duration: 0.25)), value: spaceID)
         .animation(NookDesign.Motion.standard, value: isActive)
