@@ -58,6 +58,8 @@ struct ExtensionLibraryView: View {
     // MARK: - Utility Buttons
 
     private var utilityButtonsSection: some View {
+        // kurth: segunda fila con Imprimir, PDF, Archivo web y Captura (KurthPanelDePagina.swift).
+        VStack(spacing: 6) {
         HStack(spacing: 6) {
             CopyButton(icon: "link", label: "Copy Link") {
                 guard let url = currentTab?.url.absoluteString else { return false }
@@ -76,6 +78,8 @@ struct ExtensionLibraryView: View {
             .disabled(currentTab == nil)
 
             MuteButton(tab: currentTab)
+        }
+        KurthAccionesDePagina(browserManager: browserManager, windowState: windowState, onDismiss: onDismiss)
         }
         .padding(12)
     }
@@ -196,6 +200,11 @@ struct ExtensionLibraryView: View {
                         .buttonStyle(.plain)
                     }
                 }
+            }
+
+            // kurth: solo la letra, junto al zoom de la página (KurthPanelDePagina.swift).
+            if currentTab != nil {
+                KurthFilaTamañoDeTexto(browserManager: browserManager, windowState: windowState)
             }
         }
         .padding(12)

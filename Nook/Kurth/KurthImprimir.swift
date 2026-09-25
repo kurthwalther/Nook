@@ -92,7 +92,49 @@ enum KurthImprimir {
         return String((texto.isEmpty ? "Página" : texto).prefix(80))
     }
 
+    // MARK: - Captura de la página completa
+
+    /// Toda la página de arriba abajo como PNG, no solo lo que se ve: WebKit la da entera como PDF
+    /// de una sola hoja (createPDF sin rect) y aquí se pasa a pixeles, a la escala de la pantalla y
+    /// con un tope de 16 384 px de alto (arriba de eso muchas apps ya no abren la imagen). Queda en
+    /// Descargas y copiada. Devuelve dónde quedó, o nil si no se pudo.
+    static func capturarPaginaCompleta(_ webView: WKWebView, titulo: String) async -> URL? {
+        guard let pdf = try? await webView.pdf(configuration: WKPDFConfiguration()),
+              let hoja = NSPDFImageRep(data: pdf) else { return nil }
+        var escala = webView.window?.backingScaleFactor ?? 2
+        let tope: CGFloat = 16_384
+        if hoja.bounds.height * escala > tope { escala = tope / hoja.bounds.height }
+        let ancho = Int(hoja.bounds.width * escala), alto = Int(hoja.bounds.height * escala)
+        guard ancho > 0, alto > 0,
+              let pixeles = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: ancho, pixelsHigh: alto,
+                                             bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                             colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return nil }
+        pixeles.size = hoja.bounds.size
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: pixeles)
+        NSColor.white.setFill()
+        NSRect(origin: .zero, size: hoja.bounds.size).fill()
+        hoja.draw(in: NSRect(origin: .zero, size: hoja.bounds.size))
+        NSGraphicsContext.restoreGraphicsState()
+        guard let png = pixeles.representation(using: .png, properties: [:]) else { return nil }
+
+        let fecha = DateFormatter()
+        fecha.dateFormat = "yyyy-MM-dd 'a las' HH.mm.ss"
+        let descargas = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
+        let destino = descargas.appendingPathComponent("Captura de \(limpio(titulo)) \(fecha.string(from: Date())).png")
+        guard (try? png.write(to: destino, options: .atomic)) != nil else { return nil }
+        // Copiada como imagen, para pegarla directo en un chat o un documento.
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setData(png, forType: .png)
+        return destino
+    }
+
     // MARK: - Tamaño del texto
+
+    /// El factor de texto actual de la página (1 = 100 %).
+    static func factorDeTexto(_ webView: WKWebView) -> Double {
+        leerDouble(webView, "_textZoomFactor") ?? 1
+    }
 
     /// Agranda o achica solo el texto (el zoom normal escala toda la página). nil lo regresa a 100 %.
     /// Pasos de 10 %, entre 50 % y 300 %, como Safari. No se guarda: es de la página abierta.
