@@ -33,6 +33,18 @@ struct ExtensionLibraryOverlay: View {
     /// (rareza de SwiftUI) y lo reabría en el mismo clic. El botón consulta esto y no reabre si el
     /// cierre fue hace un instante (Kurth, 25 sep).
     @MainActor static var cerradoEn: Date = .distantPast
+    /// kurth: el cierre lo decide un monitor de mouseDown, no una capa de SwiftUI: un clic real de
+    /// trackpad se mueve un pixel y ni el "toque" de la capa ni el botón de abajo lo tomaban (nada
+    /// pasaba). En el mouseDown: dentro del panel, sigue; sobre el botón de extensiones, cierra y
+    /// se traga el clic (para que el botón no reabra); en cualquier otro lado, cierra y el clic
+    /// sigue (chat abre el chat, la página recibe el clic). Kurth, 25 sep.
+    @State private var marcos = Marcos()
+    @State private var monitor: Any?
+
+    @MainActor final class Marcos {
+        var boton = CGRect.zero
+        var panel = CGRect.zero
+    }
 
     private let menuWidth: CGFloat = 300
     private let gap: CGFloat = 6
@@ -45,21 +57,13 @@ struct ExtensionLibraryOverlay: View {
                let settings = browserManager.nookSettings,
                let anchor {
                 let buttonFrame = proxy[anchor]
+                let _ = { marcos.boton = buttonFrame }()
                 let libraryX = originX(buttonFrame: buttonFrame, container: proxy.size)
                 // kurth: el submenú se abre del lado donde cabe. Con el panel del agente abierto la
                 // biblioteca queda pegada a la orilla derecha y el submenú se cortaba (Kurth, 25 sep).
                 let menuOnLeft = isShowingMoreMenu && libraryX + menuWidth + gap + moreMenuWidth > proxy.size.width - gap
 
                 ZStack(alignment: .topLeading) {
-                    // kurth: cierra al soltar el mouse, sin exigir que no se haya movido (un clic
-                    // real de mouse se mueve un pixel y el "toque" no se cumplía: nada pasaba). Y no
-                    // cubre la barra: sus botones responden con el panel abierto, así extensiones
-                    // lo cierra y chat abre el chat (Kurth, 25 sep).
-                    Color.clear
-                        .contentShape(Rectangle())
-                        .gesture(DragGesture(minimumDistance: 0).onEnded { _ in close() })
-                        .padding(.top, KurthChrome.floatingTopBar ? 44 : 0)
-
                     HStack(alignment: .top, spacing: gap) {
                         if menuOnLeft { moreMenu(anchor: .topTrailing) }
 
@@ -79,13 +83,42 @@ struct ExtensionLibraryOverlay: View {
                     // A la izquierda, el par se corre lo que mide el submenú: la biblioteca no se mueve.
                     .offset(x: menuOnLeft ? libraryX - (moreMenuWidth + gap) : libraryX,
                             y: buttonFrame.maxY + gap)
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("extlib")) } action: { marcos.panel = $0 }
                 }
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
+                .coordinateSpace(name: "extlib")
                 .animation(NookDesign.Motion.quick, value: isShowingMoreMenu)
                 .onExitCommand { close() }
                 .onChange(of: windowState.selectedItemID) { _, _ in close() }
             }
         }
         .ignoresSafeArea()
+        .onChange(of: windowState.isExtensionLibraryVisible, initial: true) { _, abierto in
+            if abierto { instalarMonitor() } else { quitarMonitor() }
+        }
+        .onDisappear { quitarMonitor() }
+    }
+
+    private func instalarMonitor() {
+        guard monitor == nil else { return }
+        let marcos = self.marcos
+        let estado = windowState
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { evento in
+            MainActor.assumeIsolated {
+                guard let ventana = evento.window, ventana === (estado.windowHandle as? NSWindow),
+                      let contenido = ventana.contentView else { return evento }
+                let enVentana = evento.locationInWindow
+                let p = CGPoint(x: enVentana.x, y: contenido.bounds.height - enVentana.y)
+                if marcos.panel.contains(p) { return evento }
+                close()
+                return marcos.boton.contains(p) ? nil : evento
+            }
+        }
+    }
+
+    private func quitarMonitor() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
     }
 
     private func moreMenu(anchor: UnitPoint) -> some View {
