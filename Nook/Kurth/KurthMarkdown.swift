@@ -39,25 +39,25 @@ struct KurthMarkdownText: View {
     private func vista(_ bloque: Bloque) -> some View {
         switch bloque {
         case .parrafo(let s):
-            enLinea(s)
+            enLinea(s).modifier(SinSeleccionSiHayEnlace(activo: Self.tieneEnlace(s)))
         case .titulo(let s):
             enLinea(s).font(.system(size: tamaño + 1, weight: .semibold))
         case .viñeta(let s, let sangria):
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text("•").font(.system(size: tamaño, weight: .regular)).foregroundStyle(.secondary)
-                enLinea(s)
+                enLinea(s).modifier(SinSeleccionSiHayEnlace(activo: Self.tieneEnlace(s)))
             }
             .padding(.leading, CGFloat(sangria) * 12)
         case .numerada(let s, let numero, let sangria):
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(numero).font(.system(size: tamaño, weight: .regular).monospacedDigit()).foregroundStyle(.secondary)
-                enLinea(s)
+                enLinea(s).modifier(SinSeleccionSiHayEnlace(activo: Self.tieneEnlace(s)))
             }
             .padding(.leading, CGFloat(sangria) * 12)
         case .cita(let s):
             HStack(alignment: .top, spacing: 8) {
                 Capsule().fill(Color.primary.opacity(0.2)).frame(width: 2)
-                enLinea(s).foregroundStyle(.secondary)
+                enLinea(s).foregroundStyle(.secondary).modifier(SinSeleccionSiHayEnlace(activo: Self.tieneEnlace(s)))
             }
         case .codigo(let s):
             Text(s)
@@ -70,9 +70,18 @@ struct KurthMarkdownText: View {
         }
     }
 
+    private static let opciones = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+
+    /// Si la línea trae algún [enlace](url), incluidas las marcas kurth-marca:ID.
+    private static func tieneEnlace(_ s: String) -> Bool {
+        guard s.contains("](") else { return false }
+        let atribuido = (try? AttributedString(markdown: s, options: opciones)) ?? AttributedString(s)
+        return atribuido.runs.contains { $0.link != nil }
+    }
+
     /// Negritas, itálicas, `código`, ~~tachado~~ y [enlaces](url) dentro de una línea.
     private func enLinea(_ s: String) -> Text {
-        let opciones = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        let opciones = Self.opciones
         var atribuido = (try? AttributedString(markdown: s, options: opciones)) ?? AttributedString(s)
         // Las marcas del agente ([aquí](kurth-marca:ID)) llevan 📍: son chips que llevan a la página.
         let marcas = atribuido.runs.compactMap { $0.link?.scheme == "kurth-marca" ? $0.range : nil }
@@ -119,5 +128,15 @@ struct KurthMarkdownText: View {
         if let abierto = codigo { salida.append(.codigo(abierto.joined(separator: "\n"))) }
         cerrarParrafo()
         return salida
+    }
+}
+
+/// En macOS, un enlace dentro de un Text seleccionable no recibe el clic: SwiftUI lo toma como
+/// inicio de selección y `openURL` nunca corre (Kurth, 24 sep: el 📍 "aquí" del agente no hacía
+/// nada). Los párrafos con enlace renuncian a la selección; los demás se siguen pudiendo copiar.
+private struct SinSeleccionSiHayEnlace: ViewModifier {
+    let activo: Bool
+    func body(content: Content) -> some View {
+        if activo { content.textSelection(.disabled) } else { content }
     }
 }
