@@ -21,6 +21,9 @@ extension AppDelegate {
         // el mismo que usa Safari para su barra. Viene apagado (0). Cada pestaña copia esta
         // configuración al crearse, así que tiene que estar antes de la primera.
         let config = BrowserConfiguration.shared.webViewConfiguration
+        // Writing Tools completo (reescribir, corregir, resumir con Apple Intelligence) en los campos
+        // de texto de las páginas: Nook no lo pedía y quedaba en lo que WebKit decida por defecto.
+        config.writingToolsBehavior = .complete
         setPrivateDouble(config, "_setSampledPageTopColorMaxDifference:", 5)
         setPrivateDouble(config, "_setSampledPageTopColorMinHeight:", 10)
     }

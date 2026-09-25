@@ -118,6 +118,30 @@ struct NookCommands: Commands {
         
 
         // Edit Section
+        // kurth: imprimir, exportar como PDF y guardar como archivo web (KurthImprimir.swift). ⌘P no
+        // hacía nada: WKWebView no responde a print: y nadie armaba la operación.
+        CommandGroup(replacing: .printItem) {
+            Button("Imprimir…") {
+                if let pagina = browserManager.kurthPaginaActiva { KurthImprimir.imprimir(pagina) }
+            }
+            .keyboardShortcut("p", modifiers: .command)
+            .disabled(browserManager.tabs.activeWindowSession == nil)
+
+            Button("Exportar como PDF…") {
+                if let pagina = browserManager.kurthPaginaActiva {
+                    KurthImprimir.exportarPDF(pagina, titulo: browserManager.kurthTituloActivo)
+                }
+            }
+            .disabled(browserManager.tabs.activeWindowSession == nil)
+
+            Button("Guardar como archivo web…") {
+                if let pagina = browserManager.kurthPaginaActiva {
+                    KurthImprimir.guardarArchivoWeb(pagina, titulo: browserManager.kurthTituloActivo)
+                }
+            }
+            .disabled(browserManager.tabs.activeWindowSession == nil)
+        }
+
         CommandGroup(replacing: .undoRedo) {
             Button("Undo Close Tab") {
                 if let window = windowRegistry.activeWindow { browserManager.tabs.reopenLastClosed(in: window) }
@@ -234,6 +258,24 @@ struct NookCommands: Commands {
                 browserManager.resetZoomCurrentTab()
             }
             .modifier(dynamicShortcut(.actualSize))
+            .disabled(browserManager.tabs.activeWindowSession == nil)
+
+            // kurth: solo el texto, aparte del zoom de la página, como Safari (KurthImprimir.swift).
+            Button("Agrandar texto") {
+                if let pagina = browserManager.kurthPaginaActiva { KurthImprimir.tamañoDeTexto(pagina, mas: true) }
+            }
+            .keyboardShortcut("+", modifiers: [.command, .option])
+            .disabled(browserManager.tabs.activeWindowSession == nil)
+
+            Button("Achicar texto") {
+                if let pagina = browserManager.kurthPaginaActiva { KurthImprimir.tamañoDeTexto(pagina, mas: false) }
+            }
+            .keyboardShortcut("-", modifiers: [.command, .option])
+            .disabled(browserManager.tabs.activeWindowSession == nil)
+
+            Button("Texto a tamaño normal") {
+                if let pagina = browserManager.kurthPaginaActiva { KurthImprimir.tamañoDeTexto(pagina, mas: nil) }
+            }
             .disabled(browserManager.tabs.activeWindowSession == nil)
 
             Divider()
