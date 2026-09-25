@@ -178,10 +178,11 @@ struct KurthTabStrip: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { segmentsWidth = $0 }
     }
 
-    /// El segmento seleccionado de un control segmentado: relleno claro con un borde apenas.
+    /// El segmento seleccionado de un control segmentado: relleno con un borde apenas. En 0.17 (antes
+    /// 0.12): la activa no se distinguía lo suficiente (Kurth, 25 sep: "un poquito más oscuro").
     private var activePill: some View {
         Capsule()
-            .fill(.primary.opacity(0.12))
+            .fill(.primary.opacity(0.17))
             .overlay(Capsule().strokeBorder(.primary.opacity(0.08), lineWidth: 1))
     }
 
