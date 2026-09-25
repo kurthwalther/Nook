@@ -163,17 +163,23 @@
 
   // ── Señalar: marcas de Kurth (azul) y del agente (ámbar) ─────────────────────────────────
   // Cajas, resaltados de texto, notas, pines numerados y el anillo de guía. Todo vive en un
-  // shadow root cerrado dentro de <kurth-capa>, en coordenadas del documento: se mueve con el
-  // scroll solo y la página no lo puede estilizar ni leer. El texto se resalta con la API de
-  // resaltado de CSS (CSS.highlights), que no toca el HTML. Diseño: kurth/diseño-señalar.md.
+  // shadow root cerrado dentro de <kurth-capa>, fija al viewport, y la página no lo puede
+  // estilizar ni leer. Cada marca guarda su fuente viva (el elemento, el Range del texto o el
+  // contenedor de la caja con su posición relativa) y en cada scroll, cambio de tamaño o reflujo
+  // se vuelve a colocar desde ahí: una marca sobre una barra fija se queda con la barra, y una
+  // sobre un menú que se cierra se esconde hasta que vuelva (Kurth, 24 sep; antes eran
+  // coordenadas del documento pintadas una sola vez). El texto se resalta con la API de resaltado
+  // de CSS (CSS.highlights), que no toca el HTML. Diseño: kurth/diseño-señalar.md.
   const COLOR = { tu: '#0A84FF', agente: '#FF9F0A' };
-  const registro = new Map();   // id → { autor, tipo, nodos: [], rango?, elemento?, caja?, nota }
-  let capa = null, sombra = null;
+  // id → { autor, tipo, claseCaja, cajas: [nodos], pin?, notaNodo?, nota,
+  //        elemento? | rango? | (contenedor + relativa, documento) }
+  const registro = new Map();
+  let capa = null, sombra = null, escuchando = false, pendiente = false;
 
   function asegurarCapa() {
     if (capa && capa.isConnected) return sombra;
     capa = document.createElement('kurth-capa');
-    capa.style.cssText = 'position:absolute;top:0;left:0;width:0;height:0;z-index:2147483647;pointer-events:none;';
+    capa.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;z-index:2147483647;pointer-events:none;';
     sombra = capa.attachShadow({ mode: 'closed' });
     const estilo = document.createElement('style');
     estilo.textContent = `
@@ -189,6 +195,13 @@
       @keyframes destello{0%,100%{opacity:1}50%{opacity:.25}}`;
     sombra.appendChild(estilo);
     document.documentElement.appendChild(capa);
+    if (!escuchando) {
+      escuchando = true;
+      // Scroll de cualquier contenedor (captura), tamaño de la ventana y reflujo del documento.
+      addEventListener('scroll', programarReposicion, { capture: true, passive: true });
+      addEventListener('resize', programarReposicion, { passive: true });
+      if (typeof ResizeObserver === 'function') new ResizeObserver(programarReposicion).observe(document.documentElement);
+    }
     // ::highlight tiene que vivir en el documento: el shadow root no pinta texto de afuera.
     if (!document.getElementById('kurth-resaltados')) {
       const h = document.createElement('style');
@@ -199,7 +212,8 @@
     return sombra;
   }
 
-  const docRect = (r) => ({ x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height });
+  const enVista = (r) => ({ x: r.left, y: r.top, w: r.width, h: r.height });
+  const inflar = (r, p) => ({ x: r.x - p, y: r.y - p, w: r.w + p * 2, h: r.h + p * 2 });
 
   function nodo(clase, autor, css) {
     const n = document.createElement('div');
@@ -224,14 +238,14 @@
     }
   }
 
-  // Los rectángulos de un Range, uno por renglón y en coordenadas del documento. getClientRects
-  // devuelve un rectángulo por cada inline anidado (enlace, negrita) y por cada nodo de texto, así
-  // que se funden los que comparten renglón (misma altura, a 2 px) en uno solo.
+  // Los rectángulos de un Range en el viewport, uno por renglón. getClientRects devuelve uno por
+  // cada inline anidado (enlace, negrita) y por cada nodo de texto, así que se funden los que
+  // comparten renglón (misma altura, a 2 px) en uno solo.
   function renglonesDe(rango) {
     const salida = [];
     for (const r of rango.getClientRects()) {
       if (r.width < 1 || r.height < 1) continue;
-      const d = docRect(r);
+      const d = enVista(r);
       const igual = salida.find((s) => Math.abs(s.y - d.y) <= 2 && Math.abs(s.h - d.h) <= 2);
       if (igual) {
         const x2 = Math.max(igual.x + igual.w, d.x + d.w);
@@ -241,26 +255,69 @@
     return salida;
   }
 
-  function union(rects) {
-    const x = Math.min(...rects.map((r) => r.x)), y = Math.min(...rects.map((r) => r.y));
-    return { x, y, w: Math.max(...rects.map((r) => r.x + r.w)) - x, h: Math.max(...rects.map((r) => r.y + r.h)) - y };
+  // El elemento más chico que contiene una caja del viewport (para que la caja lo siga).
+  function contenedorDe(o) {
+    let c = document.elementFromPoint(o.x + o.w / 2, o.y + o.h / 2);
+    if (c && c.closest('kurth-capa')) c = null;
+    while (c && c !== document.body) {
+      const r = c.getBoundingClientRect();
+      if (r.left <= o.x && r.top <= o.y && r.right >= o.x + o.w && r.bottom >= o.y + o.h) break;
+      c = c.parentElement;
+    }
+    return c || document.body || document.documentElement;
   }
 
-  // Dibuja nota y pin junto a un rectángulo del documento.
-  function adornos(m, id, rect, numero, nota) {
+  function base(o, tipo, claseCaja) {
+    return { autor: o.autor, tipo, claseCaja, cajas: [], pin: null, notaNodo: null, nota: o.nota || '' };
+  }
+
+  const nodosDe = (m) => [...m.cajas, m.pin, m.notaNodo].filter(Boolean);
+
+  // Dónde está hoy la marca, en el viewport: por renglón si es texto, un rectángulo si no. Vacío
+  // si su objetivo se fue del DOM o está oculto (display:none da 0×0).
+  function geometria(m) {
+    if (m.elemento) return m.elemento.isConnected ? [inflar(enVista(m.elemento.getBoundingClientRect()), 4)] : [];
+    if (m.rango) return renglonesDe(m.rango).map((r) => inflar(r, 3));
+    if (m.contenedor && m.contenedor.isConnected) {
+      const rc = m.contenedor.getBoundingClientRect();
+      return [{ x: rc.left + m.relativa.x, y: rc.top + m.relativa.y, w: m.relativa.w, h: m.relativa.h }];
+    }
+    if (m.documento) return [{ x: m.documento.x - scrollX, y: m.documento.y - scrollY, w: m.documento.w, h: m.documento.h }];
+    return [];
+  }
+
+  // Crea el pin numerado y la nota; dónde van lo decide colocarMarca.
+  function adornos(m, id, numero, nota) {
     if (numero) {
-      const pin = nodo('pin', m.autor, '');
-      pin.textContent = String(numero);
-      colocar(pin, rect.x - 10, rect.y - 10);
-      pin.addEventListener('click', () => destellar(id));
-      m.nodos.push(pin);
+      m.pin = nodo('pin', m.autor, '');
+      m.pin.textContent = String(numero);
+      m.pin.addEventListener('click', () => destellar(id));
     }
     if (nota) {
-      const n = nodo('nota', m.autor, '');
-      n.textContent = nota;
-      colocar(n, rect.x, rect.y + rect.h + 6);
-      m.nodos.push(n);
+      m.notaNodo = nodo('nota', m.autor, '');
+      m.notaNodo.textContent = nota;
     }
+  }
+
+  // Pone cada nodo de la marca donde está hoy su objetivo. Un recuadro por rectángulo (varios
+  // renglones en texto), creados o quitados según haga falta. Sin geometría, la marca se esconde
+  // sin borrarse: puede volver (un menú que se abre otra vez).
+  function colocarMarca(m) {
+    const rects = geometria(m).filter((r) => r.w > 0 && r.h > 0);
+    while (m.cajas.length < rects.length) m.cajas.push(nodo(m.claseCaja, m.autor, ''));
+    while (m.cajas.length > rects.length) m.cajas.pop().remove();
+    rects.forEach((r, i) => colocar(m.cajas[i], r.x, r.y, r.w, r.h));
+    const primero = rects[0];
+    for (const n of [m.pin, m.notaNodo]) if (n) n.style.display = primero ? '' : 'none';
+    if (!primero) return;
+    if (m.pin) colocar(m.pin, primero.x - 10, primero.y - 10);
+    if (m.notaNodo) colocar(m.notaNodo, primero.x, primero.y + primero.h + 6);
+  }
+
+  function programarReposicion() {
+    if (pendiente || !registro.size) return;
+    pendiente = true;
+    requestAnimationFrame(() => { pendiente = false; for (const m of registro.values()) colocarMarca(m); });
   }
 
   // Busca un texto en la página (sin distinguir espacios ni mayúsculas) y devuelve un Range.
@@ -330,62 +387,60 @@
     if (!m) return false;
     const objetivo = m.elemento || (m.rango && m.rango.startContainer.parentElement);
     if (objetivo) objetivo.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    else if (m.caja) window.scrollTo({ top: Math.max(0, m.caja.y - innerHeight / 3), behavior: 'smooth' });
-    for (const n of m.nodos) { n.classList.remove('destello'); void n.offsetWidth; n.classList.add('destello'); }
+    else {
+      const r = geometria(m)[0];
+      if (r) scrollBy({ top: r.y + r.h / 2 - innerHeight / 2, behavior: 'smooth' });
+    }
+    colocarMarca(m);
+    for (const n of nodosDe(m)) { n.classList.remove('destello'); void n.offsetWidth; n.classList.add('destello'); }
     return true;
   }
 
   const marcas = {
     // Caja libre: x, y, w, h en coordenadas del viewport (px CSS).
+    // Caja libre: x, y, w, h en el viewport. Sigue al elemento más chico que la contiene
+    // (o al que venga en o.contenedor, al restaurar), con su posición relativa a él.
     caja(o) {
-      const rect = { x: o.x + scrollX, y: o.y + scrollY, w: o.w, h: o.h };
-      const m = { autor: o.autor, tipo: 'caja', nodos: [], caja: rect, nota: o.nota || '' };
+      const vista = { x: o.x, y: o.y, w: o.w, h: o.h };
+      const contenedor = o.contenedor || contenedorDe(vista);
+      const rc = contenedor.getBoundingClientRect();
+      const m = base(o, 'caja', 'caja');
+      m.contenedor = contenedor;
+      m.relativa = { x: vista.x - rc.left, y: vista.y - rc.top, w: vista.w, h: vista.h };
+      m.documento = { x: o.x + scrollX, y: o.y + scrollY, w: o.w, h: o.h };
       registro.set(o.id, m);
-      const n = nodo('caja', o.autor, '');
-      colocar(n, rect.x, rect.y, rect.w, rect.h);
-      m.nodos.push(n);
-      adornos(m, o.id, rect, o.numero, o.nota);
+      adornos(m, o.id, o.numero, o.nota);
+      colocarMarca(m);
       return o.id;
     },
     elemento(o) {
       const e = element(o.ref);
-      const r = docRect(e.getBoundingClientRect());
-      const pad = 4;
-      const rect = { x: r.x - pad, y: r.y - pad, w: r.w + pad * 2, h: r.h + pad * 2 };
-      const m = { autor: o.autor, tipo: o.pulso ? 'pulso' : 'elemento', nodos: [], elemento: e, caja: rect, nota: o.nota || '' };
+      const m = base(o, o.pulso ? 'pulso' : 'elemento', o.pulso ? 'pulso' : 'caja');
+      m.elemento = e;
       registro.set(o.id, m);
-      const n = nodo(o.pulso ? 'pulso' : 'caja', o.autor, '');
-      colocar(n, rect.x, rect.y, rect.w, rect.h);
-      m.nodos.push(n);
-      adornos(m, o.id, rect, o.numero, o.nota);
+      adornos(m, o.id, o.numero, o.nota);
+      colocarMarca(m);
       return describe(e);
     },
+    // Texto: resaltado con CSS.highlights y además un recuadro por renglón, como las cajas de Kurth
+    // (24 sep: "que sus marcas igual sean recuadros, no solo globos"); el resaltado solo tiñe el
+    // fondo de las letras y en una página clara casi no se nota.
     texto(o) {
       const rango = buscarTexto(o.texto, o.prefijo, o.sufijo);
       if (!rango) throw new Error('No encontré ese texto en la página: ' + q(cut(o.texto, 60)));
-      const m = { autor: o.autor, tipo: 'texto', nodos: [], rango, nota: o.nota || '' };
+      const m = base(o, 'texto', 'caja');
+      m.rango = rango;
       registro.set(o.id, m);
       repintarResaltados();
-      // Además del resaltado del texto, un recuadro por renglón, como las cajas que pone Kurth
-      // (24 sep: "que sus marcas igual sean recuadros, no solo globos"). El ::highlight solo tiñe el
-      // fondo de las letras y en una página clara casi no se nota.
-      const renglones = renglonesDe(rango);
-      const pad = 3;
-      for (const r of renglones) {
-        const n = nodo('caja', o.autor, '');
-        colocar(n, r.x - pad, r.y - pad, r.w + pad * 2, r.h + pad * 2);
-        m.nodos.push(n);
-      }
-      const primero = renglones[0] || docRect(rango.getBoundingClientRect());
-      m.caja = renglones.length ? union(renglones) : primero;
-      adornos(m, o.id, { x: primero.x - pad, y: primero.y - pad, w: primero.w + pad * 2, h: primero.h + pad * 2 }, o.numero, o.nota);
+      adornos(m, o.id, o.numero, o.nota);
+      colocarMarca(m);
       return clean(rango.toString());
     },
     destellar,
     quitar(id) {
       const m = registro.get(id);
       if (!m) return false;
-      m.nodos.forEach((n) => n.remove());
+      nodosDe(m).forEach((n) => n.remove());
       registro.delete(id);
       repintarResaltados();
       return true;
@@ -427,18 +482,12 @@
         if (isInteractive(el) && visible(el)) elementos.push(line(el, roleOf(el) || 'elemento', refFor(el)));
         else if (el.tagName === 'IMG' && imagenes.length < 10) imagenes.push(clean(el.alt) || cut(el.currentSrc || el.src, 80));
       }
-      const centro = document.elementFromPoint(o.x + o.w / 2, o.y + o.h / 2);
-      let contenedor = centro;
-      while (contenedor && contenedor !== document.body) {
-        const r = contenedor.getBoundingClientRect();
-        if (r.left <= o.x && r.top <= o.y && r.right >= o.x + o.w && r.bottom >= o.y + o.h) break;
-        contenedor = contenedor.parentElement;
-      }
-      const rc = (contenedor || document.body).getBoundingClientRect();
+      const contenedor = contenedorDe(o);
+      const rc = contenedor.getBoundingClientRect();
       const texto = cut(textos.join(' '), 2000);
       return {
         texto, elementos, imagenes,
-        ancla: { selector: selectorDe(contenedor || document.body),
+        ancla: { selector: selectorDe(contenedor),
                  relativa: { x: o.x - rc.left, y: o.y - rc.top, w: o.w, h: o.h },
                  cita: cut(texto, 120), documento: { x: o.x + scrollX, y: o.y + scrollY, w: o.w, h: o.h } },
       };
@@ -468,7 +517,7 @@
           else if (a.documento) { x = a.documento.x - scrollX; y = a.documento.y - scrollY; }
           else continue;
           const w = (a.relativa || a.documento).w, h = (a.relativa || a.documento).h;
-          marcas.caja({ id: m.id, autor: m.autor, x, y, w, h, nota: m.nota, numero: m.numero });
+          marcas.caja({ id: m.id, autor: m.autor, x, y, w, h, nota: m.nota, numero: m.numero, contenedor: cont || undefined });
           n++;
         } catch (e) { /* la página cambió: esa marca ya no se ancla */ }
       }
