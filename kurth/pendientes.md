@@ -3,6 +3,29 @@
 Una sola lista para las dos Macs. Quien avance, la actualiza en el mismo commit.
 Detalle de Zen en `kurth/plan-zen.md`.
 
+## Al cerrar el 25 sep (José) — seguir en la Pro el fin
+
+**Esperan su OK:**
+- **Transición de las barras fijas.** Hoy comprimen la página y WebKit reacomoda el texto en cada
+  cuadro (tiembla). Probé que entraran *encima* de la página y la página se ajustara al final: "se
+  siente bien feo" (dos tiempos), revertido sin commit. Propuesta: que la barra **empuje** la
+  página en un solo movimiento con el acomodo congelado (`_setFixedLayoutSize:` existe en su WebKit;
+  `_setUseFixedLayout:` no, falta ver con qué se activa) y un fundido de 0.15 s al ajustarse. Otra
+  opción: la página cambia de golpe y solo la barra entra con fundido. Para probar: MCP `kurth_panel`.
+- **Cuadrícula:** buscar escribiendo y "cerradas recientemente" (`reopenLastClosed` ya existe).
+- **Material de las barras:** el ◐ del encabezado del agente es temporal; quitarlo cuando elija
+  vidrio o clásico (también está en Settings › Appearance).
+- underPageBackgroundColor con el tema: "por ahora no".
+
+**Instalado y sin probar con su mouse o trackpad:** deslizar la cápsula entre pestañas, pellizco a
+la cuadrícula, reordenar arrastrando en la cuadrícula, recorte de Señalar con texto (miniatura en el
+chip), y la franja de Robb Report con el color por votos (en una medición con scroll daba negro por
+una línea en la orilla; ya muestrea 8 px adentro, falta verlo).
+
+**Otros:** rutinas (diseño hablado, sin construir); "instalar apps" (recomendé el Agregar al Dock de
+Safari); limpiar las reglas "permitir siempre" viejas de ~/.claude/settings.local.json (traen un
+token de TickTick; necesita su OK).
+
 ## Para mañana (25 sep)
 
 1. **Sonido de error en el chat** — sigue sonando; mi teoría del campo desactivado era falsa.
