@@ -58,6 +58,12 @@ enum KurthMCPTools {
                 info: "Mostrar el scroll pocket de WebKit (el velo al hacer scroll bajo la barra)"),
         Setting(key: "kurth.passwords", type: "bool", defaultValue: true,
                 info: "Llave de contraseñas de Apple en los campos de usuario y contraseña de las páginas (Touch ID → llena la página). Se aplica a las páginas que se abran después de reiniciar Nook"),
+        Setting(key: "kurth.agentCardHeight", type: "number", defaultValue: 0.5,
+                info: "Alto de la tarjeta del agente que se asoma con hover, como fracción del alto de la ventana (0.5 = mitad). Se limita a 360 pt como mínimo y a no tapar la barra de arriba"),
+        Setting(key: "kurth.agentCardMaterial", type: "string", defaultValue: "glass",
+                info: "Material de la tarjeta del agente con hover: glass (Liquid Glass con el tema encima) o panel (el mismo material del panel fijo)"),
+        Setting(key: "kurth.agentCardPinned", type: "bool", defaultValue: false,
+                info: "Tarjeta del agente fijada: se queda abierta aunque el mouse se vaya (el pin de su encabezado)"),
         Setting(key: "kurth.aiSidebarWidth", type: "number", defaultValue: 330.0,
                 info: "Ancho del panel del agente en pt (200–520). Es el último que dejó el usuario al soltar el borde; cambiarlo aquí aplica a las ventanas que se abran después"),
     ]

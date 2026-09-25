@@ -21,6 +21,11 @@
 //  Se abre y se queda abierta en la misma franja que antes, de todo el alto: si solo contara la
 //  tarjeta, al abrirla desde arriba de la orilla se cerraba antes de que el mouse bajara a ella.
 //
+//  Después (Kurth, 25 sep): la orilla de arriba se arrastra para cambiar el alto, sin llegar a la
+//  barra de arriba; un pin la deja abierta aunque el mouse se vaya; y un switch en el encabezado
+//  alterna entre el vidrio y el material del panel fijo, para comparar. Los tres son ajustes
+//  kurth.agentCard* (en el MCP y en la sincronización de iCloud).
+//
 
 import AppKit
 import SwiftUI
@@ -36,6 +41,9 @@ final class KurthAgentHoverManager: ObservableObject {
     @MainActor static var redimensionando = false
     /// Hay texto escrito sin mandar en el panel flotante (KurthAgentChat lo mantiene al día).
     @MainActor static var conBorrador = false
+    /// Fijada con el pin del encabezado: se queda abierta aunque el mouse se vaya.
+    static let claveFijada = "kurth.agentCardPinned"
+    static var fijada: Bool { UserDefaults.standard.bool(forKey: claveFijada) }
 
     weak var browserManager: BrowserManager?
     weak var windowRegistry: WindowRegistry?
@@ -95,6 +103,9 @@ final class KurthAgentHoverManager: ObservableObject {
 
     deinit { stop() }
 
+    /// Vuelve a decidir sin esperar a que se mueva el mouse (al quitar el pin).
+    func revisarAhora() { programar() }
+
     private func programar() {
         DispatchQueue.main.async { [weak self] in self?.revisar() }
     }
@@ -106,6 +117,11 @@ final class KurthAgentHoverManager: ObservableObject {
         // Con el panel fijo a la vista, el flotante no existe.
         if estado.isSidebarAIChatVisible {
             if isOverlayVisible { isOverlayVisible = false }
+            return
+        }
+
+        if Self.fijada {
+            reveal()
             return
         }
 
@@ -177,11 +193,18 @@ struct KurthAgentHoverOverlay: View {
 
     private var enLaDerecha: Bool { nookSettings.sidebarPosition == .left }
 
-    /// La mitad del alto, pero no menos de 360 pt: en una ventana baja, el campo, los controles
-    /// y un par de mensajes tienen que caber.
-    static func alto(en altoDeVentana: CGFloat) -> CGFloat {
-        let disponible = altoDeVentana - 2 * KurthChrome.overlayInset
-        return min(disponible, max(360, altoDeVentana * 0.5))
+    /// El alto, como fracción del alto de la ventana: así queda proporcional en la Air y en la Pro.
+    @AppStorage("kurth.agentCardHeight") private var fraccion = 0.5
+    /// Mientras se arrastra la orilla de arriba; se guarda al soltar.
+    @State private var fraccionEnVivo: Double?
+    @AppStorage("kurth.agentCardMaterial") private var material = "glass"
+    @AppStorage(KurthAgentHoverManager.claveFijada) private var fijada = false
+
+    /// Entre 360 pt (el campo, los controles y un par de mensajes) y la orilla de abajo de la barra
+    /// de arriba (44 pt con cápsulas) más la separación: la tarjeta nunca la tapa (Kurth, 25 sep).
+    static func limitar(_ alto: CGFloat, en altoDeVentana: CGFloat) -> CGFloat {
+        let maximo = altoDeVentana - 44 - 2 * KurthChrome.overlayInset
+        return min(maximo, max(min(360, maximo), alto))
     }
 
     /// Cuánto del tema va sobre el vidrio. El tema solo ya es casi opaco (0.75, KurthTheme.opacity)
@@ -190,23 +213,33 @@ struct KurthAgentHoverOverlay: View {
 
     var body: some View {
         GeometryReader { ventana in
+        let altoDeVentana = ventana.size.height
+        let alto = Self.limitar(altoDeVentana * (fraccionEnVivo ?? fraccion), en: altoDeVentana)
         ZStack(alignment: enLaDerecha ? .bottomTrailing : .bottomLeading) {
             if !windowState.isSidebarAIChatVisible, hover.isOverlayVisible {
                 KurthAgentChat(flotante: true)
-                    .frame(width: windowState.aiSidebarWidth, height: Self.alto(en: ventana.size.height))
+                    .frame(width: windowState.aiSidebarWidth, height: alto)
                     .environmentObject(browserManager)
                     .environment(windowState)
                     .environment(nookSettings)
-                    .background { KurthHoverTheme(soloTema: true).opacity(Self.velo) }
-                    .clipShape(KurthChrome.overlayShape)
-                    .glassEffect(.regular, in: KurthChrome.overlayShape)
-                    .nookElevation(.floating)
-                    .alwaysArrowCursor(leavingFree: enLaDerecha ? .minXEdge : .maxXEdge, width: 14)
+                    .modifier(KurthAgentCardMaterial(vidrio: material != "panel"))
+                    .alwaysArrowCursor(leavingFree: [enLaDerecha ? .minXEdge : .maxXEdge, .maxYEdge], width: 14)
                     .overlay(alignment: enLaDerecha ? .leading : .trailing) {
                         AISidebarResizeView(kurthEnFlotante: true)
                             .frame(maxHeight: .infinity)
                             .environmentObject(browserManager)
                             .environment(windowState)
+                    }
+                    .overlay(alignment: .top) {
+                        KurthAgentCardAltura(alto: alto) { nuevo, soltado in
+                            let f = Double(Self.limitar(nuevo, en: altoDeVentana) / max(altoDeVentana, 1))
+                            if soltado {
+                                fraccion = f
+                                fraccionEnVivo = nil
+                            } else {
+                                fraccionEnVivo = f
+                            }
+                        }
                     }
                     .padding(enLaDerecha ? .trailing : .leading, KurthChrome.overlayInset)
                     .padding(.bottom, KurthChrome.overlayInset)
@@ -226,7 +259,82 @@ struct KurthAgentHoverOverlay: View {
         }
         .onDisappear { hover.stop() }
         .onChange(of: windowState.isSidebarAIChatVisible) { _, fijo in
-            if fijo { hover.isOverlayVisible = false }
+            if fijo { hover.isOverlayVisible = false } else if fijada { hover.reveal() }
         }
+        .onChange(of: fijada) { _, ahora in
+            if ahora { hover.reveal() } else { hover.revisarAhora() }
+        }
+    }
+}
+
+/// Vidrio (Liquid Glass con el tema encima, a `velo`) o el material del panel fijo (el mismo que la
+/// barra lateral flotante): el switch del encabezado alterna para comparar.
+private struct KurthAgentCardMaterial: ViewModifier {
+    let vidrio: Bool
+
+    func body(content: Content) -> some View {
+        if vidrio {
+            content
+                .background { KurthHoverTheme(soloTema: true).opacity(KurthAgentHoverOverlay.velo) }
+                .clipShape(KurthChrome.overlayShape)
+                .glassEffect(.regular, in: KurthChrome.overlayShape)
+                .nookElevation(.floating)
+        } else {
+            content
+                .background { KurthHoverTheme() }
+                .clipShape(KurthChrome.overlayShape)
+                .nookElevation(.floating)
+        }
+    }
+}
+
+/// La orilla de arriba de la tarjeta: se arrastra para cambiar el alto, con la misma línea de acento
+/// que la orilla del ancho (AISidebarResizeView). Mientras se arrastra, el hover no la esconde.
+private struct KurthAgentCardAltura: View {
+    let alto: CGFloat
+    /// El alto nuevo; `true` al soltar, para guardarlo.
+    let cambiar: (CGFloat, Bool) -> Void
+
+    @State private var encima = false
+    @State private var altoAlEmpezar: CGFloat?
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            if encima || altoAlEmpezar != nil {
+                Capsule()
+                    .fill(Color.accentColor)
+                    .frame(height: 2)
+                    .padding(.horizontal, 30)
+                    .padding(.top, 1)
+                    .transition(.opacity)
+            }
+            Color.clear
+                .frame(height: 8)
+                .padding(.horizontal, 30)
+                .contentShape(Rectangle())
+                .onHoverTracking { dentro in
+                    encima = dentro
+                    if dentro { NSCursor.resizeUpDown.set() } else if altoAlEmpezar == nil { NSCursor.arrow.set() }
+                }
+                .gesture(
+                    DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                        .onChanged { valor in
+                            if altoAlEmpezar == nil {
+                                altoAlEmpezar = alto
+                                KurthAgentHoverManager.redimensionando = true
+                            }
+                            // La orilla sube con el mouse: hacia arriba (translation negativa) crece.
+                            cambiar((altoAlEmpezar ?? alto) - valor.translation.height, false)
+                            NSCursor.resizeUpDown.set()
+                        }
+                        .onEnded { valor in
+                            cambiar((altoAlEmpezar ?? alto) - valor.translation.height, true)
+                            altoAlEmpezar = nil
+                            KurthAgentHoverManager.redimensionando = false
+                            if !encima { NSCursor.arrow.set() }
+                        }
+                )
+        }
+        .animation(NookDesign.Motion.quick, value: encima)
     }
 }

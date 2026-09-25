@@ -11,14 +11,14 @@ import SwiftUI
 
 private final class ForceArrowCursorNSView: NSView {
     private var trackingArea: NSTrackingArea?
-    // kurth: franja de la orilla donde NO se fuerza la flecha, para que el redimensionador de la
-    // barra lateral flotante pueda poner su cursor (SidebarHoverOverlayView).
-    var freeEdge: CGRectEdge?
+    // kurth: franjas de las orillas donde NO se fuerza la flecha, para que los redimensionadores
+    // de los paneles flotantes pongan su cursor (SidebarHoverOverlayView, KurthAgentHoverOverlay).
+    var freeEdges: [CGRectEdge] = []
     var freeWidth: CGFloat = 0
 
     private var arrowRect: NSRect {
-        guard let freeEdge, freeWidth > 0 else { return bounds }
-        return bounds.divided(atDistance: freeWidth, from: freeEdge).remainder
+        guard freeWidth > 0 else { return bounds }
+        return freeEdges.reduce(bounds) { rect, edge in rect.divided(atDistance: freeWidth, from: edge).remainder }
     }
 
     override func viewWillMove(toWindow newWindow: NSWindow?) {
@@ -64,20 +64,20 @@ private final class ForceArrowCursorNSView: NSView {
 }
 
 struct ForceArrowCursorView: NSViewRepresentable {
-    var freeEdge: CGRectEdge? = nil // kurth
+    var freeEdges: [CGRectEdge] = [] // kurth
     var freeWidth: CGFloat = 0 // kurth
 
     func makeNSView(context: Context) -> NSView {
         let v = ForceArrowCursorNSView(frame: .zero)
         v.wantsLayer = true
         v.layer?.backgroundColor = NSColor.clear.cgColor
-        v.freeEdge = freeEdge
+        v.freeEdges = freeEdges
         v.freeWidth = freeWidth
         return v
     }
     func updateNSView(_ nsView: NSView, context: Context) {
         guard let v = nsView as? ForceArrowCursorNSView else { return }
-        v.freeEdge = freeEdge
+        v.freeEdges = freeEdges
         v.freeWidth = freeWidth
         v.window?.invalidateCursorRects(for: v)
     }
@@ -91,6 +91,11 @@ extension View {
 
     /// kurth: igual, pero deja libre una franja de la orilla (para un redimensionador).
     func alwaysArrowCursor(leavingFree edge: CGRectEdge, width: CGFloat) -> some View {
-        self.overlay(ForceArrowCursorView(freeEdge: edge, freeWidth: width).allowsHitTesting(false))
+        alwaysArrowCursor(leavingFree: [edge], width: width)
+    }
+
+    /// kurth: con varias orillas libres (la tarjeta del agente: la del ancho y la de arriba).
+    func alwaysArrowCursor(leavingFree edges: [CGRectEdge], width: CGFloat) -> some View {
+        self.overlay(ForceArrowCursorView(freeEdges: edges, freeWidth: width).allowsHitTesting(false))
     }
 }

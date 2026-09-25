@@ -57,6 +57,9 @@ struct KurthAgentChat: View {
     @AppStorage("kurth.hairline") private var hairlineOpacity = 0.1
     @AppStorage("kurth.capsuleBlur") private var capsuleBlur = false
     @Environment(\.displayScale) private var displayScale
+    /// La tarjeta que se asoma con hover (KurthAgentHoverOverlay): fijarla y su material.
+    @AppStorage(KurthAgentHoverManager.claveFijada) private var tarjetaFijada = false
+    @AppStorage("kurth.agentCardMaterial") private var materialDeTarjeta = "glass"
 
     private var esCapsulas: Bool { barStyle != "tinted" }
     /// Las alturas de KurthTopBarView: 44 deja 8 pt alrededor de cápsulas de 28; con tinte, 40.
@@ -184,6 +187,23 @@ struct KurthAgentChat: View {
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .help("Marcas en esta página")
+            }
+
+            if flotante {
+                // Para comparar los dos materiales en la misma tarjeta (Kurth, 25 sep); cuando
+                // elija uno, este botón sobra.
+                Button(materialDeTarjeta == "panel" ? "Pasar a vidrio" : "Pasar al material del panel",
+                       systemImage: "circle.lefthalf.filled") {
+                    materialDeTarjeta = materialDeTarjeta == "panel" ? "glass" : "panel"
+                }
+                .kurthBarIcon(size: medidaDeIcono)
+                .help(materialDeTarjeta == "panel" ? "Material del panel fijo · clic: vidrio" : "Vidrio · clic: material del panel fijo")
+
+                Button(tarjetaFijada ? "Soltar" : "Fijar", systemImage: tarjetaFijada ? "pin.fill" : "pin") {
+                    tarjetaFijada.toggle()
+                }
+                .kurthBarIcon(size: medidaDeIcono)
+                .help(tarjetaFijada ? "Fijada: se queda abierta. Clic para que vuelva a esconderse" : "Fijar: que se quede abierta aunque quites el mouse")
             }
 
             Button("Borrar la conversación", systemImage: "trash") {
