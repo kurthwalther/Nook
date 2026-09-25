@@ -115,9 +115,9 @@ struct KurthTabStrip: View {
                     .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.x + $0.containerSize.width >= $0.contentSize.width - 1 } action: { _, v in alFinal = v }
                     .mask {
                         HStack(spacing: 0) {
-                            LinearGradient(colors: [alInicio ? .black : .clear, .black], startPoint: .leading, endPoint: .trailing).frame(width: 18)
+                            LinearGradient(colors: [alInicio ? .black : .clear, .black], startPoint: .leading, endPoint: .trailing).frame(width: 30)
                             Color.black
-                            LinearGradient(colors: [.black, alFinal ? .black : .clear], startPoint: .leading, endPoint: .trailing).frame(width: 18)
+                            LinearGradient(colors: [.black, alFinal ? .black : .clear], startPoint: .leading, endPoint: .trailing).frame(width: 30)
                         }
                     }
                     .animation(NookDesign.Motion.quick, value: alInicio)
@@ -303,6 +303,7 @@ struct KurthTabStrip: View {
                     .frame(width: mostrarCopiar && anchoDominio > 0 ? anchoDominio : nil, alignment: .leading)
                     .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { if !mostrarCopiar { anchoDominio = $0 } }
                     .animation(NookDesign.Motion.quick, value: mostrarCopiar)
+                    if let session, session.hasAudioContent || session.isAudioMuted { speakerButton(session) }
                     reloadButton
                 } else if showsTitle {
                     Text(tabs.title(for: entry.item))
@@ -312,6 +313,7 @@ struct KurthTabStrip: View {
                         .truncationMode(.tail)
                         .frame(maxWidth: Self.titleMaxWidth)
                 }
+                if !isActive, let session, session.hasAudioContent || session.isAudioMuted { speakerButton(session) }
             }
             .padding(.horizontal, KurthTopBarView.capsuleInset)
             .frame(height: Self.segmentHeight)
@@ -342,6 +344,18 @@ struct KurthTabStrip: View {
                     session.toggleMute()
                 }
             }
+            // Split view tenía una sola entrada, arrastrar una pestaña a la página, y Kurth no dio
+            // con ella (25 sep): desde aquí, esta pestaña junto a la activa, a la derecha.
+            if !isActive {
+                Button("Abrir en split junto a la activa", systemImage: "rectangle.split.2x1") {
+                    browserManager.enterSplit(with: id, placeOnRight: true, in: windowState)
+                }
+            }
+            if browserManager.splitManager.isSplit(for: windowState.id) {
+                Button("Separar el split", systemImage: "rectangle") {
+                    browserManager.separateSplit(in: windowState)
+                }
+            }
             Button("Cerrar pestaña", systemImage: "xmark", role: .destructive) {
                 tabs.close(id)
             }
@@ -351,13 +365,12 @@ struct KurthTabStrip: View {
         .help(tabs.title(for: entry.item))
     }
 
-    /// El favicon, que al pasar el mouse se vuelve la X de cerrar (Safari 15 hacía lo mismo). Es el
-    /// único hueco de información de una pestaña de 22 pt, así que también dice si la pestaña está
-    /// cargando (el cometa; solo en las que no son la activa, que lo dice en recargar) y si suena
-    /// (bocina, tachada si está silenciada; silenciar va en el clic derecho). Kurth, 25 sep.
+    /// El favicon, que al pasar el mouse se vuelve la X de cerrar (Safari 15 hacía lo mismo), y el
+    /// cometa mientras la pestaña carga (solo en las que no son la activa, que lo dice en recargar).
+    /// Aquí solo va estado sin acción: lo que se puede tocar (silenciar) tiene su propio lugar,
+    /// speakerButton, porque este hueco ya es la X al pasar el mouse (Kurth, 25 sep).
     @ViewBuilder
     private func leadingIcon(_ entry: Entry, session: PageSession?, isActive: Bool, showsClose: Bool) -> some View {
-        let silenciada = session?.isAudioMuted == true
         ZStack {
             if showsClose {
                 Button("Cerrar pestaña", systemImage: "xmark") {
@@ -372,17 +385,25 @@ struct KurthTabStrip: View {
                 KurthLoadingIndicator()
                     .foregroundStyle(.secondary)
                     .transition(.opacity)
-            } else if session?.hasAudioContent == true || silenciada {
-                Image(systemName: silenciada ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .transition(.opacity)
             } else {
                 ItemFavicon(item: entry.item, session: session)
                     .transition(.opacity)
             }
         }
         .frame(width: NookDesign.Size.favicon, height: NookDesign.Size.favicon)
+    }
+
+    /// La bocina: solo existe mientras la pestaña suena o está silenciada, al final del segmento
+    /// (antes de recargar en la activa), como en Safari, y un clic silencia o devuelve el sonido.
+    /// El segmento crece esos 26 pt mientras dura el sonido; en Safari pasa igual.
+    private func speakerButton(_ session: PageSession) -> some View {
+        Button(session.isAudioMuted ? "Activar sonido" : "Silenciar pestaña",
+               systemImage: session.isAudioMuted ? "speaker.slash.fill" : "speaker.wave.2.fill") {
+            session.toggleMute()
+        }
+        .kurthFieldIcon()
+        .transition(.opacity)
+        .help(session.isAudioMuted ? "Activar sonido" : "Silenciar pestaña")
     }
 
     /// Copiar la URL de la pestaña activa: aparece al pasar el mouse por la pestaña, a la izquierda
