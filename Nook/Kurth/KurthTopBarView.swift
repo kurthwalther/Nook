@@ -50,6 +50,8 @@ struct KurthTopBarView: View {
     @State private var trailingWidth: CGFloat = 0
     @State private var didCopy = false
     @State private var isHoveringAddress = false
+    /// El mouse está sobre la cápsula del dominio: ahí aparece el ícono de copiar (Kurth, 25 sep).
+    @State private var isHoveringCapsule = false
 
     private var isCapsules: Bool { barStyle != "tinted" }
     private var isCompact: Bool { tabLayout == "compact" }
@@ -240,6 +242,7 @@ struct KurthTopBarView: View {
                         reloadButton.kurthFieldIcon().padding(.trailing, Self.capsuleInset)
                     }
                     .modifier(KurthGlass(tint: glassTint))
+                    .onHoverTracking { isHoveringCapsule = $0 }
             } else {
                 // Copiar junto al dominio; recargar vive con las flechas en esta variante.
                 HStack(spacing: NookDesign.Spacing.md + 2) {
@@ -247,6 +250,7 @@ struct KurthTopBarView: View {
                     hostText(tab)
                 }
                 .padding(.horizontal, NookDesign.Spacing.md)
+                .onHoverTracking { isHoveringCapsule = $0 }
             }
         } else {
             // Sin pestaña, el espacio de la URL es un campo listo para escribir (KurthEmptyPage.swift).
@@ -276,12 +280,17 @@ struct KurthTopBarView: View {
             .onHoverTracking { isHoveringAddress = $0 }
     }
 
+    /// Solo al pasar el mouse por la cápsula (o mientras muestra la palomita); el hueco se queda
+    /// para que el dominio no se mueva. ⌘⇧C hace lo mismo.
     private func copyButton(_ tab: PageSession) -> some View {
         Button("Copiar URL", systemImage: didCopy ? "checkmark" : "link") {
             copyURL(tab.url)
         }
         .kurthFieldIcon()
-        .help("Copiar URL")
+        .opacity(isHoveringCapsule || didCopy ? 1 : 0)
+        .allowsHitTesting(isHoveringCapsule || didCopy)
+        .animation(NookDesign.Motion.quick, value: isHoveringCapsule)
+        .help("Copiar URL (⌘⇧C)")
     }
 
     /// Recargar, cargando (gira) o detener (X, solo al pasar el mouse): KurthReloadButton.swift.

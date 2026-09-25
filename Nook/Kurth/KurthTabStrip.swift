@@ -36,6 +36,8 @@ struct KurthTabStrip: View {
 
     @Namespace private var strip
     @State private var hovered: UUID?
+    /// Acaba de copiar la URL: el ícono es una palomita 1.2 s.
+    @State private var copiado = false
     /// Arrastre para reordenar: qué segmento, cuánto se ha movido y dónde estaba cada uno al
     /// empezar (las medidas en vivo ya incluyen los desplazamientos, así que no sirven).
     @State private var dragging: UUID?
@@ -268,6 +270,7 @@ struct KurthTabStrip: View {
                         .lineLimit(1)
                         .truncationMode(.head)
                         .frame(minWidth: KurthTopBarView.addressMinWidth - 2 * KurthTopBarView.capsuleInset - 2 * (NookDesign.Size.favicon + 6))
+                    if let url { copyButton(url, visible: isHovered) }
                     reloadButton
                 } else if showsTitle {
                     Text(tabs.title(for: entry.item))
@@ -329,6 +332,25 @@ struct KurthTabStrip: View {
             }
         }
         .frame(width: NookDesign.Size.favicon, height: NookDesign.Size.favicon)
+    }
+
+    /// Copiar la URL de la pestaña activa: aparece al pasar el mouse por la pestaña, a la izquierda
+    /// de recargar, como en Arc. El hueco queda siempre para que la tira no cambie de ancho al
+    /// entrar y salir el mouse (Kurth, 25 sep). ⌘⇧C hace lo mismo.
+    private func copyButton(_ url: URL, visible: Bool) -> some View {
+        Button("Copiar URL", systemImage: copiado ? "checkmark" : "link") {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(url.absoluteString, forType: .string)
+            withAnimation(NookDesign.Motion.quick) { copiado = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                withAnimation(NookDesign.Motion.quick) { copiado = false }
+            }
+        }
+        .kurthFieldIcon()
+        .opacity(visible || copiado ? 1 : 0)
+        .allowsHitTesting(visible || copiado)
+        .animation(NookDesign.Motion.quick, value: visible)
+        .help("Copiar URL (⌘⇧C)")
     }
 
     /// Recargar, cargando (gira) o detener (X, solo al pasar el mouse), sobre la página de esta
