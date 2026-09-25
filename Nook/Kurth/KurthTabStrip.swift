@@ -253,6 +253,8 @@ struct KurthTabStrip: View {
         Capsule()
             .fill(.primary.opacity(0.4))
             .frame(width: 1, height: 16)
+            // Aire a los lados: pegado a la cápsula de la activa se veía como parte de ella (Kurth, 25 sep).
+            .padding(.horizontal, 3)
             .opacity(hidden ? 0 : 1)
     }
 
@@ -276,12 +278,13 @@ struct KurthTabStrip: View {
             }
         } label: {
             HStack(spacing: 6) {
-                // Con título, el favicon se vuelve la X al pasar el mouse. Solo ícono: la X va como
-                // una bolita en la esquina del favicon, que sigue a la vista, o no quedaría por
-                // dónde entrar a la pestaña (Kurth, 24 y 25 sep).
-                leadingIcon(entry, session: session, isActive: isActive,
-                            showsClose: isHovered && (isActive || showsTitle),
-                            closeBadge: isHovered && !isActive && !showsTitle)
+                // Con título (o activa), el favicon se vuelve la X al pasar el mouse. Solo ícono: la X
+                // entra completa a la izquierda del favicon, que sigue a la vista para entrar a la
+                // pestaña (Kurth, 25 sep; la bolita en la esquina no le gustó).
+                if isHovered && !isActive && !showsTitle {
+                    closeButton(entry).transition(.opacity)
+                }
+                leadingIcon(entry, session: session, isActive: isActive, showsClose: isHovered && (isActive || showsTitle))
                 if isActive {
                     // La cápsula de siempre: dominio y recargar. Copiar la URL vive en el clic
                     // derecho y en ⌘⇧C; un ícono más al pasar el mouse sobraba (Kurth, 25 sep).
@@ -358,17 +361,10 @@ struct KurthTabStrip: View {
     /// Aquí solo va estado sin acción: lo que se puede tocar (silenciar) tiene su propio lugar,
     /// speakerButton, porque este hueco ya es la X al pasar el mouse (Kurth, 25 sep).
     @ViewBuilder
-    private func leadingIcon(_ entry: Entry, session: PageSession?, isActive: Bool, showsClose: Bool, closeBadge: Bool = false) -> some View {
+    private func leadingIcon(_ entry: Entry, session: PageSession?, isActive: Bool, showsClose: Bool) -> some View {
         ZStack {
             if showsClose {
-                Button("Cerrar pestaña", systemImage: "xmark") {
-                    tabs.close(entry.item.id)
-                }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.plain)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .transition(.opacity)
+                closeButton(entry).transition(.opacity)
             } else if !isActive, session?.isLoading == true {
                 KurthLoadingIndicator()
                     .foregroundStyle(.secondary)
@@ -379,24 +375,18 @@ struct KurthTabStrip: View {
             }
         }
         .frame(width: NookDesign.Size.favicon, height: NookDesign.Size.favicon)
-        // Solo ícono: la X como bolita en la esquina de arriba a la izquierda, donde macOS pone
-        // cerrar (semáforos, pestañas de Safari); el resto del favicon sigue entrando a la pestaña.
-        .overlay(alignment: .topLeading) {
-            if closeBadge {
-                Button("Cerrar pestaña", systemImage: "xmark") {
-                    tabs.close(entry.item.id)
-                }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.plain)
-                .font(.system(size: 6, weight: .bold))
-                .foregroundStyle(Color(nsColor: .windowBackgroundColor))
-                .frame(width: 11, height: 11)
-                .background(Circle().fill(Color.primary.opacity(0.7)))
-                .offset(x: -4, y: -4)
-                .transition(.opacity.combined(with: .scale(scale: 0.6)))
-                .help("Cerrar pestaña")
-            }
+    }
+
+    /// La X de cerrar, del tamaño del favicon.
+    private func closeButton(_ entry: Entry) -> some View {
+        Button("Cerrar pestaña", systemImage: "xmark") {
+            tabs.close(entry.item.id)
         }
+        .labelStyle(.iconOnly)
+        .buttonStyle(.plain)
+        .font(.system(size: 10, weight: .semibold))
+        .foregroundStyle(.secondary)
+        .frame(width: NookDesign.Size.favicon, height: NookDesign.Size.favicon)
     }
 
     /// Pausa/play y bocina: existen mientras la pestaña suena, está silenciada o Kurth la pausó
