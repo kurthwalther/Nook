@@ -40,6 +40,10 @@ struct KurthTopBarView: View {
     @AppStorage("kurth.capsuleBlur") private var capsuleBlur = false
     /// En "capsules", capa ligera del color del sitio dentro del vidrio, para legibilidad.
     @AppStorage("kurth.capsuleTintOpacity") private var capsuleTintOpacity = 0.35
+    /// Pestañas: "separate" (solo en la barra lateral) o "compact" (en la barra, como Safari 15).
+    @AppStorage("kurth.tabLayout") private var tabLayout = "separate"
+    /// En compact, "titles" (ícono y título) o "icons" (solo ícono, como iPad).
+    @AppStorage("kurth.compactTabs") private var compactTabs = "titles"
 
     @State private var showsRadiusPanel = false
     @State private var leadingWidth: CGFloat = 0
@@ -48,6 +52,7 @@ struct KurthTopBarView: View {
     @State private var isHoveringAddress = false
 
     private var isCapsules: Bool { barStyle != "tinted" }
+    private var isCompact: Bool { tabLayout == "compact" }
 
     /// Con cápsulas de 28 pt, 44 deja 8 pt arriba y abajo, igual que a los lados; en "tinted" 40.
     private var barHeight: CGFloat { isCapsules ? 44 : KurthChrome.topBarHeight }
@@ -83,6 +88,7 @@ struct KurthTopBarView: View {
         .environment(\.colorScheme, pageScheme ?? systemScheme)
         .animation(NookDesign.Motion.standard, value: pageScheme)
         .animation(NookDesign.Motion.standard, value: barStyle)
+        .animation(NookDesign.Motion.standard, value: tabLayout)
     }
 
     // MARK: - Fondo
@@ -130,6 +136,17 @@ struct KurthTopBarView: View {
                     if isCapsules {
                         Divider()
                         Toggle("Blur detrás de las cápsulas", isOn: $capsuleBlur)
+                    }
+                    Divider()
+                    Picker("Pestañas", selection: $tabLayout) {
+                        Text("En la barra lateral").tag("separate")
+                        Text("Compactas en la barra (tipo Safari)").tag("compact")
+                    }
+                    .pickerStyle(.inline)
+                    if isCompact {
+                        Toggle("Solo íconos (como iPad)", isOn: Binding(
+                            get: { compactTabs == "icons" },
+                            set: { compactTabs = $0 ? "icons" : "titles" }))
                     }
                     Divider()
                     Button("Editar tema…") {
@@ -211,7 +228,11 @@ struct KurthTopBarView: View {
     @ViewBuilder
     private var address: some View {
         if let tab = browserManager.tabs.selectedSession(in: windowState) {
-            if isCapsules {
+            if isCompact {
+                // Pestañas compactas (KurthTabStrip.swift): la tira ocupa todo el centro.
+                KurthTabStrip(glass: isCapsules, tint: glassTint, iconsOnly: compactTabs == "icons")
+                    .padding(.horizontal, isCapsules ? 8 : NookDesign.Spacing.md)
+            } else if isCapsules {
                 // Cápsula: el dominio centrado y los íconos anclados a las orillas, no al texto.
                 // Mide lo que ocupa el dominio (mínimo `addressMinWidth`) y crece si es largo.
                 hostText(tab)
