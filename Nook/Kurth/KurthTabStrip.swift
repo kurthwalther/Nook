@@ -36,10 +36,6 @@ struct KurthTabStrip: View {
 
     @Namespace private var strip
     @State private var hovered: UUID?
-    /// Acaba de copiar la URL: el ícono es una palomita 1.2 s.
-    @State private var copiado = false
-    /// Ancho del dominio de la pestaña activa en reposo; se fija mientras se ve el ícono de copiar.
-    @State private var anchoDominio: CGFloat = 0
     /// Pestañas que Kurth pausó desde la tira: mientras no vuelvan a sonar, muestran play.
     @State private var pausadas: Set<UUID> = []
     /// Cuando la tira se desplaza por dentro: si está en el inicio o en el final, para el desvanecido.
@@ -283,28 +279,14 @@ struct KurthTabStrip: View {
                 // (Kurth, 24 sep). Se cierra con clic derecho.
                 leadingIcon(entry, session: session, isActive: isActive, showsClose: isHovered && (isActive || showsTitle))
                 if isActive {
-                    // La cápsula de siempre: dominio y recargar. Al pasar el mouse, copiar entra
-                    // entre los dos y el dominio se corta por el principio para hacerle lugar: el
-                    // ancho en reposo se mide y se fija mientras el ícono está, así la pestaña no
-                    // cambia de tamaño. Un hueco reservado "se ve feo" (Kurth, 25 sep).
-                    let mostrarCopiar = url != nil && (isHovered || copiado)
-                    let minimo = KurthTopBarView.addressMinWidth - 2 * KurthTopBarView.capsuleInset - 2 * (NookDesign.Size.favicon + 6)
-                    // El ícono mide 20 más 6 de separación: al dominio le queda el resto de su
-                    // ancho de reposo y se corta por el final ("ultrajewels.co…"), sin moverse.
-                    let anchoConIcono = max(anchoDominio - 26, 0)
-                    HStack(spacing: 6) {
-                        Text(url.map(KurthTopBarView.shortHost) ?? tabs.title(for: entry.item))
-                            .font(NookDesign.Font.body)
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .frame(minWidth: mostrarCopiar ? nil : minimo)
-                            .frame(width: mostrarCopiar && anchoConIcono > 0 ? anchoConIcono : nil)
-                        if mostrarCopiar, let url { copyButton(url).transition(.opacity) }
-                    }
-                    .frame(width: mostrarCopiar && anchoDominio > 0 ? anchoDominio : nil, alignment: .leading)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { if !mostrarCopiar { anchoDominio = $0 } }
-                    .animation(NookDesign.Motion.quick, value: mostrarCopiar)
+                    // La cápsula de siempre: dominio y recargar. Copiar la URL vive en el clic
+                    // derecho y en ⌘⇧C; un ícono más al pasar el mouse sobraba (Kurth, 25 sep).
+                    Text(url.map(KurthTopBarView.shortHost) ?? tabs.title(for: entry.item))
+                        .font(NookDesign.Font.body)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(minWidth: KurthTopBarView.addressMinWidth - 2 * KurthTopBarView.capsuleInset - 2 * (NookDesign.Size.favicon + 6))
                     if let session, session.hasAudioContent || session.isAudioMuted || pausadas.contains(id) { mediaButtons(session, id: id) }
                     reloadButton
                 } else if showsTitle {
@@ -446,21 +428,6 @@ struct KurthTabStrip: View {
     private func correr(en session: PageSession, id: UUID, _ js: String) {
         let webView = browserManager.getWebView(for: id, in: windowState.id) ?? session.webView
         webView?.evaluateJavaScript(js, completionHandler: nil)
-    }
-
-    /// Copiar la URL de la pestaña activa: aparece al pasar el mouse por la pestaña, a la izquierda
-    /// de recargar, como en Arc, y se queda mientras muestra la palomita. ⌘⇧C hace lo mismo.
-    private func copyButton(_ url: URL) -> some View {
-        Button("Copiar URL", systemImage: copiado ? "checkmark" : "link") {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(url.absoluteString, forType: .string)
-            withAnimation(NookDesign.Motion.quick) { copiado = true }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                withAnimation(NookDesign.Motion.quick) { copiado = false }
-            }
-        }
-        .kurthFieldIcon()
-        .help("Copiar URL (⌘⇧C)")
     }
 
     /// Recargar, cargando (gira) o detener (X, solo al pasar el mouse), sobre la página de esta
