@@ -8,8 +8,9 @@
 //  cargando, y si te pones arriba, la X"). Lo comparten la barra (KurthTopBarView, en las dos
 //  variantes) y la tira compacta (KurthTabStrip); cada sitio le pone su estilo de ícono.
 //
-//  El indicador tiene cuatro variantes (`kurth.loadingStyle`, clic derecho en la barra), para
-//  elegir viendo. `kurth.loadingDemo` deja el botón en estado de carga para compararlas sin
+//  El indicador tiene cinco variantes (`kurth.loadingStyle`, clic derecho en la barra): cuatro
+//  portadas de loading.dev (MIT, Jakub Krehel), las que Kurth eligió el 25 sep, y la rueda
+//  clásica de macOS. `kurth.loadingDemo` deja el botón en estado de carga para compararlas sin
 //  esperar a que cargue una página.
 //
 
@@ -21,7 +22,7 @@ import NookWeb
 struct KurthReloadButton: View {
     let session: PageSession?
     @State private var alPasar = false
-    @AppStorage("kurth.loadingStyle") private var estilo = "dots"
+    @AppStorage("kurth.loadingStyle") private var estilo = "arc"
     @AppStorage("kurth.loadingDemo") private var demo = false
 
     private var cargando: Bool { session?.isLoading == true || demo }
@@ -49,94 +50,98 @@ struct KurthReloadButton: View {
     }
 }
 
-/// Las variantes del indicador, todas en el gris de los íconos de la barra y de 11 a 14 pt.
-/// Un loader de CSS o de Lottie no entra tal cual en un botón nativo, pero casi todos son formas
-/// simples animadas: se reconstruyen aquí con TimelineView (un reloj que redibuja la vista en
-/// cada cuadro) o con los efectos de SF Symbols.
+/// Los indicadores, en el gris de los íconos de la barra. Los de loading.dev se dibujan a 20 px
+/// con un círculo de radio 10 en un lienzo de 24 y trazo 2.5, puntas redondas y giro lineal; aquí
+/// van a 12 pt con las mismas proporciones, tiempos y curvas. Un loader de CSS no entra tal cual en
+/// un botón nativo: se reconstruye con TimelineView (un reloj que redibuja la vista en cada cuadro).
 struct KurthLoadingIndicator: View {
     let estilo: String
-    @State private var giro = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     static let estilos: [(clave: String, nombre: String)] = [
-        ("dots", "Puntos (símbolo de progreso)"),
-        ("claude", "Flor de Claude (como este chat)"),
-        ("rays", "Rayos (rueda, versión SF)"),
-        ("dotted", "Anillo de puntos"),
+        ("arc", "Arco"),
+        ("comet", "Cometa"),
+        ("ring", "Anillo"),
+        ("snake", "Serpiente"),
         ("spinner", "Rueda clásica de macOS"),
-        ("rotate", "La flecha girando"),
-        ("ring", "Arco fino"),
-        ("bounce", "Tres puntos que brincan"),
-        ("bars", "Tres barras"),
     ]
 
-    /// Los cuadros del spinner de Claude Code: la flor crece y se cierra. El asterisco de ocho
-    /// puntas lleva el selector de presentación de texto para que no salga como emoji.
-    private static let flor = ["·", "✢", "✳\u{FE0E}", "✶", "✻", "✽", "✻", "✶", "✳\u{FE0E}", "✢"]
+    /// Lado del indicador; el círculo de loading.dev ocupa 20 de 24 y el trazo 2.5 de 24.
+    private let lado: CGFloat = 12
+    private var diametro: CGFloat { lado * 20 / 24 }
+    private var trazo: CGFloat { lado * 2.5 / 24 }
+    /// Perímetro del círculo de radio 10, en unidades del lienzo (62.83): ahí se miden los guiones.
+    private let perimetro = 2 * Double.pi * 10
 
     var body: some View {
         switch estilo {
-        case "claude":
-            TimelineView(.periodic(from: .now, by: 0.1)) { ctx in
-                let i = Int(ctx.date.timeIntervalSinceReferenceDate * 10) % Self.flor.count
-                Text(Self.flor[i])
-                    .font(.system(size: 14, weight: .medium))
-                    .frame(width: 14, height: 14)
-            }
-        case "rays":
-            Image(systemName: "rays")
-                .symbolEffect(.variableColor.iterative.dimInactiveLayers.nonReversing, isActive: true)
-        case "dotted":
-            Image(systemName: "circle.dotted")
-                .symbolEffect(.variableColor.cumulative.dimInactiveLayers.nonReversing, isActive: true)
         case "spinner":
             // El NSProgressIndicator de siempre: la rueda de rayos que se apagan.
             ProgressView()
                 .controlSize(.small)
                 .scaleEffect(0.75)
-        case "rotate":
-            // La misma flecha de recargar, dando vueltas: "está recargando".
-            Image(systemName: "arrow.clockwise")
-                .rotationEffect(.degrees(giro ? 360 : 0))
-                .animation(.linear(duration: 1).repeatForever(autoreverses: false), value: giro)
-                .onAppear { giro = true }
-        case "ring":
-            // Un arco de tres cuartos que gira, con el mismo grosor que los trazos de los íconos.
-            Circle()
-                .trim(from: 0.2, to: 1)
-                .stroke(style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
-                .frame(width: 11, height: 11)
-                .rotationEffect(.degrees(giro ? 360 : 0))
-                .animation(.linear(duration: 0.9).repeatForever(autoreverses: false), value: giro)
-                .onAppear { giro = true }
-        case "bounce":
-            // Tres puntos que brincan por turnos, como el "escribiendo…" de Mensajes.
-            TimelineView(.animation) { ctx in
-                let t = ctx.date.timeIntervalSinceReferenceDate
-                HStack(spacing: 2) {
-                    ForEach(0..<3, id: \.self) { i in
-                        Circle()
-                            .frame(width: 3, height: 3)
-                            .offset(y: -max(0, sin(t * 7 - Double(i) * 1.1)) * 3)
-                    }
+        case "comet":
+            // Cola: anillo con degradado angular de transparente a lleno (el degradado va en la
+            // máscara para que el color sea el del ícono); cabeza: un punto del grosor del anillo,
+            // arriba, donde el degradado llega a lleno. Grosor 0.12 del lado, 700 ms.
+            reloj(700) { fase in
+                let grosor = lado * 0.12
+                ZStack {
+                    Circle()
+                        .strokeBorder(lineWidth: grosor)
+                        .mask(AngularGradient(colors: [.clear, .black], center: .center,
+                                              startAngle: .degrees(-90), endAngle: .degrees(270)))
+                    Circle()
+                        .frame(width: grosor, height: grosor)
+                        .offset(y: -(lado - grosor) / 2)
                 }
-                .frame(width: 14, height: 12)
+                .frame(width: lado, height: lado)
+                .rotationEffect(.degrees(fase * 360))
             }
-        case "bars":
-            // Tres barras que suben y bajan desfasadas, como un ecualizador chico.
-            TimelineView(.animation) { ctx in
-                let t = ctx.date.timeIntervalSinceReferenceDate
-                HStack(spacing: 2) {
-                    ForEach(0..<3, id: \.self) { i in
-                        RoundedRectangle(cornerRadius: 1)
-                            .frame(width: 2.5, height: 5 + 7 * (0.5 + 0.5 * sin(t * 7 - Double(i) * 1.1)))
-                    }
+        case "ring":
+            // Pista completa al 20 % y un guion de 16 de 62.8 encima, 800 ms.
+            reloj(800) { fase in
+                ZStack {
+                    Circle().stroke(lineWidth: trazo).opacity(0.2)
+                    arco(hasta: 16 / perimetro).rotationEffect(.degrees(fase * 360))
                 }
-                .frame(width: 14, height: 12)
+                .frame(width: diametro, height: diametro)
+            }
+        case "snake":
+            // Gira en 1400 ms y, en el mismo tiempo, el guion se estira de 1 a 45 y avanza
+            // (0 % 1/0, 50 % 45/−17, 100 % 45/−62 de dasharray/dashoffset), en ease-in-out por
+            // tramo. El desfase negativo del SVG es aquí un giro extra del guion.
+            reloj(1400) { fase in
+                let suave = { (x: Double) in x * x * (3 - 2 * x) }
+                let largo: Double, inicio: Double
+                if fase < 0.5 { let u = suave(fase / 0.5); largo = 1 + 44 * u; inicio = 17 * u }
+                else { let u = suave((fase - 0.5) / 0.5); largo = 45; inicio = 17 + 45 * u }
+                arco(hasta: largo / perimetro)
+                    .frame(width: diametro, height: diametro)
+                    .rotationEffect(.degrees((inicio / perimetro + fase) * 360))
             }
         default:
-            // El símbolo de progreso de SF con su efecto de color por capas.
-            Image(systemName: "progress.indicator")
-                .symbolEffect(.variableColor.iterative.dimInactiveLayers.nonReversing, isActive: true)
+            // Arco: un guion de 18 de 62.8, 800 ms.
+            reloj(800) { fase in
+                arco(hasta: 18 / perimetro)
+                    .frame(width: diametro, height: diametro)
+                    .rotationEffect(.degrees(fase * 360))
+            }
+        }
+    }
+
+    /// Un tramo del círculo desde las 3 en punto, con el trazo y las puntas redondas de loading.dev.
+    private func arco(hasta: Double) -> some View {
+        Circle()
+            .trim(from: 0, to: hasta)
+            .stroke(style: StrokeStyle(lineWidth: trazo, lineCap: .round))
+    }
+
+    /// Fase de 0 a 1 que da la vuelta cada `ms` milisegundos. Con "reducir movimiento", quieta.
+    private func reloj<Contenido: View>(_ ms: Double, @ViewBuilder _ contenido: @escaping (Double) -> Contenido) -> some View {
+        TimelineView(.animation(paused: reduceMotion)) { ctx in
+            let t = ctx.date.timeIntervalSinceReferenceDate * 1000
+            contenido(reduceMotion ? 0.3 : t.truncatingRemainder(dividingBy: ms) / ms)
         }
     }
 }
