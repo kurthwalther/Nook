@@ -119,11 +119,10 @@ struct KurthBotonDePanel: View {
                     }
                 }
                 .frame(width: 28, height: 28)
+                // Igual que el CopyButton del panel: sin encoger, o se veía más chica que "Copy Link".
                 Text(hecho ? (listo ?? texto) : texto)
                     .font(NookDesign.Font.caption)
                     .foregroundStyle(hecho ? .green : .secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
@@ -156,7 +155,8 @@ struct KurthFilaTamañoDeTexto: View {
                 .frame(width: 28, height: 28)
                 .background(Color.orange.opacity(0.12))
                 .clipShape(NookDesign.Radius.shape(NookDesign.Radius.sm))
-            Text("Tamaño del texto")
+            // "Tamaño del texto" no cabía junto a los controles; junto a "Page Zoom" basta "Texto".
+            Text("Texto")
                 .font(NookDesign.Font.body)
             Spacer()
             HStack(spacing: 6) {
