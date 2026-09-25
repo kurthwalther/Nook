@@ -95,7 +95,9 @@ struct KurthTabStrip: View {
 
     var body: some View {
         let available = min(slotWidth, Self.maxWidth)
-        let overflows = available > 0 && segmentsWidth + plusWidth + 2 * Self.segmentInset > available
+        // La X de solo íconos suma 22 pt mientras está; no cuenta para pasar a modo scroll, o la tira
+        // brincaba al ancho fijo y crecía a los dos lados (Kurth, 25 sep).
+        let overflows = available > 0 && segmentsWidth - crecimientoDeX + plusWidth + 2 * Self.segmentInset > available
         Color.clear
             .frame(maxWidth: .infinity)
             .frame(height: KurthTopBarView.capsuleHeight)
@@ -411,16 +413,9 @@ struct KurthTabStrip: View {
         .frame(width: KurthEscala.pt(NookDesign.Size.favicon), height: KurthEscala.pt(NookDesign.Size.favicon))
     }
 
-    /// La X de cerrar, del tamaño del favicon.
+    /// La X de cerrar, del tamaño del favicon; gris, y negra (primary) con el mouse encima.
     private func closeButton(_ entry: Entry) -> some View {
-        Button("Cerrar pestaña", systemImage: "xmark") {
-            tabs.close(entry.item.id)
-        }
-        .labelStyle(.iconOnly)
-        .buttonStyle(.plain)
-        .font(KurthEscala.fuente(10, .semibold))
-        .foregroundStyle(.secondary)
-        .frame(width: KurthEscala.pt(NookDesign.Size.favicon), height: KurthEscala.pt(NookDesign.Size.favicon))
+        CloseX { tabs.close(entry.item.id) }
     }
 
     /// Pausa/play y bocina: existen mientras la pestaña suena, está silenciada o Kurth la pausó
@@ -495,6 +490,25 @@ struct KurthTabStrip: View {
     }
 
     /// Cápsula de vidrio en "capsules"; en "tinted", el mismo relleno plano que el campo vacío.
+    /// Botón de cerrar con su propio estado de mouse: se pone negro al pasar por encima, para
+    /// decir "esto es lo que vas a tocar" (Kurth, 25 sep).
+    private struct CloseX: View {
+        let action: () -> Void
+        @State private var alPasar = false
+
+        var body: some View {
+            Button("Cerrar pestaña", systemImage: "xmark", action: action)
+                .labelStyle(.iconOnly)
+                .buttonStyle(.plain)
+                .font(KurthEscala.fuente(10, .semibold))
+                .foregroundStyle(alPasar ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                .frame(width: KurthEscala.pt(NookDesign.Size.favicon), height: KurthEscala.pt(NookDesign.Size.favicon))
+                .contentShape(Rectangle())
+                .onHoverTracking { alPasar = $0 }
+                .animation(NookDesign.Motion.quick, value: alPasar)
+        }
+    }
+
     private struct StripSurface: ViewModifier {
         let glass: Bool
         let tint: Color?
