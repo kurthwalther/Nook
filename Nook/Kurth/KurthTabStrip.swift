@@ -10,6 +10,8 @@
 //  que el resto: Kurth no quiso que se encogieran solos (24 sep).
 //  La tira mide lo que mide su contenido y va centrada, como la cápsula sola (Kurth, 24 sep: "no
 //  hacerse una barra enorme"). Si no cabe, se desplaza de lado en vez de encimarse a los botones.
+//  Se reordenan arrastrando: el segmento sigue al mouse, los demás se hacen a un lado y al soltar
+//  se llama al mismo `move` del sidebar; soltar junto a un favorito lo vuelve favorito.
 //  Se enciende con kurth.tabLayout = compact (clic derecho en la barra o kurth_set_settings).
 //
 
@@ -32,6 +34,12 @@ struct KurthTabStrip: View {
 
     @Namespace private var strip
     @State private var hovered: UUID?
+    /// Arrastre para reordenar: qué segmento, cuánto se ha movido y dónde estaba cada uno al
+    /// empezar (las medidas en vivo ya incluyen los desplazamientos, así que no sirven).
+    @State private var dragging: UUID?
+    @State private var dragTranslation: CGFloat = 0
+    @State private var frames: [UUID: CGRect] = [:]
+    @State private var dragFrames: [UUID: CGRect] = [:]
     /// Ancho del hueco entre las cápsulas de los lados: la tira se centra en él mientras quepa.
     @State private var slotWidth: CGFloat = 0
 
@@ -73,15 +81,23 @@ struct KurthTabStrip: View {
 
     private var capsule: some View {
         let entries = entries
+        let insertion = dragging.map { insertionIndex(for: $0, in: entries) }
         return HStack(spacing: 0) {
             ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
                 if index > 0 {
-                    divider(hidden: touchesHighlight(entries[index - 1].id) || touchesHighlight(entry.id))
+                    divider(hidden: dragging != nil || touchesHighlight(entries[index - 1].id) || touchesHighlight(entry.id))
                 }
                 segment(entry)
+                    .offset(x: shift(of: entry.id, in: entries))
+                    // Los demás se corren con resorte; el arrastrado sigue al mouse sin retraso.
+                    .animation(dragging == entry.id ? nil : NookDesign.Motion.spring, value: insertion)
+                    .zIndex(dragging == entry.id ? 1 : 0)
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("strip")) } action: { frames[entry.id] = $0 }
+                    .simultaneousGesture(reorderGesture(entry, in: entries))
             }
             newTabButton
         }
+        .coordinateSpace(name: "strip")
         .padding(.horizontal, Self.segmentInset)
         // El resalte de la activa sigue al segmento seleccionado y se desliza al cambiar.
         .background(alignment: .leading) {
@@ -96,6 +112,63 @@ struct KurthTabStrip: View {
         .modifier(StripSurface(glass: glass, tint: tint))
         .animation(NookDesign.Motion.standard, value: selectedID)
         .animation(NookDesign.Motion.quick, value: hovered)
+        .animation(NookDesign.Motion.spring, value: dragging)
+    }
+
+    // MARK: - Reordenar arrastrando
+
+    private func reorderGesture(_ entry: Entry, in entries: [Entry]) -> some Gesture {
+        DragGesture(minimumDistance: 6, coordinateSpace: .named("strip"))
+            .onChanged { value in
+                if dragging != entry.id {
+                    dragging = entry.id
+                    dragFrames = frames
+                }
+                dragTranslation = value.translation.width
+            }
+            .onEnded { _ in
+                let insertion = insertionIndex(for: entry.id, in: entries)
+                let others = entries.filter { $0.id != entry.id }
+                let previous = insertion > 0 ? others[insertion - 1] : nil
+                // Sin nada delante, entra al principio de la sección del primero (o se queda en la suya).
+                let parent = previous?.item.parent ?? others.first?.item.parent ?? entry.item.parent
+                // Sin animación al soltar: el segmento ya está donde va a quedar, solo cambia de dueño.
+                var settle = Transaction()
+                settle.disablesAnimations = true
+                withTransaction(settle) {
+                    dragging = nil
+                    dragTranslation = 0
+                    if parent != entry.item.parent || previous?.id != previousID(of: entry.id, in: entries) {
+                        tabs.move(entry.id, to: parent, after: previous?.id)
+                    }
+                }
+            }
+    }
+
+    /// Cuántos de los otros segmentos quedan a la izquierda del centro del que se arrastra.
+    private func insertionIndex(for id: UUID, in entries: [Entry]) -> Int {
+        guard let frame = dragFrames[id] else { return 0 }
+        let center = frame.midX + dragTranslation
+        return entries.filter { $0.id != id && (dragFrames[$0.id]?.midX ?? 0) < center }.count
+    }
+
+    private func previousID(of id: UUID, in entries: [Entry]) -> UUID? {
+        guard let index = entries.firstIndex(where: { $0.id == id }), index > 0 else { return nil }
+        return entries[index - 1].id
+    }
+
+    /// Lo que se desplaza cada segmento mientras uno se arrastra: el arrastrado sigue al mouse y
+    /// los que quedan entre su lugar viejo y el nuevo se corren el ancho del arrastrado.
+    private func shift(of id: UUID, in entries: [Entry]) -> CGFloat {
+        guard let dragging, let from = entries.firstIndex(where: { $0.id == dragging }) else { return 0 }
+        if id == dragging { return dragTranslation }
+        let width = (dragFrames[dragging]?.width ?? 0) + 1
+        let insertion = insertionIndex(for: dragging, in: entries)
+        guard let index = entries.firstIndex(where: { $0.id == id }) else { return 0 }
+        let position = index < from ? index : index - 1
+        if position < from && position >= insertion { return width }
+        if position >= from && position < insertion { return -width }
+        return 0
     }
 
     /// El segmento seleccionado de un control segmentado: relleno claro con un borde apenas.
@@ -107,7 +180,7 @@ struct KurthTabStrip: View {
 
     /// Los separadores desaparecen junto a la pestaña activa y a la que tiene el mouse encima,
     /// como en el control segmentado de Apple.
-    private func touchesHighlight(_ id: UUID) -> Bool { id == selectedID || id == hovered }
+    private func touchesHighlight(_ id: UUID) -> Bool { id == selectedID || id == hovered || id == dragging }
 
     private func divider(hidden: Bool) -> some View {
         Rectangle()
