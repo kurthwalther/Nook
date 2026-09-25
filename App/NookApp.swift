@@ -74,6 +74,7 @@ struct NookApp: App {
                     .onAppear {
                         setupApplicationLifecycle()
                         setupAIServices()
+                        KurthSync.shared.arrancar(tabs: browserManager.tabs) // kurth: iCloud Drive (KurthSync.swift)
                     }
                 
                 

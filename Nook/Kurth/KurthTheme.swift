@@ -40,6 +40,9 @@ struct KurthTheme: Codable, Equatable {
     /// El accentHex que tenía el Space al guardar. Normalmente es el primario; al guardar por
     /// cierre de la app no da tiempo de escribir el acento y queda el anterior.
     var accent: String?
+    /// Cuándo se guardó, para que entre Macs gane el más reciente (KurthSync). nil en los temas
+    /// guardados antes de sincronizar: cuentan como los más viejos.
+    var modificado: Date?
 
     var primaryHex: String? { dots.first?.hex }
 
@@ -136,6 +139,7 @@ final class KurthThemeStore {
         guard let id = editingSpaceID else { return }
         if var draft = drafts[id] {
             draft.accent = nil
+            draft.modificado = Date()
             saved[id] = draft
             write()
             if let hex = draft.primaryHex { tabs?.updateSpace(id, name: nil, icon: nil, accentHex: hex) }
@@ -149,6 +153,7 @@ final class KurthThemeStore {
     private func saveOnQuit() {
         guard let id = editingSpaceID, var draft = drafts[id] else { return }
         draft.accent = editingTabs?.space(id)?.accentHex
+        draft.modificado = Date()
         saved[id] = draft
         write()
     }
@@ -157,10 +162,19 @@ final class KurthThemeStore {
     func setTheme(_ theme: KurthTheme, for spaceID: UUID, tabs: TabsController?) {
         var t = theme
         t.accent = nil
+        t.modificado = Date()
         saved[spaceID] = t
         if editingSpaceID == spaceID { drafts[spaceID] = t }
         write()
         if let hex = t.primaryHex { tabs?.updateSpace(spaceID, name: nil, icon: nil, accentHex: hex) }
+    }
+
+    /// Un tema que llegó de otra Mac (KurthSync), ya con su fecha. El acento viaja aparte, en el
+    /// Space. Si justo se está editando ese tema aquí, gana lo que se está editando.
+    func aplicarRemoto(_ theme: KurthTheme, para spaceID: UUID) {
+        guard editingSpaceID != spaceID else { return }
+        saved[spaceID] = theme
+        write()
     }
 
     // MARK: - Archivo

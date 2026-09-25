@@ -62,10 +62,18 @@ esconden del MCP (las reemplazan).
 - Tareas en segundo plano.
 - Detalle: `kurth_get_settings` reporta el override del vidrio como 1 cuando está en automático.
 
-## iCloud (CloudKit, cuenta de desarrollador de paga)
+## iCloud — por iCloud Drive, no CloudKit (Kurth, 24 sep)
 
-- Fase 1: favoritos, Spaces, fijadas, carpetas, temas y ajustes (`CKSyncEngine`).
-- Fase 2: historial (SwiftData tiene 6 `@Attribute(.unique)` que CloudKit no acepta).
+CloudKit obligaba a cambiar el identificador de Nook (com.gstudios.nook es del equipo de upstream)
+y migrar sesiones (454 MB de WebKit), ajustes y permisos. Se eligió iCloud Drive: KurthSync.swift.
+- ✅ Fase 1 (24 sep): Spaces, favoritos, fijadas, carpetas, temas y ajustes. Cada Mac escribe solo
+  su archivo en iCloud Drive/Nook/Sync/<id>.json; gana el cambio más reciente por registro; los
+  borrados viajan 30 días. Primera vez: mismo nombre de Space = mismo Space; misma dirección en el
+  mismo lugar = misma fijada (alias). Probado con una Mac simulada: alta, alias sin duplicar y
+  borrado (en ≤ 15 s aunque el archivo se sobrescriba en su lugar). **Falta: probar con la Pro.**
+- Ajustes de apariencia (kurth.*) al instante; los de la ventana de Ajustes al reabrir Nook.
+- Diagnóstico: kurth_sync_status y kurth_sync_now en el MCP.
+- Fase 2: historial (por meses, en archivos aparte).
 - Nunca la base de datos en una carpeta de iCloud Drive.
 
 ## Zen

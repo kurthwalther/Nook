@@ -78,6 +78,7 @@ enum KurthMCPTools {
 
     /// nil si la herramienta no es de la capa Kurth.
     static func call(_ name: String, _ args: [String: Any], window: BrowserWindowState, tabs: TabsController) -> [String: Any]? {
+        if let resultado = KurthSync.llamar(name) { return resultado }
         switch name {
         case "kurth_get_settings":
             return text(json(snapshot(window: window, tabs: tabs)))
