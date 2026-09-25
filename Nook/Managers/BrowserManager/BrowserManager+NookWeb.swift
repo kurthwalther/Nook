@@ -326,6 +326,8 @@ extension BrowserManager: AlertPresenter {
         allowsMultipleSelection: Bool, allowsDirectories: Bool, over webView: WKWebView,
         completion: @escaping ([URL]?) -> Void
     ) {
+        // kurth: si el agente dejó archivos para esta vista (upload_file), no hay selector.
+        if let urls = KurthCopilot.tomarArchivosPendientes(webView) { return completion(urls) }
         let openPanel = NSOpenPanel()
         openPanel.allowsMultipleSelection = allowsMultipleSelection
         openPanel.canChooseDirectories = allowsDirectories

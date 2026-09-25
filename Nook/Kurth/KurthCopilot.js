@@ -138,8 +138,10 @@
     if (out.lines.length >= out.max || SKIP.has(el.tagName)) return;
     const interactive = isInteractive(el);
     const role = roleOf(el);
-    if ((interactive || role === 'heading') && visible(el)) {
-      out.lines.push(line(el, role || 'elemento', interactive ? refFor(el) : null));
+    // Un campo de archivo oculto tras un botón "Subir" también se lista: upload_file lo usa directo.
+    const archivoOculto = el.tagName === 'INPUT' && el.type === 'file';
+    if ((interactive || role === 'heading') && (visible(el) || archivoOculto)) {
+      out.lines.push(line(el, role || 'elemento', interactive ? refFor(el) : null) + (archivoOculto && !visible(el) ? ' (oculto)' : ''));
       // Adentro de un enlace o un botón no hay nada más que tocar por separado.
       if (interactive && (el.tagName === 'A' || el.tagName === 'BUTTON')) return;
     }
@@ -563,6 +565,42 @@
     },
 
     lastClick() { return lastClick; },
+
+    describir(ref) { return describe(element(ref)); },
+
+    // Para wait_for: ¿se ven el texto y/o la referencia? El texto se busca en lo que la página
+    // pinta (innerText respeta display:none y visibility), sin mayúsculas ni espacios de más.
+    seVe(texto, ref) {
+      if (ref) {
+        const clave = String(ref).replace(/^@/, '');
+        const e = refs.get(clave) && refs.get(clave).deref();
+        if (!e || !e.isConnected || !visible(e)) return false;
+      }
+      if (texto) {
+        const cuerpo = clean((document.body && document.body.innerText) || '').toLowerCase();
+        if (!cuerpo.includes(clean(texto).toLowerCase())) return false;
+      }
+      return true;
+    },
+
+    esCampoDeArchivo(ref) { const e = element(ref); return e.tagName === 'INPUT' && e.type === 'file'; },
+
+    // Mete archivos en un <input type=file> sin selector: bytes → File → DataTransfer, y los
+    // eventos input/change que escuchan React y compañía.
+    ponerArchivos(ref, archivos) {
+      const e = element(ref);
+      const dt = new DataTransfer();
+      for (const a of archivos) {
+        const bin = atob(a.b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        dt.items.add(new File([bytes], a.nombre, { type: a.tipo }));
+      }
+      e.files = dt.files;
+      e.dispatchEvent(new Event('input', { bubbles: true }));
+      e.dispatchEvent(new Event('change', { bubbles: true }));
+      return describe(e) + ' (' + e.files.length + ' archivo(s))';
+    },
 
     clickJS(ref) {
       const e = element(ref);
