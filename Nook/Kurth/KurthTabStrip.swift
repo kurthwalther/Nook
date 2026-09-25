@@ -190,10 +190,9 @@ struct KurthTabStrip: View {
         let tinte = KurthWindowTheme.theme(window: windowState, tabs: tabs).primaryHex
             .map { KurthThemeMath.paintColor(hex: $0, opacity: 1) }
         return Capsule()
-            .fill(.primary.opacity(0.21))
+            .fill(.primary.opacity(0.25))
             .overlay { if let tinte { Capsule().fill(tinte.opacity(0.06)).blendMode(.multiply) } }
-            .overlay(Capsule().strokeBorder(.primary.opacity(0.08), lineWidth: 1))
-            .overlay { if let tinte { Capsule().strokeBorder(tinte.opacity(0.09), lineWidth: 1).blendMode(.multiply) } }
+            // Sin borde (Kurth, 25 sep): el relleno solo, como el segmento elegido de macOS.
     }
 
     // MARK: - Reordenar arrastrando
