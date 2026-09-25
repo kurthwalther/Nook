@@ -229,7 +229,8 @@ struct KurthAgentChat: View {
     private var detalleDeEstado: String? {
         switch agente.estado {
         case .apagado: return nil
-        case .arrancando: return "abriendo sesión…"
+        // Abrir la sesión se dice arriba de la caja de texto, no aquí (Kurth, 25 sep: salía dos veces).
+        case .arrancando: return nil
         case .listo: return nil
         case .trabajando: return agente.permiso == nil ? "trabajando…" : "esperando tu respuesta"
         case .error(let motivo): return motivo
@@ -481,7 +482,7 @@ struct KurthAgentChat: View {
     }
 
     private var puedeEnviar: Bool {
-        agente.estado.puedeEscribir
+        agente.aceptaMensajes
             && (!texto.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !KurthSenalar.shared.referencias.isEmpty
                 || !agente.adjuntos.isEmpty)
     }

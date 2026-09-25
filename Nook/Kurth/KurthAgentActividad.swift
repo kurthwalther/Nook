@@ -98,9 +98,7 @@ struct KurthAgentActividad: View {
     }
 
     /// Una vuelta del brillo cada 1.8 s.
-    private func fase(_ fecha: Date) -> Double {
-        fecha.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.8) / 1.8
-    }
+    private func fase(_ fecha: Date) -> Double { KurthBrillo.fase(fecha) }
 
     // MARK: - Qué hace cada herramienta, en palabras
 
@@ -191,6 +189,11 @@ struct KurthAgentActividad: View {
 /// movimiento).
 struct KurthBrillo: ViewModifier {
     let fase: Double?
+
+    /// Dónde va la banda en ese momento: una pasada cada 1.8 s.
+    static func fase(_ fecha: Date) -> Double {
+        fecha.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.8) / 1.8
+    }
 
     func body(content: Content) -> some View {
         content

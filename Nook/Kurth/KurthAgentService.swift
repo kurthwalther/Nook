@@ -93,8 +93,6 @@ final class KurthAgentService {
         case listo
         case trabajando
         case error(String)
-
-        var puedeEscribir: Bool { self == .listo }
     }
 
     private(set) var mensajes: [Mensaje] = []
@@ -266,6 +264,7 @@ final class KurthAgentService {
             do {
                 guard let ejecutable = Self.buscarNpx() else {
                     self.estado = .error("No encontré npx. El agente necesita Node instalado.")
+                    self.descartarEnEspera()
                     return
                 }
                 var agente = KurthACPAgent.claudeCodeEnCache(npx: ejecutable) ?? KurthACPAgent.claudeCode(npx: ejecutable)
@@ -295,13 +294,14 @@ final class KurthAgentService {
                 await self.aplicarOpcionesGuardadas()
                 self.modos = self.cliente.availableModes
                 self.modoActual = self.cliente.currentModeId
-                self.estado = .listo
+                self.sesionLista()
             } catch {
                 // Si el proceso murió, su último mensaje de error dice por qué; "el agente no está
                 // corriendo" solo dice que ya no está (así se escondió el PATH el 24 sep).
                 if case .error = self.estado { return }
                 let causa = self.ultimoDiagnostico.map { "\(error.localizedDescription) \($0)" }
                 self.estado = .error(causa ?? error.localizedDescription)
+                self.descartarEnEspera()
             }
         }
     }
@@ -313,6 +313,33 @@ final class KurthAgentService {
         permiso = nil
         cliente.stop()
         estado = .apagado
+        descartarEnEspera()
+    }
+
+    // MARK: - Escribir mientras abre la sesión
+
+    /// Lo que se mandó mientras la sesión abría (Kurth, 25 sep: "que se pueda escribir mientras
+    /// carga"): su globo ya está en pantalla y sale en cuanto la sesión quede lista. Uno a la vez.
+    private var enEspera: (() -> Void)?
+
+    /// Si se puede mandar un mensaje ahora: con la sesión lista, o abriéndose y sin otro esperando.
+    var aceptaMensajes: Bool {
+        estado == .listo || (estado == .arrancando && enEspera == nil)
+    }
+
+    /// La sesión quedó abierta: lo que esperaba sale ya.
+    private func sesionLista() {
+        estado = .listo
+        let pendiente = enEspera
+        enEspera = nil
+        pendiente?()
+    }
+
+    /// La sesión no abrió: lo que esperaba no sale, y se dice debajo de su globo.
+    private func descartarEnEspera() {
+        guard enEspera != nil else { return }
+        enEspera = nil
+        mensajes.append(Mensaje(autor: .agente, texto: "⚠️ No se mandó: la sesión no abrió."))
     }
 
     /// Los comandos que empatan con lo que se lleva escrito tras la «/».
@@ -348,9 +375,10 @@ final class KurthAgentService {
                 await self.aplicarOpcionesGuardadas()
                 self.modos = self.cliente.availableModes
                 self.modoActual = self.cliente.currentModeId
-                self.estado = .listo
+                self.sesionLista()
             } catch {
                 self.estado = .error(error.localizedDescription)
+                self.descartarEnEspera()
             }
         }
     }
@@ -419,13 +447,21 @@ final class KurthAgentService {
     func enviar(_ texto: String, pagina: KurthACPResourceLink? = nil, contenido: String? = nil,
                 señalados: [KurthSenalar.Referencia] = []) {
         let limpio = texto.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !limpio.isEmpty, estado == .listo else { return }
+        guard !limpio.isEmpty, aceptaMensajes else { return }
         let adjuntados = adjuntos
         adjuntos.removeAll()
 
         // En el globo, lo adjuntado va con «📎» para que se pinte con clip y no con el visor.
         let chips = señalados.map { "\($0.numero) \($0.resumen)" } + adjuntados.map { "📎 " + $0.nombre }
         mensajes.append(Mensaje(autor: .usuario, texto: limpio, señalados: chips.isEmpty ? nil : chips))
+        let mandar: () -> Void = { [weak self] in
+            self?.mandar(limpio, pagina: pagina, contenido: contenido, señalados: señalados, adjuntados: adjuntados)
+        }
+        if estado == .arrancando { enEspera = mandar } else { mandar() }
+    }
+
+    private func mandar(_ limpio: String, pagina: KurthACPResourceLink?, contenido: String?,
+                        señalados: [KurthSenalar.Referencia], adjuntados: [Adjunto]) {
         mensajes.append(Mensaje(autor: .agente, texto: "", enCurso: true))
         plan.removeAll()
         estado = .trabajando

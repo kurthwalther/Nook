@@ -3,18 +3,21 @@
 //  KurthAgentInput.swift
 //  Nook (rama kurth)
 //
-//  La caja de texto del panel del agente, con el acomodo de Aside (Kurth, 24 sep):
+//  La caja de texto del panel del agente, con el acomodo de Aside (Kurth, 24 y 25 sep):
 //
+//     (+) (⛶)                   Abriendo sesión…
 //    ┌──────────────────────────────────────────┐
 //    │ [adjuntos y lo señalado]                 │
-//    │ (+)  Pídele algo…              ⛶   (↑)   │
+//    │  Pídele algo…                       (↑)  │
 //    │  🗀   🛡               ✳ Opus 5.5  medium  │
 //    └──────────────────────────────────────────┘
 //
-//  «+» agrega archivos, imágenes o una captura de la pestaña; también se pueden soltar encima
-//  archivos del Finder, enlaces o imágenes. Enviar y Señalar van en el renglón del texto. Abajo,
-//  dentro del mismo bloque blanco (Kurth: "como antes se veía bien"): carpeta y permisos a la
-//  izquierda; modelo y esfuerzo a la derecha, con el logo del proveedor.
+//  Arriba del bloque blanco: «+» agrega archivos, imágenes o una captura de la pestaña, y Señalar
+//  marca una zona de la página; a la derecha, mientras la sesión abre, "Abriendo sesión…" con el
+//  brillo del agente trabajando. Se puede escribir y mandar mientras tanto: el mensaje sale en
+//  cuanto la sesión quede lista (KurthAgentService.enEspera). También se pueden soltar encima
+//  archivos del Finder, enlaces o imágenes. Abajo, dentro del mismo bloque (Kurth: "como antes se
+//  veía bien"): carpeta y permisos a la izquierda; modelo y esfuerzo a la derecha.
 //
 
 import SwiftUI
@@ -38,6 +41,7 @@ struct KurthAgentInput: View {
 
     /// Hay algo arrastrándose encima de la caja.
     @State private var soltando = false
+    @Environment(\.accessibilityReduceMotion) private var sinMovimiento
 
     /// Los controles redondos miden 28 y la caja los rodea con 6. El concéntrico sería 20 (14 + 6);
     /// Kurth lo prefirió en 16 (24 sep).
@@ -46,7 +50,32 @@ struct KurthAgentInput: View {
     private var forma: RoundedRectangle { RoundedRectangle(cornerRadius: 16, style: .continuous) }
 
     var body: some View {
-        caja
+        VStack(spacing: 6) {
+            filaDeArriba
+            caja
+        }
+    }
+
+    // MARK: - Arriba del bloque: agregar, señalar y el aviso de la sesión
+
+    private var filaDeArriba: some View {
+        let abriendo = agente.estado == .arrancando
+        return HStack(spacing: 4) {
+            menuDeAgregar
+            botonSeñalar
+            Spacer(minLength: 8)
+            if abriendo {
+                TimelineView(.animation(minimumInterval: sinMovimiento ? 1 : 1.0 / 30)) { reloj in
+                    Text("Abriendo sesión…")
+                        .modifier(KurthBrillo(fase: sinMovimiento ? nil : KurthBrillo.fase(reloj.date)))
+                }
+                .font(.system(size: KurthAgentChat.tamañoDeTexto))
+                .lineLimit(1)
+                .transition(.opacity)
+            }
+        }
+        .padding(.horizontal, 8)
+        .animation(NookDesign.Motion.quick, value: abriendo)
     }
 
     // MARK: - La caja
@@ -57,9 +86,7 @@ struct KurthAgentInput: View {
                 fichas
             }
             HStack(alignment: .bottom, spacing: 6) {
-                menuDeAgregar
                 campo
-                botonSeñalar
                 botonEnviar
             }
             filaDeOpciones
@@ -92,16 +119,14 @@ struct KurthAgentInput: View {
                 return .handled
             }
             .padding(.vertical, 6)
+            // El texto empieza donde el icono de carpeta de abajo (6 + 8 del borde).
+            .padding(.leading, 8)
             .frame(minHeight: control)
     }
 
-    private var marcador: String {
-        switch agente.estado {
-        case .arrancando: return "Abriendo sesión…"
-        case .error: return "El agente no arrancó"
-        default: return "Pídele algo…"
-        }
-    }
+    /// Siempre el mismo: que la sesión está abriendo se dice arriba del bloque, y un error, en el
+    /// encabezado del panel (antes salía también aquí, dos veces; Kurth, 25 sep).
+    private var marcador: String { "Pídele algo…" }
 
     private var menuDeAgregar: some View {
         Menu {
@@ -125,15 +150,19 @@ struct KurthAgentInput: View {
         .help("Agregar archivos, imágenes o una captura. También puedes soltarlos aquí.")
     }
 
+    private var señalando: Bool { KurthSenalar.shared.modoCaja == windowState.id }
+
+    /// Con el mismo círculo que «+»: van juntos arriba del bloque.
     private var botonSeñalar: some View {
         Button {
             KurthSenalar.shared.alternarModoCaja(en: windowState)
         } label: {
             Image(systemName: "viewfinder")
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(KurthSenalar.shared.modoCaja == windowState.id ? Color.accentColor : Color.primary.opacity(0.5))
+                .foregroundStyle(señalando ? Color.accentColor : Color.primary.opacity(0.7))
                 .frame(width: control, height: control)
-                .contentShape(Rectangle())
+                .background(señalando ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.06), in: Circle())
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .help("Señalar en la página (⌘⇧M): arrastra una caja sobre lo que quieras mostrarle")
@@ -263,7 +292,7 @@ struct KurthAgentInput: View {
             Spacer(minLength: 8)
             menuDeModelo
         }
-        // El icono de carpeta queda bajo el centro del «+» (6 + 8 ≈ 14 del borde, «+» centrado en 20).
+        // El icono de carpeta queda donde empieza el texto (6 + 8 = 14 del borde).
         .padding(.horizontal, 8)
         .padding(.bottom, 2)
     }
@@ -393,6 +422,10 @@ struct KurthAgentInput: View {
         .menuStyle(.button)
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
+        // Primero se mide el modelo: sin prioridad, el HStack repartía el ancho en partes iguales
+        // entre permisos, el espacio y el modelo, y a 200 pt al modelo le tocaba solo el logo
+        // aunque sobrara espacio (Kurth, 25 sep).
+        .layoutPriority(1)
         .disabled(agente.opciones.isEmpty)
         .help("Modelo y esfuerzo del agente")
     }
