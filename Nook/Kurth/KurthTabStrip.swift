@@ -40,8 +40,13 @@ struct KurthTabStrip: View {
     @State private var dragTranslation: CGFloat = 0
     @State private var frames: [UUID: CGRect] = [:]
     @State private var dragFrames: [UUID: CGRect] = [:]
-    /// Ancho del hueco entre las cápsulas de los lados: la tira se centra en él mientras quepa.
+    /// Ancho del hueco entre las cápsulas de los lados y de la tira: mientras quepa va centrada
+    /// tal cual; solo si no cabe se mete en un ScrollView (que en macOS 26 dibuja su propio efecto
+    /// de borde sobre el vidrio, y por eso no se usa siempre).
     @State private var slotWidth: CGFloat = 0
+    @State private var stripWidth: CGFloat = 0
+    /// Acaba de haber un arrastre: el clic de ese mismo soltar no cuenta como selección.
+    @State private var justDragged = false
 
     private var tabs: TabsController { browserManager.tabs }
     private var selectedID: UUID? { tabs.selectedItemID(in: windowState) }
@@ -69,14 +74,20 @@ struct KurthTabStrip: View {
     private static let verticalRoom: CGFloat = 8
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            capsule
-                .padding(.vertical, Self.verticalRoom)
-                // Mientras la tira quepa, va centrada en el hueco; si no, se desplaza.
-                .frame(minWidth: slotWidth)
+        Group {
+            if slotWidth > 0, stripWidth > slotWidth {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    capsule.padding(.vertical, Self.verticalRoom)
+                }
+            } else {
+                capsule
+            }
         }
+        .frame(maxWidth: .infinity)
         .frame(height: KurthTopBarView.capsuleHeight + Self.verticalRoom * 2)
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { slotWidth = $0 }
+        .background {
+            Color.clear.onGeometryChange(for: CGFloat.self) { $0.size.width } action: { slotWidth = $0 }
+        }
     }
 
     private var capsule: some View {
@@ -110,6 +121,7 @@ struct KurthTabStrip: View {
         .fixedSize(horizontal: true, vertical: false)
         .clipShape(Capsule())
         .modifier(StripSurface(glass: glass, tint: tint))
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { stripWidth = $0 }
         .animation(NookDesign.Motion.standard, value: selectedID)
         .animation(NookDesign.Motion.quick, value: hovered)
         .animation(NookDesign.Motion.spring, value: dragging)
@@ -123,10 +135,13 @@ struct KurthTabStrip: View {
                 if dragging != entry.id {
                     dragging = entry.id
                     dragFrames = frames
+                    justDragged = true
                 }
                 dragTranslation = value.translation.width
             }
             .onEnded { _ in
+                // El botón dispara con el mismo mouse-up que termina el arrastre: se deja pasar.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { justDragged = false }
                 let insertion = insertionIndex(for: entry.id, in: entries)
                 let others = entries.filter { $0.id != entry.id }
                 let previous = insertion > 0 ? others[insertion - 1] : nil
@@ -200,6 +215,7 @@ struct KurthTabStrip: View {
         let url = tabs.currentURL(for: entry.item)
 
         return Button {
+            guard !justDragged else { return }
             if isActive {
                 // Como en Safari: la pestaña activa abre el campo para editar la dirección.
                 if let url { commandPalette.openWithCurrentURL(url) } else { commandPalette.open() }
