@@ -75,7 +75,9 @@ y migrar sesiones (454 MB de WebKit), ajustes y permisos. Se eligió iCloud Driv
   su archivo en iCloud Drive/Nook/Sync/<id>.json; gana el cambio más reciente por registro; los
   borrados viajan 30 días. Primera vez: mismo nombre de Space = mismo Space; misma dirección en el
   mismo lugar = misma fijada (alias). Probado con una Mac simulada: alta, alias sin duplicar y
-  borrado (en ≤ 15 s aunque el archivo se sobrescriba en su lugar). **Falta: probar con la Pro.**
+  borrado (en ≤ 15 s aunque el archivo se sobrescriba en su lugar). **Con la Pro (24 sep noche):** la Pro
+  instalada con `089f30a3` exporta su archivo y ya importa el de la Air (`kurth_sync_status`: otrasMacs =
+  "MacBook Air de admin (2)", alias 0). Falta que Kurth vea que Spaces y favoritos quedaron bien en las dos.
 - Ajustes de apariencia (kurth.*) al instante; los de la ventana de Ajustes al reabrir Nook.
 - Diagnóstico: kurth_sync_status y kurth_sync_now en el MCP.
 - Fase 2: historial (por meses, en archivos aparte).
