@@ -9,7 +9,9 @@
 //  solo ícono si Kurth lo pide (kurth.compactTabs = icons, como en iPad). Los favoritos van igual
 //  que el resto: Kurth no quiso que se encogieran solos (24 sep).
 //  La tira mide lo que mide su contenido y va centrada, como la cápsula sola (Kurth, 24 sep: "no
-//  hacerse una barra enorme"). Si no cabe, se desplaza de lado en vez de encimarse a los botones.
+//  hacerse una barra enorme"). Si no cabe, el vidrio se queda fijo al ancho disponible, con sus
+//  puntas redondas y el + al final, y los segmentos se desplazan por dentro (Kurth, 24 sep: "el
+//  scroll debería hacerse dentro del segmented").
 //  Se reordenan arrastrando: el segmento sigue al mouse, los demás se hacen a un lado y al soltar
 //  se llama al mismo `move` del sidebar; soltar junto a un favorito lo vuelve favorito.
 //  Se enciende con kurth.tabLayout = compact (clic derecho en la barra o kurth_set_settings).
@@ -40,15 +42,15 @@ struct KurthTabStrip: View {
     @State private var dragTranslation: CGFloat = 0
     @State private var frames: [UUID: CGRect] = [:]
     @State private var dragFrames: [UUID: CGRect] = [:]
-    /// Ancho natural de la tira y ancho de la ranura que la barra le deja. La tira va como capa
-    /// (overlay) sobre una ranura vacía y flexible: así la ranura mide lo que de verdad hay entre
-    /// las cápsulas de los lados y nunca la empuja (medida sobre la barra, la barra crecía con la
-    /// tira y siempre "cabía"). Mientras quepa va centrada tal cual; si no, se mete en un
-    /// ScrollView, que solo se usa entonces porque en macOS 26 pinta su efecto de borde.
-    @State private var stripWidth: CGFloat = 0
-    @State private var slotWidth: CGFloat = 0
     /// Acaba de haber un arrastre: el clic de ese mismo soltar no cuenta como selección.
     @State private var justDragged = false
+    /// Ancho natural de los segmentos, del + y de la ranura que la barra le deja a la tira. La tira
+    /// va como capa (overlay) sobre una ranura vacía y flexible: así la ranura mide lo que de verdad
+    /// hay entre las cápsulas de los lados y nunca la empuja (medida sobre la barra, la barra crecía
+    /// con la tira y siempre "cabía").
+    @State private var segmentsWidth: CGFloat = 0
+    @State private var plusWidth: CGFloat = 0
+    @State private var slotWidth: CGFloat = 0
 
     private var tabs: TabsController { browserManager.tabs }
     private var selectedID: UUID? { tabs.selectedItemID(in: windowState) }
@@ -72,39 +74,62 @@ struct KurthTabStrip: View {
     static let segmentInset: CGFloat = 3
     /// Un título de pestaña inactiva no pasa de esto; más largo se corta con puntos.
     static let titleMaxWidth: CGFloat = 150
-    /// Aire vertical para que la sombra de la cápsula no se recorte en el ScrollView.
-    private static let verticalRoom: CGFloat = 8
     /// Tope de la tira aunque sobre ranura: unas 7 pestañas de ancho medio (Kurth, 24 sep). Más
-    /// que eso se desplaza.
+    /// que eso se desplaza por dentro.
     static let maxWidth: CGFloat = 7 * 120
 
     var body: some View {
         let available = min(slotWidth, Self.maxWidth)
+        let overflows = available > 0 && segmentsWidth + plusWidth + 2 * Self.segmentInset > available
         Color.clear
             .frame(maxWidth: .infinity)
-            .frame(height: KurthTopBarView.capsuleHeight + Self.verticalRoom * 2)
+            .frame(height: KurthTopBarView.capsuleHeight)
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { slotWidth = $0 }
             .overlay {
-                if available > 0, stripWidth > available {
-                    ScrollViewReader { proxy in
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            capsule.padding(.vertical, Self.verticalRoom)
-                        }
-                        .scrollEdgeEffectHidden(true, for: .horizontal)
-                        .frame(width: available)
-                        // La activa siempre a la vista: al cambiar de pestaña la tira se desplaza sola.
-                        .onChange(of: selectedID, initial: true) { _, id in
-                            guard let id else { return }
-                            withAnimation(NookDesign.Motion.standard) { proxy.scrollTo(id) }
-                        }
-                    }
-                } else {
-                    capsule
-                }
+                capsule(overflows: overflows, width: available)
             }
     }
 
-    private var capsule: some View {
+    // MARK: - Cápsula
+
+    /// El vidrio: mide su contenido mientras quepa; si no, se fija al ancho disponible y los
+    /// segmentos se desplazan por dentro, con el + siempre a la vista al final.
+    private func capsule(overflows: Bool, width: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            if overflows {
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        segments
+                    }
+                    .scrollEdgeEffectHidden(true, for: .horizontal)
+                    // La activa siempre a la vista: al cambiar de pestaña la tira se desplaza sola.
+                    .onChange(of: selectedID, initial: true) { _, id in
+                        guard let id else { return }
+                        withAnimation(NookDesign.Motion.standard) { proxy.scrollTo(id) }
+                    }
+                }
+            } else {
+                segments
+            }
+            newTabButton
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { plusWidth = $0 }
+        }
+        .padding(.horizontal, Self.segmentInset)
+        .frame(width: overflows ? width : nil, height: KurthTopBarView.capsuleHeight)
+        // Mide lo que mide su contenido: nada se estira para llenar la barra.
+        .fixedSize(horizontal: !overflows, vertical: false)
+        .clipShape(Capsule())
+        .modifier(StripSurface(glass: glass, tint: tint))
+        // Los ajustes de la barra también desde la tira, no solo desde sus extremos (Kurth, 24 sep).
+        .contextMenu { KurthBarSettingsMenu() }
+        .animation(NookDesign.Motion.standard, value: selectedID)
+        .animation(NookDesign.Motion.quick, value: hovered)
+        .animation(NookDesign.Motion.spring, value: dragging)
+    }
+
+    /// Los segmentos con sus separadores y el resalte de la activa, que sigue al segmento
+    /// seleccionado y se desliza al cambiar. Es lo que se desplaza cuando no cabe.
+    private var segments: some View {
         let entries = entries
         let insertion = dragging.map { insertionIndex(for: $0, in: entries) }
         return HStack(spacing: 0) {
@@ -121,25 +146,21 @@ struct KurthTabStrip: View {
                     .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("strip")) } action: { frames[entry.id] = $0 }
                     .simultaneousGesture(reorderGesture(entry, in: entries))
             }
-            newTabButton
         }
         .coordinateSpace(name: "strip")
-        .padding(.horizontal, Self.segmentInset)
-        // El resalte de la activa sigue al segmento seleccionado y se desliza al cambiar.
         .background(alignment: .leading) {
             if let selectedID {
                 activePill.matchedGeometryEffect(id: selectedID, in: strip, isSource: false)
             }
         }
-        .frame(height: KurthTopBarView.capsuleHeight)
-        // Mide lo que mide su contenido: nada se estira para llenar la barra.
-        .fixedSize(horizontal: true, vertical: false)
-        .clipShape(Capsule())
-        .modifier(StripSurface(glass: glass, tint: tint))
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { stripWidth = $0 }
-        .animation(NookDesign.Motion.standard, value: selectedID)
-        .animation(NookDesign.Motion.quick, value: hovered)
-        .animation(NookDesign.Motion.spring, value: dragging)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { segmentsWidth = $0 }
+    }
+
+    /// El segmento seleccionado de un control segmentado: relleno claro con un borde apenas.
+    private var activePill: some View {
+        Capsule()
+            .fill(.primary.opacity(0.12))
+            .overlay(Capsule().strokeBorder(.primary.opacity(0.08), lineWidth: 1))
     }
 
     // MARK: - Reordenar arrastrando
@@ -201,13 +222,6 @@ struct KurthTabStrip: View {
         return 0
     }
 
-    /// El segmento seleccionado de un control segmentado: relleno claro con un borde apenas.
-    private var activePill: some View {
-        Capsule()
-            .fill(.primary.opacity(0.12))
-            .overlay(Capsule().strokeBorder(.primary.opacity(0.08), lineWidth: 1))
-    }
-
     /// Los separadores desaparecen junto a la pestaña activa y a la que tiene el mouse encima,
     /// como en el control segmentado de Apple.
     private func touchesHighlight(_ id: UUID) -> Bool { id == selectedID || id == hovered || id == dragging }
@@ -239,7 +253,9 @@ struct KurthTabStrip: View {
             }
         } label: {
             HStack(spacing: 6) {
-                leadingIcon(entry, session: session, isHovered: isHovered)
+                // Solo ícono: sin X al pasar el mouse, o no queda por dónde entrar a la pestaña
+                // (Kurth, 24 sep). Se cierra con clic derecho.
+                leadingIcon(entry, session: session, showsClose: isHovered && (isActive || showsTitle))
                 if isActive {
                     // La cápsula de siempre: dominio y recargar.
                     Text(url.map(KurthTopBarView.shortHost) ?? tabs.title(for: entry.item))
@@ -284,15 +300,17 @@ struct KurthTabStrip: View {
             Button("Cerrar pestaña", systemImage: "xmark", role: .destructive) {
                 tabs.close(id)
             }
+            Divider()
+            KurthBarSettingsMenu()
         }
         .help(tabs.title(for: entry.item))
     }
 
     /// El favicon, que al pasar el mouse se vuelve la X de cerrar (Safari 15 hacía lo mismo).
     @ViewBuilder
-    private func leadingIcon(_ entry: Entry, session: PageSession?, isHovered: Bool) -> some View {
+    private func leadingIcon(_ entry: Entry, session: PageSession?, showsClose: Bool) -> some View {
         ZStack {
-            if isHovered {
+            if showsClose {
                 Button("Cerrar pestaña", systemImage: "xmark") {
                     tabs.close(entry.item.id)
                 }

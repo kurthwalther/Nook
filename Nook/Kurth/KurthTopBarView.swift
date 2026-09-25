@@ -128,31 +128,7 @@ struct KurthTopBarView: View {
                     KurthRadiusPanel()
                 }
                 .contextMenu {
-                    Picker("Estilo de barra", selection: $barStyle) {
-                        Text("Cápsulas (tipo Safari)").tag("capsules")
-                        Text("Color del sitio").tag("tinted")
-                    }
-                    .pickerStyle(.inline)
-                    if isCapsules {
-                        Divider()
-                        Toggle("Blur detrás de las cápsulas", isOn: $capsuleBlur)
-                    }
-                    Divider()
-                    Picker("Pestañas", selection: $tabLayout) {
-                        Text("En la barra lateral").tag("separate")
-                        Text("Compactas en la barra (tipo Safari)").tag("compact")
-                    }
-                    .pickerStyle(.inline)
-                    if isCompact {
-                        Toggle("Solo íconos (como iPad)", isOn: Binding(
-                            get: { compactTabs == "icons" },
-                            set: { compactTabs = $0 ? "icons" : "titles" }))
-                    }
-                    Divider()
-                    Button("Editar tema…") {
-                        KurthThemeStore.shared.openPicker(window: windowState, tabs: browserManager.tabs)
-                    }
-                    .disabled(windowState.isIncognito || windowState.spaceID == nil)
+                    KurthBarSettingsMenu()
                     Button("Radio de la página… (\(Int(KurthPrefs.shared.pageRadius)) pt)") {
                         showsRadiusPanel = true
                     }
@@ -573,5 +549,46 @@ private struct KurthRadiusPanel: View {
         }
         .padding(NookDesign.Spacing.xl)
         .frame(width: 280)
+    }
+}
+
+// MARK: - Menú de ajustes de la barra
+
+/// Lo que sale con clic derecho en la barra y también sobre la tira de pestañas compactas
+/// (KurthTabStrip), para que no haya que buscar los extremos (Kurth, 24 sep).
+struct KurthBarSettingsMenu: View {
+    @EnvironmentObject var browserManager: BrowserManager
+    @Environment(BrowserWindowState.self) private var windowState
+    @AppStorage("kurth.barStyle") private var barStyle = "capsules"
+    @AppStorage("kurth.capsuleBlur") private var capsuleBlur = false
+    @AppStorage("kurth.tabLayout") private var tabLayout = "separate"
+    @AppStorage("kurth.compactTabs") private var compactTabs = "titles"
+
+    var body: some View {
+        Picker("Estilo de barra", selection: $barStyle) {
+            Text("Cápsulas (tipo Safari)").tag("capsules")
+            Text("Color del sitio").tag("tinted")
+        }
+        .pickerStyle(.inline)
+        if barStyle != "tinted" {
+            Divider()
+            Toggle("Blur detrás de las cápsulas", isOn: $capsuleBlur)
+        }
+        Divider()
+        Picker("Pestañas", selection: $tabLayout) {
+            Text("En la barra lateral").tag("separate")
+            Text("Compactas en la barra (tipo Safari)").tag("compact")
+        }
+        .pickerStyle(.inline)
+        if tabLayout == "compact" {
+            Toggle("Solo íconos (como iPad)", isOn: Binding(
+                get: { compactTabs == "icons" },
+                set: { compactTabs = $0 ? "icons" : "titles" }))
+        }
+        Divider()
+        Button("Editar tema…") {
+            KurthThemeStore.shared.openPicker(window: windowState, tabs: browserManager.tabs)
+        }
+        .disabled(windowState.isIncognito || windowState.spaceID == nil)
     }
 }
