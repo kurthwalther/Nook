@@ -44,6 +44,9 @@ struct KurthTopBarView: View {
     @AppStorage("kurth.tabLayout") private var tabLayout = "separate"
     /// En compact, "titles" (ícono y título) o "icons" (solo ícono, como iPad).
     @AppStorage("kurth.compactTabs") private var compactTabs = "titles"
+    /// Claro u oscuro del vidrio y los íconos: "page" según el color de la página (como Safari) o
+    /// "theme" según el tema de Nook. Pregunta de Kurth del 24 sep; se compara con clic derecho.
+    @AppStorage("kurth.barScheme") private var barScheme = "page"
 
     @State private var showsRadiusPanel = false
     @State private var leadingWidth: CGFloat = 0
@@ -54,6 +57,7 @@ struct KurthTopBarView: View {
 
     private var isCapsules: Bool { barStyle != "tinted" }
     private var isCompact: Bool { tabLayout == "compact" }
+    private var followsPage: Bool { barScheme != "theme" }
 
     /// Con cápsulas de 28 pt, 44 deja 8 pt arriba y abajo, igual que a los lados; en "tinted" 40.
     private var barHeight: CGFloat { isCapsules ? 44 : KurthChrome.topBarHeight }
@@ -87,10 +91,11 @@ struct KurthTopBarView: View {
         .background(
             KurthBarProbe(showsWindowButtons: showsWindowButtons)
         )
-        .environment(\.colorScheme, pageScheme ?? systemScheme)
+        .environment(\.colorScheme, followsPage ? (pageScheme ?? systemScheme) : systemScheme)
         .animation(NookDesign.Motion.standard, value: pageScheme)
         .animation(NookDesign.Motion.standard, value: barStyle)
         .animation(NookDesign.Motion.standard, value: tabLayout)
+        .animation(NookDesign.Motion.standard, value: barScheme)
     }
 
     // MARK: - Fondo
@@ -140,6 +145,12 @@ struct KurthTopBarView: View {
                         Toggle("Blur detrás de las cápsulas", isOn: $capsuleBlur)
                     }
                     Divider()
+                    Picker("Claro u oscuro", selection: $barScheme) {
+                        Text("Según la página (como Safari)").tag("page")
+                        Text("Según el tema de Nook").tag("theme")
+                    }
+                    .pickerStyle(.inline)
+                    Divider()
                     Picker("Pestañas", selection: $tabLayout) {
                         Text("En la barra lateral").tag("separate")
                         Text("Compactas en la barra (tipo Safari)").tag("compact")
@@ -168,7 +179,8 @@ struct KurthTopBarView: View {
     /// Con la capa del sitio las cápsulas se leen mejor, salvo cuando la página tiene encabezado
     /// fijo (YouTube): ahí quedan pegadas a él y el vidrio puro se ve mejor que la capa encima.
     private var glassTint: Color? {
-        guard let pageColor, pageState?.hasTopHeader != true else { return nil }
+        // Según el tema, el vidrio va puro: sin el color de la página adentro.
+        guard followsPage, let pageColor, pageState?.hasTopHeader != true else { return nil }
         return Color(nsColor: pageColor).opacity(capsuleTintOpacity)
     }
 

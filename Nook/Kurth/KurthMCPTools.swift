@@ -48,6 +48,8 @@ enum KurthMCPTools {
                 info: "Barra capsules: opacidad del color de la página dentro de las cápsulas"),
         Setting(key: "kurth.tabLayout", type: "string", defaultValue: "separate",
                 info: "Pestañas: separate (solo en la barra lateral) o compact (en la barra de arriba como segmentos, Safari 15)"),
+        Setting(key: "kurth.barScheme", type: "string", defaultValue: "page",
+                info: "Claro u oscuro del vidrio de la barra: page (según el color de la página, como Safari) o theme (según el tema de Nook)"),
         Setting(key: "kurth.compactTabs", type: "string", defaultValue: "titles",
                 info: "Con tabLayout compact: titles (ícono y título) o icons (solo ícono, como iPad)"),
         Setting(key: "kurth.colorExtension", type: "bool", defaultValue: true,
