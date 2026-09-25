@@ -264,6 +264,11 @@ struct KurthTopBarView: View {
                 // Pestañas compactas (KurthTabStrip.swift): la tira ocupa todo el centro.
                 KurthTabStrip(glass: isCapsules, tint: glassTint, iconsOnly: compactTabs == "icons")
                     .padding(.horizontal, isCapsules ? 8 : NookDesign.Spacing.md)
+                    // La tira publica su cápsula si todas caben; si se desplaza por dentro, no se
+                    // desliza entre pestañas: ahí el gesto mueve la tira (KurthGestosDePestanas).
+                    .onPreferenceChange(KurthZonaDeDeslizar.self) { zona in
+                        MainActor.assumeIsolated { KurthGestos.de(windowState).zonaDeDeslizar = zona }
+                    }
             } else if isCapsules {
                 // Cápsula: el dominio centrado y los íconos anclados a las orillas, no al texto.
                 // Mide lo que ocupa el dominio (mínimo `addressMinWidth`) y crece si es largo.
@@ -279,6 +284,7 @@ struct KurthTopBarView: View {
                     }
                     .modifier(KurthGlass(tint: glassTint))
                     .onHoverTracking { isHoveringCapsule = $0 }
+                    .modifier(KurthZonaDeDeslizarAqui())
             } else {
                 // Copiar junto al dominio; recargar vive con las flechas en esta variante.
                 HStack(spacing: NookDesign.Spacing.md + 2) {
@@ -287,6 +293,7 @@ struct KurthTopBarView: View {
                 }
                 .padding(.horizontal, NookDesign.Spacing.md)
                 .onHoverTracking { isHoveringCapsule = $0 }
+                .modifier(KurthZonaDeDeslizarAqui())
             }
         } else {
             // Sin pestaña, el espacio de la URL es un campo listo para escribir (KurthEmptyPage.swift).

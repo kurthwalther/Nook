@@ -90,6 +90,11 @@ enum KurthMCPTools {
                 "harmony": ["type": "string"], "kind": ["type": "string"], "lightness": ["type": "number"],
             ]]
         ),
+        AIToolDefinition(
+            name: "kurth_tab_grid",
+            description: "Abre o cierra la cuadrícula de pestañas de la ventana activa (la misma del pellizco y ⇧⌘\\). abierta: true/false; sin ella, alterna.",
+            parameters: ["type": "object", "properties": ["abierta": ["type": "boolean"]]]
+        ),
     ]
 
     /// nil si la herramienta no es de la capa Kurth.
@@ -97,6 +102,11 @@ enum KurthMCPTools {
         if let resultado = KurthSync.llamar(name) { return resultado }
         if let resultado = KurthPasswords.llamar(name, args) { return resultado }
         switch name {
+        case "kurth_tab_grid":
+            let gestos = KurthGestos.de(window)
+            let abrir = (args["abierta"] as? Bool) ?? (gestos.progreso < 1)
+            if abrir { gestos.abrirCuadricula() } else { gestos.cerrarCuadricula() }
+            return text(abrir ? "Cuadrícula abierta" : "Cuadrícula cerrada")
         case "kurth_get_settings":
             return text(json(snapshot(window: window, tabs: tabs)))
         case "kurth_set_settings":

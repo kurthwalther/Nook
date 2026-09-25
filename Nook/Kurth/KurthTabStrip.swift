@@ -138,6 +138,8 @@ struct KurthTabStrip: View {
         .fixedSize(horizontal: !overflows, vertical: false)
         .clipShape(Capsule())
         .modifier(StripSurface(glass: glass, tint: tint))
+        // Para deslizar entre pestañas sobre la tira (KurthGestosDePestanas), solo si todo cabe.
+        .background { GeometryReader { geo in Color.clear.preference(key: KurthZonaDeDeslizar.self, value: overflows ? nil : geo.frame(in: .global)) } }
         // Los ajustes de la barra también desde la tira, no solo desde sus extremos (Kurth, 24 sep).
         .contextMenu { KurthBarSettingsMenu() }
         .animation(NookDesign.Motion.standard, value: selectedID)

@@ -270,6 +270,9 @@ struct WindowView: View {
             ZStack(alignment: .top) {
                 ZStack(alignment: .top) {
                     WebsiteView()
+                        // kurth: deslizar la cápsula entre pestañas y alejarse a la cuadrícula
+                        // (Nook/Kurth/KurthGestosDePestanas.swift).
+                        .modifier(KurthPaginaEnMovimiento())
                         // Sombra ligera bajo la página (KurthPageEdge); en split cada panel va aparte.
                         .background {
                             if browserManager.tabs.selectedSession(in: windowState) != nil,
@@ -284,6 +287,8 @@ struct WindowView: View {
                         .environmentObject(browserManager)
                         .environment(windowState)
                         .zIndex(2500)
+                    KurthCuadricula() // kurth: todas las pestañas (pellizco o ⇧⌘\)
+                        .zIndex(2700)
                 }
                 // El indicador de carga ya no tiene franja propia: va sobre la orilla de arriba de
                 // la barra, sin quitarle clics ni el arrastre de la ventana.

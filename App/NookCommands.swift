@@ -278,6 +278,12 @@ struct NookCommands: Commands {
             }
             .disabled(browserManager.tabs.activeWindowSession == nil)
 
+            // kurth: todas las pestañas en miniatura, como el ⇧⌘\ de Safari (KurthCuadricula.swift).
+            Button("Mostrar todas las pestañas") {
+                KurthGestos.activa(windowRegistry)?.alternarCuadricula()
+            }
+            .keyboardShortcut("\\", modifiers: [.command, .shift])
+
             Divider()
 
             Button("Hard Reload (Ignore Cache)") {
