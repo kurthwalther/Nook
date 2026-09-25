@@ -48,7 +48,10 @@ struct SidebarHoverOverlayView: View {
                         .environment(windowState)
                         .environment(commandPalette)
                         .environmentObject(browserManager.gradientColorManager)
-                        .environment(\.nookInsideGlass, true)
+                        // kurth: la pestaña elegida con la misma pastilla de vidrio que en la barra fija
+                        // (Kurth, 25 sep: "antes estaban como en un pill glass, mantén igual"). Upstream
+                        // la cambiaba por un relleno blanco con borde para no poner vidrio sobre vidrio.
+                        .environment(\.nookInsideGlass, false)
                         .frame(maxHeight: .infinity)
                         // kurth: el material de todas las barras, vidrio o el del panel fijo
                         // (Nook/Kurth/KurthPanelMaterial.swift), con la sombra flotante.
