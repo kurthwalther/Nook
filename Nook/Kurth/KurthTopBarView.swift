@@ -148,11 +148,13 @@ struct KurthTopBarView: View {
 
     private var showsBlur: Bool { hasPage && (!isCapsules || capsuleBlur) }
 
-    /// El color del encabezado que solo vio el script (KurthPageState.scriptHeaderColor), mientras
-    /// la página no está hasta arriba. Si WebKit ya lo ve, su propio relleno se encarga.
+    /// El color del encabezado pegado arriba según el script (KurthPageState.scriptHeaderColor): el
+    /// de su CSS, exacto. Manda aunque WebKit también lo vea, porque WebKit muestrea pixeles y le
+    /// sale apenas gris: en ultrajewels la franja medía #FCFCFC contra el #FFFFFF de la página y de
+    /// lado a lado se veía un escalón, como sombra bajo la barra (Kurth, 25 sep).
     private var headerFill: NSColor? {
-        guard hasPage, !isAtTop, let state = pageState, state.topHeaderColor == nil else { return nil }
-        return state.scriptHeaderColor
+        guard hasPage else { return nil }
+        return pageState?.scriptHeaderColor
     }
 
     /// Con la capa del sitio las cápsulas se leen mejor, salvo cuando la página tiene encabezado
@@ -576,6 +578,9 @@ struct KurthBarSettingsMenu: View {
     @AppStorage("kurth.capsuleBlur") private var capsuleBlur = false
     @AppStorage("kurth.tabLayout") private var tabLayout = "separate"
     @AppStorage("kurth.compactTabs") private var compactTabs = "titles"
+    /// Indicador de carga del botón de recargar (KurthReloadButton) y su modo de prueba.
+    @AppStorage("kurth.loadingStyle") private var loadingStyle = "dots"
+    @AppStorage("kurth.loadingDemo") private var loadingDemo = false
 
     var body: some View {
         Picker("Estilo de barra", selection: $barStyle) {
@@ -598,6 +603,11 @@ struct KurthBarSettingsMenu: View {
                 get: { compactTabs == "icons" },
                 set: { compactTabs = $0 ? "icons" : "titles" }))
         }
+        Divider()
+        Picker("Indicador de carga", selection: $loadingStyle) {
+            ForEach(KurthLoadingIndicator.estilos, id: \.clave) { Text($0.nombre).tag($0.clave) }
+        }
+        Toggle("Ver el indicador sin cargar (prueba)", isOn: $loadingDemo)
         Divider()
         Button("Editar tema…") {
             KurthThemeStore.shared.openPicker(window: windowState, tabs: browserManager.tabs)

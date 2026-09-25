@@ -56,6 +56,10 @@ enum KurthMCPTools {
                 info: "Mostrar el scroll pocket de WebKit (el velo al hacer scroll bajo la barra)"),
         Setting(key: "kurth.passwords", type: "bool", defaultValue: true,
                 info: "Llave de contraseñas de Apple en los campos de usuario y contraseña de las páginas (Touch ID → llena la página). Se aplica a las páginas que se abran después de reiniciar Nook"),
+        Setting(key: "kurth.loadingStyle", type: "string", defaultValue: "dots",
+                info: "Indicador de carga del botón de recargar: dots (símbolo de progreso), spinner (rueda de macOS), rotate (la flecha girando) o ring (arco fino)"),
+        Setting(key: "kurth.loadingDemo", type: "bool", defaultValue: false,
+                info: "Deja el botón de recargar en estado de carga para comparar indicadores sin esperar a una página"),
         Setting(key: "kurth.aiSidebarWidth", type: "number", defaultValue: 330.0,
                 info: "Ancho del panel del agente en pt (234–520). Es el último que dejó el usuario al soltar el borde; cambiarlo aquí aplica a las ventanas que se abran después"),
     ]
