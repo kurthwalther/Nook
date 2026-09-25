@@ -226,10 +226,13 @@ struct KurthTabStrip: View {
     /// como en el control segmentado de Apple.
     private func touchesHighlight(_ id: UUID) -> Bool { id == selectedID || id == hovered || id == dragging }
 
+    /// La línea ligera de Safari entre pestañas. Estaba en 0.14 y 14 pt: sobre el vidrio oscuro de una
+    /// página negra no se veía y las pestañas parecían un solo bloque (Kurth, 25 sep: "necesitan una
+    /// separación más notable"). Igual con solo íconos que con títulos.
     private func divider(hidden: Bool) -> some View {
-        Rectangle()
-            .fill(.primary.opacity(0.14))
-            .frame(width: 1, height: 14)
+        Capsule()
+            .fill(.primary.opacity(0.3))
+            .frame(width: 1, height: 16)
             .opacity(hidden ? 0 : 1)
     }
 
