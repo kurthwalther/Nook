@@ -40,6 +40,8 @@ struct KurthTabStrip: View {
     @State private var copiado = false
     /// Ancho del dominio de la pestaña activa en reposo; se fija mientras se ve el ícono de copiar.
     @State private var anchoDominio: CGFloat = 0
+    /// Pestañas que Kurth pausó desde la tira: mientras no vuelvan a sonar, muestran play.
+    @State private var pausadas: Set<UUID> = []
     /// Cuando la tira se desplaza por dentro: si está en el inicio o en el final, para el desvanecido.
     @State private var alInicio = true
     @State private var alFinal = true
@@ -303,7 +305,7 @@ struct KurthTabStrip: View {
                     .frame(width: mostrarCopiar && anchoDominio > 0 ? anchoDominio : nil, alignment: .leading)
                     .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { if !mostrarCopiar { anchoDominio = $0 } }
                     .animation(NookDesign.Motion.quick, value: mostrarCopiar)
-                    if let session, session.hasAudioContent || session.isAudioMuted { mediaButtons(session) }
+                    if let session, session.hasAudioContent || session.isAudioMuted || pausadas.contains(id) { mediaButtons(session, id: id) }
                     reloadButton
                 } else if showsTitle {
                     Text(tabs.title(for: entry.item))
@@ -313,7 +315,7 @@ struct KurthTabStrip: View {
                         .truncationMode(.tail)
                         .frame(maxWidth: Self.titleMaxWidth)
                 }
-                if !isActive, let session, session.hasAudioContent || session.isAudioMuted { mediaButtons(session) }
+                if !isActive, let session, session.hasAudioContent || session.isAudioMuted || pausadas.contains(id) { mediaButtons(session, id: id) }
             }
             .padding(.horizontal, KurthTopBarView.capsuleInset)
             .frame(height: Self.segmentHeight)
@@ -393,25 +395,57 @@ struct KurthTabStrip: View {
         .frame(width: NookDesign.Size.favicon, height: NookDesign.Size.favicon)
     }
 
-    /// Pausa y bocina: solo existen mientras la pestaña suena (o está silenciada), al final del
-    /// segmento, antes de recargar en la activa. Van siempre a la vista, no al pasar el mouse, para
-    /// que la pestaña no cambie de ancho al entrar y salir (Kurth, 25 sep). Pausa detiene todo el
-    /// audio y video de la página (PageSession.pause); al detenerse, los dos desaparecen solos.
-    private func mediaButtons(_ session: PageSession) -> some View {
-        HStack(spacing: 0) {
-            if session.hasAudioContent {
-                Button("Pausar", systemImage: "pause.fill") { session.pause() }
-                    .kurthFieldIcon()
-                    .help("Pausar")
+    /// Pausa/play y bocina: existen mientras la pestaña suena, está silenciada o Kurth la pausó
+    /// desde aquí; al final del segmento, antes de recargar en la activa. Siempre a la vista, no al
+    /// pasar el mouse, para que la pestaña no cambie de ancho al entrar y salir (Kurth, 25 sep).
+    /// Pausa marca en la página qué video o audio estaba sonando y lo detiene; play reanuda
+    /// exactamente esos (Nook permite reproducir desde JavaScript sin clic en la página). El estado
+    /// de medios lo reporta la página sola al pausar o reanudar, así que los íconos siguen.
+    private func mediaButtons(_ session: PageSession, id: UUID) -> some View {
+        let suena = session.hasAudioContent
+        let enPausa = !suena && pausadas.contains(id)
+        return HStack(spacing: 0) {
+            if suena {
+                Button("Pausar", systemImage: "pause.fill") {
+                    correr(en: session, id: id, """
+                        document.querySelectorAll('video, audio').forEach((el) => {
+                          if (!el.paused) { el.dataset.kurthPausado = '1'; el.pause(); }
+                        });
+                        """)
+                    pausadas.insert(id)
+                }
+                .kurthFieldIcon()
+                .help("Pausar")
+            } else if enPausa {
+                Button("Reanudar", systemImage: "play.fill") {
+                    correr(en: session, id: id, """
+                        document.querySelectorAll('video, audio').forEach((el) => {
+                          if (el.dataset.kurthPausado) { delete el.dataset.kurthPausado; el.play().catch(() => {}); }
+                        });
+                        """)
+                    pausadas.remove(id)
+                }
+                .kurthFieldIcon()
+                .help("Reanudar")
             }
-            Button(session.isAudioMuted ? "Activar sonido" : "Silenciar pestaña",
-                   systemImage: session.isAudioMuted ? "speaker.slash.fill" : "speaker.wave.2.fill") {
-                session.toggleMute()
+            if suena || session.isAudioMuted {
+                Button(session.isAudioMuted ? "Activar sonido" : "Silenciar pestaña",
+                       systemImage: session.isAudioMuted ? "speaker.slash.fill" : "speaker.wave.2.fill") {
+                    session.toggleMute()
+                }
+                .kurthFieldIcon()
+                .help(session.isAudioMuted ? "Activar sonido" : "Silenciar pestaña")
             }
-            .kurthFieldIcon()
-            .help(session.isAudioMuted ? "Activar sonido" : "Silenciar pestaña")
         }
         .transition(.opacity)
+        // Si vuelve a sonar desde la página, ya no está "pausada por Kurth".
+        .onChange(of: session.hasAudioContent) { _, suena in if suena { pausadas.remove(id) } }
+    }
+
+    /// JavaScript en la página de esa pestaña, en la vista de esta ventana.
+    private func correr(en session: PageSession, id: UUID, _ js: String) {
+        let webView = browserManager.getWebView(for: id, in: windowState.id) ?? session.webView
+        webView?.evaluateJavaScript(js, completionHandler: nil)
     }
 
     /// Copiar la URL de la pestaña activa: aparece al pasar el mouse por la pestaña, a la izquierda
