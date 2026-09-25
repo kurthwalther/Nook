@@ -27,6 +27,7 @@ struct KurthTabStrip: View {
     @EnvironmentObject var browserManager: BrowserManager
     @Environment(BrowserWindowState.self) private var windowState
     @Environment(CommandPalette.self) private var commandPalette
+    @Environment(\.colorScheme) private var scheme
 
     /// Vidrio (barra "capsules") o relleno plano (barra "tinted").
     let glass: Bool
@@ -190,8 +191,10 @@ struct KurthTabStrip: View {
         let tinte = KurthWindowTheme.theme(window: windowState, tabs: tabs).primaryHex
             .map { KurthThemeMath.paintColor(hex: $0, opacity: 1) }
         return Capsule()
-            .fill(.primary.opacity(0.30))
-            .overlay { if let tinte { Capsule().fill(tinte.opacity(0.10)).blendMode(.multiply) } }
+            // En barra oscura el blanco al 35 % se pierde (Kurth, 25 sep: "en negros casi no se
+            // nota"); ahí sube a 45. El ojo necesita más alfa sobre negro que sobre blanco.
+            .fill(.primary.opacity(scheme == .dark ? 0.45 : 0.35))
+            .overlay { if let tinte { Capsule().fill(tinte.opacity(0.15)).blendMode(.multiply) } }
             // Sin borde (Kurth, 25 sep): el relleno solo, como el segmento elegido de macOS.
     }
 
