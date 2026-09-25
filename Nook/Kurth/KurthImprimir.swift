@@ -99,6 +99,7 @@ enum KurthImprimir {
     /// con un tope de 16 384 px de alto (arriba de eso muchas apps ya no abren la imagen). Queda en
     /// Descargas y copiada. Devuelve dónde quedó, o nil si no se pudo.
     static func capturarPaginaCompleta(_ webView: WKWebView, titulo: String) async -> URL? {
+        await recorrer(webView)
         guard let pdf = try? await webView.pdf(configuration: WKPDFConfiguration()),
               let hoja = NSPDFImageRep(data: pdf) else { return nil }
         var escala = webView.window?.backingScaleFactor ?? 2
@@ -127,6 +128,30 @@ enum KurthImprimir {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setData(png, forType: .png)
         return destino
+    }
+
+    /// Recorre la página de arriba abajo antes de capturar: muchas cargan imágenes y fondos solo al
+    /// llegar a ellos (lazy loading) y sin esto salían en blanco (ultrajewels, 25 sep). Pasos de una
+    /// pantalla cada 150 ms, como mucho 40 pasos, luego espera hasta 1.5 s a que terminen las
+    /// imágenes y regresa a donde estaba. En el mundo aislado: la página no lo ve.
+    private static func recorrer(_ webView: WKWebView) async {
+        let js = """
+        const antes = scrollY, espera = (ms) => new Promise(r => setTimeout(r, ms));
+        for (const img of document.images) { if (img.loading === 'lazy') img.loading = 'eager'; }
+        const paso = Math.max(200, innerHeight * 0.9);
+        for (let i = 0; i < 40; i++) {
+          const alto = document.documentElement.scrollHeight;
+          if (scrollY + innerHeight >= alto - 2) break;
+          scrollTo(0, scrollY + paso);
+          await espera(150);
+        }
+        const fin = performance.now() + 1500;
+        while (performance.now() < fin && [...document.images].some(i => !i.complete)) await espera(100);
+        scrollTo(0, antes);
+        await espera(200);
+        return true;
+        """
+        _ = try? await webView.callAsyncJavaScript(js, arguments: [:], in: nil, contentWorld: KurthCopilot.mundo)
     }
 
     // MARK: - Tamaño del texto

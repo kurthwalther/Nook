@@ -24,6 +24,8 @@ enum KurthMCPTools {
     }
 
     static let settings: [Setting] = [
+        Setting(key: "kurth.barAutoHide", type: "bool", defaultValue: false,
+                info: "Barra inmersiva: escondida hasta que el mouse llega a la orilla de arriba; entonces flota sobre la página sin reservarle espacio"),
         Setting(key: "kurth.windowMaterial", type: "string", defaultValue: "sidebar",
                 info: "Material del difuminado detrás de la ventana: " + KurthVibrancy.materials.keys.sorted().joined(separator: ", ")),
         Setting(key: "kurth.windowMaterialTint", type: "number", defaultValue: 1.0,

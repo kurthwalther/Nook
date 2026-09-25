@@ -45,6 +45,12 @@ struct KurthTopBarView: View {
     /// En compact, "titles" (ícono y título) o "icons" (solo ícono, como iPad).
     @AppStorage("kurth.compactTabs") private var compactTabs = "titles"
 
+    /// Barra inmersiva: escondida hasta que el mouse llega a la orilla de arriba; entonces baja y
+    /// flota sobre la página sin reservarle espacio, así la página no brinca (Kurth, 25 sep: "que se
+    /// oculte y se muestre con hover, para que sea full immersive").
+    @AppStorage("kurth.barAutoHide") private var autoHide = false
+    @State private var inmersiva = KurthBarraInmersiva()
+
     @State private var showsRadiusPanel = false
     @State private var leadingWidth: CGFloat = 0
     @State private var trailingWidth: CGFloat = 0
@@ -64,9 +70,32 @@ struct KurthTopBarView: View {
     private var iconSize: CGFloat { isCapsules ? 24 : NookDesign.Size.iconButton }
 
     var body: some View {
+        ZStack(alignment: .top) {
+            barra
+                .offset(y: seMuestra ? 0 : -(barHeight + 6))
+                .opacity(seMuestra ? 1 : 0)
+                .allowsHitTesting(seMuestra)
+        }
+        .animation(.spring(duration: 0.28, bounce: 0.08), value: seMuestra)
+        // Cuándo baja la barra lo decide KurthBarraInmersiva, con la posición del mouse contra la
+        // ventana (una franja de SwiftUI no recibía el hover bajo la zona de la barra de título).
+        .onChange(of: autoHide, initial: true) { _, activo in
+            inmersiva.altoDeBarra = barHeight
+            if activo { inmersiva.encender(en: windowState) } else { inmersiva.apagar() }
+        }
+        .onDisappear { inmersiva.apagar() }
+    }
+
+    /// Siempre, salvo en modo inmersivo; ahí, con el mouse encima, con el panel de opciones o el del
+    /// radio abiertos, o sin página (la barra es lo único que hay).
+    private var seMuestra: Bool {
+        !autoHide || inmersiva.visible || !hasPage || windowState.isExtensionLibraryVisible || showsRadiusPanel
+    }
+
+    private var barra: some View {
         let sideWidth = max(leadingWidth, trailingWidth)
 
-        HStack(spacing: 0) {
+        return HStack(spacing: 0) {
             leadingControls
                 .modifier(KurthCapsule(active: isCapsules, tint: glassTint))
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { leadingWidth = $0 }
@@ -85,7 +114,8 @@ struct KurthTopBarView: View {
         .frame(maxWidth: .infinity)
         .background(alignment: .top) { barBackground }
         .background(
-            KurthBarProbe(showsWindowButtons: showsWindowButtons)
+            // En modo inmersivo la barra no reserva espacio: flota sobre la página (sin inset).
+            KurthBarProbe(showsWindowButtons: showsWindowButtons && seMuestra, reservaEspacio: !autoHide)
         )
         .environment(\.colorScheme, pageScheme ?? systemScheme)
         .animation(NookDesign.Motion.standard, value: pageScheme)
@@ -157,7 +187,8 @@ struct KurthTopBarView: View {
     /// sale apenas gris: en ultrajewels la franja medía #FCFCFC contra el #FFFFFF de la página y de
     /// lado a lado se veía un escalón, como sombra bajo la barra (Kurth, 25 sep).
     private var headerFill: NSColor? {
-        guard hasPage else { return nil }
+        // En modo inmersivo la barra flota sobre la página: sin franja de color debajo.
+        guard hasPage, !autoHide else { return nil }
         return pageState?.scriptHeaderColor
     }
 
@@ -171,8 +202,9 @@ struct KurthTopBarView: View {
     private var hasPage: Bool { browserManager.tabs.selectedSession(in: windowState) != nil }
 
     private var colorOpacity: Double {
-        // Sin pestaña no hay página que tapar: la barra deja ver el tema.
-        guard hasPage else { return 0 }
+        // Sin pestaña no hay página que tapar: la barra deja ver el tema. En modo inmersivo flota
+        // sobre la página, sin franja.
+        guard hasPage, !autoHide else { return 0 }
         if isAtTop { return 1 }
         return isCapsules ? 0 : tintOpacity
     }
@@ -434,11 +466,14 @@ struct KurthBarButtonStyle: ButtonStyle {
 /// páginas) y esconde o muestra los semáforos.
 private struct KurthBarProbe: NSViewRepresentable {
     let showsWindowButtons: Bool
+    /// Falso en modo inmersivo: la barra no le quita alto a la página (no registra su rectángulo).
+    var reservaEspacio = true
 
     func makeNSView(context: Context) -> ProbeView { ProbeView() }
 
     func updateNSView(_ view: ProbeView, context: Context) {
         view.showsWindowButtons = showsWindowButtons
+        view.reservaEspacio = reservaEspacio
         view.sync()
     }
 
@@ -448,6 +483,7 @@ private struct KurthBarProbe: NSViewRepresentable {
 
     final class ProbeView: NSView {
         var showsWindowButtons = true
+        var reservaEspacio = true
         /// La ventana sigue aquí cuando SwiftUI desmonta la vista y `window` ya es nil.
         private weak var hostWindow: NSWindow?
         private let buttonTypes: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
@@ -475,7 +511,7 @@ private struct KurthBarProbe: NSViewRepresentable {
             let inWindow = convert(bounds, to: nil)
             let rect = CGRect(x: inWindow.minX, y: content.bounds.height - inWindow.maxY,
                               width: inWindow.width, height: inWindow.height)
-            KurthChrome.setBarRect(rect, in: window)
+            KurthChrome.setBarRect(reservaEspacio ? rect : nil, in: window)
             setWindowButtons(hidden: !showsWindowButtons, in: window)
         }
 
@@ -589,8 +625,11 @@ struct KurthBarSettingsMenu: View {
     @AppStorage("kurth.capsuleBlur") private var capsuleBlur = false
     @AppStorage("kurth.tabLayout") private var tabLayout = "separate"
     @AppStorage("kurth.compactTabs") private var compactTabs = "titles"
+    @AppStorage("kurth.barAutoHide") private var autoHide = false
 
     var body: some View {
+        Toggle("Ocultar la barra (aparece al pasar el mouse)", isOn: $autoHide)
+        Divider()
         Picker("Estilo de barra", selection: $barStyle) {
             Text("Cápsulas (tipo Safari)").tag("capsules")
             Text("Color del sitio").tag("tinted")

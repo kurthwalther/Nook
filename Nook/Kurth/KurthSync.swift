@@ -426,7 +426,7 @@ final class KurthSync {
         "kurth.agentOptions", "kurth.barStyle", "kurth.blurRadius", "kurth.blurSaturation", "kurth.capsuleBlur",
         "kurth.capsuleTintOpacity", "kurth.colorExtension", "kurth.hairline", "kurth.pageRadius",
         "kurth.pageShadow", "kurth.scrollPocket", "kurth.tintOpacity", "kurth.windowMaterial",
-        "kurth.windowMaterialTint",
+        "kurth.windowMaterialTint", "kurth.tabLayout", "kurth.compactTabs", "kurth.barAutoHide",
     ]
 
     /// Compara cada ajuste con lo último anotado y le pone `fecha` a los que cambiaron.
