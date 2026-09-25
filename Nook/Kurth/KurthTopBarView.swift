@@ -48,6 +48,7 @@ struct KurthTopBarView: View {
     @State private var showsRadiusPanel = false
     @State private var leadingWidth: CGFloat = 0
     @State private var trailingWidth: CGFloat = 0
+    @State private var barWidth: CGFloat = 0
     @State private var didCopy = false
     @State private var isHoveringAddress = false
 
@@ -81,6 +82,7 @@ struct KurthTopBarView: View {
         .padding(.horizontal, sidePadding)
         .frame(height: barHeight)
         .frame(maxWidth: .infinity)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { barWidth = $0 }
         .background(alignment: .top) { barBackground }
         .background(
             KurthBarProbe(showsWindowButtons: showsWindowButtons)
@@ -230,8 +232,10 @@ struct KurthTopBarView: View {
         if let tab = browserManager.tabs.selectedSession(in: windowState) {
             if isCompact {
                 // Pestañas compactas (KurthTabStrip.swift): la tira ocupa todo el centro.
-                KurthTabStrip(glass: isCapsules, tint: glassTint, iconsOnly: compactTabs == "icons")
-                    .padding(.horizontal, isCapsules ? 8 : NookDesign.Spacing.md)
+                let stripPadding: CGFloat = isCapsules ? 8 : NookDesign.Spacing.md
+                KurthTabStrip(glass: isCapsules, tint: glassTint, iconsOnly: compactTabs == "icons",
+                              available: barWidth - 2 * max(leadingWidth, trailingWidth) - 2 * sidePadding - 2 * stripPadding)
+                    .padding(.horizontal, stripPadding)
             } else if isCapsules {
                 // Cápsula: el dominio centrado y los íconos anclados a las orillas, no al texto.
                 // Mide lo que ocupa el dominio (mínimo `addressMinWidth`) y crece si es largo.

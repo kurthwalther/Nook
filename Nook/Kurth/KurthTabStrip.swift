@@ -31,6 +31,9 @@ struct KurthTabStrip: View {
     let tint: Color?
     /// Todas las pestañas menos la activa como ícono, aunque quepa el título.
     let iconsOnly: Bool
+    /// Ancho que la barra le deja a la tira (lo que hay entre las cápsulas de los lados). La tira
+    /// mide su contenido y, sin este dato, empujaría la ranura en vez de recortarse.
+    let available: CGFloat
 
     @Namespace private var strip
     @State private var hovered: UUID?
@@ -40,10 +43,9 @@ struct KurthTabStrip: View {
     @State private var dragTranslation: CGFloat = 0
     @State private var frames: [UUID: CGRect] = [:]
     @State private var dragFrames: [UUID: CGRect] = [:]
-    /// Ancho del hueco entre las cápsulas de los lados y de la tira: mientras quepa va centrada
-    /// tal cual; solo si no cabe se mete en un ScrollView (que en macOS 26 dibuja su propio efecto
-    /// de borde sobre el vidrio, y por eso no se usa siempre).
-    @State private var slotWidth: CGFloat = 0
+    /// Ancho natural de la tira: mientras quepa en `available` va centrada tal cual; solo si no
+    /// cabe se mete en un ScrollView (que en macOS 26 dibuja su propio efecto de borde sobre el
+    /// vidrio, y por eso no se usa siempre).
     @State private var stripWidth: CGFloat = 0
     /// Acaba de haber un arrastre: el clic de ese mismo soltar no cuenta como selección.
     @State private var justDragged = false
@@ -75,9 +77,18 @@ struct KurthTabStrip: View {
 
     var body: some View {
         Group {
-            if slotWidth > 0, stripWidth > slotWidth {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    capsule.padding(.vertical, Self.verticalRoom)
+            if available > 0, stripWidth > available {
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        capsule.padding(.vertical, Self.verticalRoom)
+                    }
+                    .scrollEdgeEffectHidden(true, for: .horizontal)
+                    .frame(width: available)
+                    // La activa siempre a la vista: al cambiar de pestaña la tira se desplaza sola.
+                    .onChange(of: selectedID, initial: true) { _, id in
+                        guard let id else { return }
+                        withAnimation(NookDesign.Motion.standard) { proxy.scrollTo(id) }
+                    }
                 }
             } else {
                 capsule
@@ -85,9 +96,6 @@ struct KurthTabStrip: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: KurthTopBarView.capsuleHeight + Self.verticalRoom * 2)
-        .background {
-            Color.clear.onGeometryChange(for: CGFloat.self) { $0.size.width } action: { slotWidth = $0 }
-        }
     }
 
     private var capsule: some View {
@@ -103,6 +111,7 @@ struct KurthTabStrip: View {
                     // Los demás se corren con resorte; el arrastrado sigue al mouse sin retraso.
                     .animation(dragging == entry.id ? nil : NookDesign.Motion.spring, value: insertion)
                     .zIndex(dragging == entry.id ? 1 : 0)
+                    .id(entry.id)
                     .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("strip")) } action: { frames[entry.id] = $0 }
                     .simultaneousGesture(reorderGesture(entry, in: entries))
             }
