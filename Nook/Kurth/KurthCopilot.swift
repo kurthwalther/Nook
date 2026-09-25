@@ -153,7 +153,7 @@ enum KurthCopilot {
                 "tabId": tabId, "ref": ref,
                 "rutas": ["type": "array", "items": ["type": "string"]]], "required": ["ref", "rutas"]]
         ),
-    ]
+    ] + KurthWebKitAgente.herramientas // kurth: lectura y acciones nativas de WebKit (KurthWebKitAgente.swift)
 
     /// Las del chat viejo que estas reemplazan; se esconden del MCP para que el agente no dude.
     static let reemplazadas: Set<String> = ["clickElement", "getInteractiveElements"]
@@ -237,6 +237,19 @@ enum KurthCopilot {
                 let quedan = try await js(destino.webView, "return window.__kurth.marcas.limpiar(autor)", ["autor": quien ?? NSNull()])
                 KurthSenalar.shared.olvidarMarcas(url: destino.session.url, autor: quien)
                 return texto("Marcas borradas. Quedan \(quedan ?? 0) en la página.")
+            case "page_text":
+                let lectura = try await KurthWebKitAgente.leer(destino.webView, formato: args["formato"] as? String,
+                                                               soloVisible: (args["visible"] as? Bool) ?? false,
+                                                               filtros: args["filtros"] as? String)
+                // WebKit lee lo que el motor ya dibujó: una pestaña de fondo sale vacía ("root" solo,
+                // medido el 25 sep). Ahí sirve snapshot, que recorre el HTML.
+                if !lectura.texto.contains("uid=") {
+                    return texto("WebKit solo lee pestañas a la vista y esta no lo está. Usa snapshot y click en esta pestaña, o ponla a la vista.", error: true)
+                }
+                let aviso = lectura.filtrado ? "\n[WebKit quitó de esta lectura texto escondido o sospechoso]" : ""
+                return texto(avisoDeDialogo(destino) + Self.abreDatos + lectura.texto + Self.cierraDatos + aviso + modo(destino))
+            case "act":
+                return texto(try await KurthWebKitAgente.actuar(destino.webView, args))
             case "read_page":
                 let max = (args["max"] as? NSNumber)?.intValue ?? 40_000
                 return texto(try await leer(destino.webView, url: destino.session.url, max: max))
@@ -612,7 +625,7 @@ enum KurthCopilot {
                                     "place order", "realizar pedido", "confirmar pedido", "submit order", "eliminar",
                                     "borrar", "delete", "remove", "publicar", "publish", "transferir", "transfer",
                                     "unsubscribe", "cancelar suscripcion", "darse de baja"]
-    private static func accionDelicada(_ descripcion: String) -> String? {
+    static func accionDelicada(_ descripcion: String) -> String? {
         let plano = descripcion.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
         return delicados.first { plano.contains($0) }
     }

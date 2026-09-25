@@ -610,6 +610,9 @@ final class KurthAgentService {
         marca un texto, un elemento o una zona con nota corta y te da un id; en tu respuesta \
         enlázalo como [aquí](kurth-marca:ID) para que él lo toque y lo vea. point_to pone un \
         anillo donde debe dar clic cuando le enseñes a hacer algo; clear_highlights borra marcas. \
+        Si tienes page_text y act (lectura y acciones nativas de WebKit), úsalos primero: page_text \
+        da el árbol de la página con un uid por elemento y act hace click, escribe, elige o hace \
+        scroll por ese uid; snapshot, click y type_text quedan de respaldo. \
         Aquí no están cargados los MCP de Kurth, para no gastar memoria. Si necesitas datos de \
         una API, llámala con un comando corto (python o curl) que lea las credenciales locales: \
         Google Ads en ~/.config/google-ads-mcp-ultra (Grupo Ultra) y ~/.config/google-ads-mcp \
