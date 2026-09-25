@@ -8,12 +8,17 @@
 //  pestaña, aunque sea de otro Space; la X la cierra; Esc, abrir los dedos o un clic en el fondo
 //  la cierran. Cubre la columna de la página: la barra lateral y el agente siguen a la mano.
 //
+//  Se reordena arrastrando (las demás se hacen a un lado mientras tanto) y se puede llevar una
+//  pestaña a otro Space; al soltar, entra junto a la que queda antes, en su misma sección, igual
+//  que en la tira de arriba. Al final de cada Space, «Nueva pestaña».
+//
 //  Las miniaturas son la última imagen de cada pestaña (KurthCapturas). La de la pestaña actual
 //  se toma al abrir; las demás, de cuando se vieron por última vez: WebKit no dibuja las páginas
 //  que no están a la vista.
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 import NookDesign
 import NookWeb
 import NookUI
@@ -21,7 +26,20 @@ import NookTabsCore
 
 struct KurthCuadricula: View {
     @Environment(BrowserWindowState.self) private var ventana
+    @Environment(CommandPalette.self) private var commandPalette
     @EnvironmentObject private var browserManager: BrowserManager
+
+    /// Dónde caería la pestaña que se arrastra: antes de otra, o al final de un Space.
+    enum Destino: Equatable {
+        case antesDe(UUID)
+        case alFinal(UUID)
+    }
+
+    @State private var arrastrando: Item?
+    @State private var destino: Destino?
+
+    /// Solo dentro de Nook: que soltarla en otro lado no la tome por texto.
+    static let tipo = UTType(exportedAs: "com.kurthwalther.nook.pestana")
 
     var body: some View {
         let gestos = KurthGestos.de(ventana)
@@ -30,16 +48,16 @@ struct KurthCuadricula: View {
                 .opacity(Double(gestos.progreso))
                 .scaleEffect(1.04 - 0.04 * gestos.progreso)
                 .allowsHitTesting(gestos.progreso >= 1)
+                .onDisappear { arrastrando = nil; destino = nil }
         }
     }
 
     private func contenido(_ gestos: KurthGestos) -> some View {
         let tabs = browserManager.tabs
-        // El Space de la ventana primero; luego los demás en su orden.
+        // El Space de la ventana primero; luego los demás en su orden. Con varios, también los
+        // vacíos: ahí se puede soltar una pestaña o abrir una nueva.
         let todos = tabs.switchableSpaces(for: ventana)
-        let espacios = (todos.filter { $0.id == ventana.spaceID } + todos.filter { $0.id != ventana.spaceID })
-            .map { (espacio: $0, pestañas: KurthGestos.pestañas(tabs, espacio: $0.id)) }
-            .filter { !$0.pestañas.isEmpty }
+        let espacios = todos.filter { $0.id == ventana.spaceID } + todos.filter { $0.id != ventana.spaceID }
 
         return ZStack {
             KurthHoverTheme()
@@ -47,27 +65,33 @@ struct KurthCuadricula: View {
                 .onTapGesture { gestos.cerrarCuadricula() }
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
-                    ForEach(espacios, id: \.espacio.id) { grupo in
+                    ForEach(espacios) { espacio in
                         VStack(alignment: .leading, spacing: 12) {
                             if espacios.count > 1 {
-                                Text(grupo.espacio.name)
+                                Text(espacio.name)
                                     .font(NookDesign.Font.title.weight(.semibold))
                                     .foregroundStyle(Color.primary.opacity(0.8))
                             }
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 190, maximum: 280), spacing: 18)],
                                       alignment: .leading, spacing: 18) {
-                                ForEach(grupo.pestañas, id: \.id) { item in
+                                ForEach(lista(espacio.id), id: \.id) { item in
                                     KurthCeldaDePestaña(item: item, gestos: gestos)
+                                        .onDrag {
+                                            arrastrando = item
+                                            destino = nil
+                                            return Self.proveedor(item)
+                                        }
+                                        .onDrop(of: [Self.tipo], delegate: KurthSoltarEnCuadricula(
+                                            aqui: .antesDe(item.id), arrastrado: arrastrando?.id,
+                                            destino: $destino, soltar: soltar))
                                 }
+                                celdaNueva(espacio.id, gestos: gestos)
+                                    .onDrop(of: [Self.tipo], delegate: KurthSoltarEnCuadricula(
+                                        aqui: .alFinal(espacio.id), arrastrado: arrastrando?.id,
+                                        destino: $destino, soltar: soltar))
                             }
+                            .animation(.spring(duration: 0.28, bounce: 0.1), value: destino)
                         }
-                    }
-                    if espacios.isEmpty {
-                        Text("No hay pestañas abiertas")
-                            .font(NookDesign.Font.body)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 80)
                     }
                 }
                 .padding(.horizontal, 28)
@@ -76,7 +100,114 @@ struct KurthCuadricula: View {
                 .padding(.bottom, 28)
             }
             .scrollEdgeEffectHidden(true, for: .vertical)
+            // Soltar entre celdas o en el fondo cuenta con el último lugar que se marcó.
+            .onDrop(of: [Self.tipo], delegate: KurthSoltarEnCuadricula(
+                aqui: nil, arrastrado: arrastrando?.id, destino: $destino, soltar: soltar))
         }
+    }
+
+    // MARK: - Reordenar
+
+    /// Las pestañas de un Space como se ven: si hay una arrastrándose, ya en el lugar donde caería.
+    private func lista(_ espacio: UUID) -> [Item] {
+        var lista = KurthGestos.pestañas(browserManager.tabs, espacio: espacio)
+        guard let arrastrando, let destino else { return lista }
+        lista.removeAll { $0.id == arrastrando.id }
+        switch destino {
+        case .antesDe(let id):
+            if let i = lista.firstIndex(where: { $0.id == id }) { lista.insert(arrastrando, at: i) }
+        case .alFinal(let id):
+            if id == espacio { lista.append(arrastrando) }
+        }
+        return lista
+    }
+
+    /// Al soltar: entra después de la que le queda antes y en su misma sección (favoritos,
+    /// guardados, del día o una carpeta), como al reordenar la tira. Si queda primera, al principio
+    /// de la sección de la que tiene delante.
+    private func soltar() {
+        defer { arrastrando = nil; destino = nil }
+        guard let arrastrando, let destino else { return }
+        let tabs = browserManager.tabs
+        switch destino {
+        case .alFinal(let espacio):
+            let seccion = Parent.tabs(spaceID: espacio)
+            let ultima = tabs.children(of: seccion).last { $0.id != arrastrando.id }
+            tabs.move(arrastrando.id, to: seccion, after: ultima?.id)
+        case .antesDe(let id):
+            guard let espacio = tabs.spaceID(of: id) else { return }
+            let lista = lista(espacio)
+            guard let i = lista.firstIndex(where: { $0.id == arrastrando.id }) else { return }
+            let previa = i > 0 ? lista[i - 1] : nil
+            let seccion = previa?.parent ?? lista.first { $0.id != arrastrando.id }?.parent ?? .tabs(spaceID: espacio)
+            tabs.move(arrastrando.id, to: seccion, after: previa?.id)
+        }
+    }
+
+    private static func proveedor(_ item: Item) -> NSItemProvider {
+        let proveedor = NSItemProvider()
+        proveedor.registerDataRepresentation(forTypeIdentifier: tipo.identifier, visibility: .ownProcess) { listo in
+            listo(Data(item.id.uuidString.utf8), nil)
+            return nil
+        }
+        return proveedor
+    }
+
+    // MARK: - Nueva pestaña
+
+    /// La última celda de cada Space: abre el campo de dirección para una pestaña nueva ahí.
+    private func celdaNueva(_ espacio: UUID, gestos: KurthGestos) -> some View {
+        let forma = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        return Button {
+            gestos.cerrarCuadricula()
+            if ventana.spaceID != espacio { browserManager.tabs.setSpace(espacio, in: ventana) }
+            commandPalette.open()
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                forma
+                    .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                    .foregroundStyle(Color.primary.opacity(destino == .alFinal(espacio) ? 0.4 : 0.18))
+                    .background(forma.fill(Color.primary.opacity(destino == .alFinal(espacio) ? 0.06 : 0.02)))
+                    .overlay {
+                        Image(systemName: "plus")
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundStyle(Color.primary.opacity(0.45))
+                    }
+                    .aspectRatio(16 / 10, contentMode: .fit)
+                Text("Nueva pestaña")
+                    .font(NookDesign.Font.secondary)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 2)
+                    .frame(height: NookDesign.Size.favicon)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Nueva pestaña en este Space")
+    }
+}
+
+/// Soltar en la cuadrícula. Al entrar a una celda marca ese lugar (las demás se reacomodan); la
+/// celda de la propia pestaña no cuenta, o se quitaría a sí misma de la lista. `aqui` nil es el
+/// fondo: no marca nada y al soltar usa el último lugar marcado.
+private struct KurthSoltarEnCuadricula: DropDelegate {
+    let aqui: KurthCuadricula.Destino?
+    let arrastrado: UUID?
+    @Binding var destino: KurthCuadricula.Destino?
+    let soltar: () -> Void
+
+    func validateDrop(info: DropInfo) -> Bool { arrastrado != nil }
+
+    func dropEntered(info: DropInfo) {
+        guard let aqui, arrastrado != nil, aqui != .antesDe(arrastrado!), destino != aqui else { return }
+        destino = aqui
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
+
+    func performDrop(info: DropInfo) -> Bool {
+        soltar()
+        return true
     }
 }
 
