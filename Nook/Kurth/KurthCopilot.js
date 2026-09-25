@@ -563,19 +563,41 @@
         return d;
       };
       const transparente = (css) => !css || css === 'transparent' || /^rgba\(.*,\s*0\)$/.test(css) || /\/\s*0\)$/.test(css);
+      // El fondo que se ve en un punto del encabezado: el primero que no es transparente, de lo que
+      // está en ese punto hacia arriba hasta el encabezado. Una imagen de fondo no cuenta.
+      const fondoVisible = (e, tope) => {
+        for (; e; e = e.parentElement) {
+          const s = getComputedStyle(e);
+          if (!transparente(s.backgroundColor)) return s.backgroundColor;
+          if (s.backgroundImage !== 'none') return null;
+          if (e === tope) break;
+        }
+        return null;
+      };
       const buscar = () => {
         const w = innerWidth;
         for (const f of [0.5, 0.25, 0.75]) {
-          let e = document.elementFromPoint(w * f, 1), color = null;
+          let e = document.elementFromPoint(w * f, 1);
           while (e && e !== document.documentElement && e !== document.body) {
             const s = getComputedStyle(e);
-            if (!color && !transparente(s.backgroundColor)) color = s.backgroundColor;
             if (s.position === 'fixed' || s.position === 'sticky') {
               const r = e.getBoundingClientRect();
-              // Su propio fondo manda (es lo que se ve en sus orillas); si no tiene, el de adentro.
-              const propio = transparente(s.backgroundColor) ? color : s.backgroundColor;
-              if (r.top <= 1 && r.height >= 20 && r.width >= w * 0.5 && propio) return aRGBA(propio);
-              break;
+              if (!(r.top <= 1 && r.height >= 20 && r.width >= w * 0.5)) break;
+              // El color es el que se ve en él, por votos en cinco puntos de lado a lado: ni el fondo
+              // propio del contenedor (Forbes lo tiene blanco y lo tapa todo un hijo negro; la barra
+              // salía blanca, Kurth 25 sep) ni lo que caiga justo en medio (un campo de búsqueda
+              // blanco en un encabezado negro). 8 px adentro: una línea delgada en la orilla no manda.
+              const y = Math.min(r.top + 8, r.bottom - 2);
+              const votos = new Map();
+              for (const x of [r.left + 4, r.left + r.width * 0.25, r.left + r.width * 0.5, r.left + r.width * 0.75, r.right - 4]) {
+                const punto = document.elementFromPoint(Math.min(Math.max(x, 0), w - 1), y);
+                if (!punto || !e.contains(punto)) continue;
+                const c = fondoVisible(punto, e);
+                if (c) votos.set(c, (votos.get(c) || 0) + 1);
+              }
+              let mejor = null, cuantos = 0;
+              for (const [c, n] of votos) if (n > cuantos) { mejor = c; cuantos = n; }
+              return mejor ? aRGBA(mejor) : null;
             }
             e = e.parentElement;
           }
