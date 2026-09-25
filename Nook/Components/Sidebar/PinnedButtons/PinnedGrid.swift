@@ -183,11 +183,14 @@ private struct PinnedTile: View {
                 tabName: tabs.title(for: item),
                 tabURL: url,
                 tabIcon: ItemFavicon(item: item, session: session),
-                isActive: tabs.selectedItemID(in: windowState) == item.id,
-                isUnloaded: session?.isUnloaded ?? true,
+                // kurth: el favorito es un acceso: se ve activo con su pestaña elegida (KurthAccesos).
+                isActive: KurthAccesos.resaltado(item.id, elegida: tabs.selectedItemID(in: windowState)),
+                isUnloaded: (session?.isUnloaded ?? true) && !KurthAccesos.resaltado(item.id, elegida: tabs.selectedItemID(in: windowState)),
                 hasLeftPinnedURL: tabs.hasLeftHome(item.id),
                 onResetToPinnedURL: { tabs.resetToHome(item.id) },
-                action: { tabs.select(item.id, in: windowState) }
+                action: {
+                    if !KurthAccesos.abrir(item, en: windowState, tabs: tabs) { tabs.select(item.id, in: windowState) }
+                }
             )
             .frame(maxWidth: .infinity)
             .contextMenu {

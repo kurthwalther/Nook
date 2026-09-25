@@ -107,9 +107,13 @@ final class KurthGestos {
 
     private var tabs: TabsController? { browserManager?.tabs }
 
-    /// En el orden de la tira de arriba: favoritos y luego lo de la barra lateral, sin carpetas.
+    /// Las pestañas abiertas, en el orden de la tira de arriba: favoritos y guardados solo si están
+    /// cargados (son accesos, KurthAccesos), y luego las del día, sin carpetas.
     static func pestañas(_ tabs: TabsController, espacio: UUID) -> [Item] {
-        tabs.favorites(of: espacio) + tabs.rows(space: espacio).map(\.item).filter { !$0.isFolder }
+        let cargado: (Item) -> Bool = { tabs.session(for: $0.id).map { !$0.isUnloaded } ?? false }
+        let favoritos = tabs.favorites(of: espacio).filter(cargado)
+        let filas = tabs.rows(space: espacio).filter { !$0.item.isFolder && ($0.section != .pinned || cargado($0.item)) }
+        return favoritos + filas.map(\.item)
     }
 
     private func paginaActiva() -> (id: UUID, webView: WKWebView)? {

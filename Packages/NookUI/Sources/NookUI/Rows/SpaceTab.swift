@@ -56,7 +56,10 @@ public struct SpaceTab: View {
                 startRename(title)
             } else {
                 if isRenaming { commitRename() }
-                tabs.select(item.id, in: windowState)
+                // kurth: un guardado es un acceso: abre su pestaña abajo (KurthAccesosGancho).
+                if KurthAccesosGancho.abrir?(item, windowState) != true {
+                    tabs.select(item.id, in: windowState)
+                }
             }
         }) {
             HStack(spacing: NookDesign.Spacing.md) {
@@ -157,8 +160,8 @@ public struct SpaceTab: View {
                 }
             }
             .clipShape(NookDesign.Radius.shape(NookDesign.Radius.md))
-            .nookRowSelection(isCurrentTab)
-            .opacity(isUnloaded ? NookDesign.Surface.unloadedOpacity : 1)
+            .nookRowSelection(isResaltada) // kurth: también el acceso cuya pestaña está elegida
+            .opacity(isUnloaded && !isResaltada ? NookDesign.Surface.unloadedOpacity : 1)
         }
         .buttonStyle(PlainButtonStyle())
         .onHoverTracking { hovering in
@@ -186,7 +189,13 @@ public struct SpaceTab: View {
                 .environment(tabs)
                 .environment(\.tabActions, actions)
         }
-        .nookElevation(isCurrentTab ? .raised : .flat)
+        .nookElevation(isResaltada ? .raised : .flat)
+    }
+
+    /// kurth: se ve seleccionada si es la elegida o si es el acceso de la elegida. Hacer clic para
+    /// renombrar sigue siendo solo para la elegida misma.
+    private var isResaltada: Bool {
+        KurthAccesosGancho.estaResaltado(item.id, elegida: tabs.selectedItemID(in: windowState))
     }
 
     private var accentColor: Color { actions?.accentColor ?? .accentColor }
@@ -196,7 +205,7 @@ public struct SpaceTab: View {
     }
 
     private var backgroundColor: Color {
-        if isCurrentTab {
+        if isResaltada {
             return Color.clear
         } else if isHovering {
             return NookDesign.Surface.fill
