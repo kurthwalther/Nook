@@ -22,9 +22,9 @@
 //  tarjeta, al abrirla desde arriba de la orilla se cerraba antes de que el mouse bajara a ella.
 //
 //  Después (Kurth, 25 sep): la orilla de arriba se arrastra para cambiar el alto, sin llegar a la
-//  barra de arriba; un pin la deja abierta aunque el mouse se vaya; y un switch en el encabezado
-//  alterna entre el vidrio y el material del panel fijo, para comparar. Los tres son ajustes
-//  kurth.agentCard* (en el MCP y en la sincronización de iCloud).
+//  barra de arriba, y un pin la deja abierta aunque el mouse se vaya (kurth.agentCardHeight y
+//  kurth.agentCardPinned, en el MCP y en la sincronización de iCloud). El material es el de todas
+//  las barras (KurthPanelMaterial).
 //
 
 import AppKit
@@ -197,7 +197,6 @@ struct KurthAgentHoverOverlay: View {
     @AppStorage("kurth.agentCardHeight") private var fraccion = 0.5
     /// Mientras se arrastra la orilla de arriba; se guarda al soltar.
     @State private var fraccionEnVivo: Double?
-    @AppStorage("kurth.agentCardMaterial") private var material = "glass"
     @AppStorage(KurthAgentHoverManager.claveFijada) private var fijada = false
 
     /// Entre 360 pt (el campo, los controles y un par de mensajes) y la orilla de abajo de la barra
@@ -206,10 +205,6 @@ struct KurthAgentHoverOverlay: View {
         let maximo = altoDeVentana - 44 - 2 * KurthChrome.overlayInset
         return min(maximo, max(min(360, maximo), alto))
     }
-
-    /// Cuánto del tema va sobre el vidrio. El tema solo ya es casi opaco (0.75, KurthTheme.opacity)
-    /// y taparía el vidrio; sin nada, el texto largo se pierde sobre una página movida.
-    static let velo = 0.55
 
     var body: some View {
         GeometryReader { ventana in
@@ -222,7 +217,7 @@ struct KurthAgentHoverOverlay: View {
                     .environmentObject(browserManager)
                     .environment(windowState)
                     .environment(nookSettings)
-                    .modifier(KurthAgentCardMaterial(vidrio: material != "panel"))
+                    .modifier(KurthMaterialFlotante())
                     .alwaysArrowCursor(leavingFree: [enLaDerecha ? .minXEdge : .maxXEdge, .maxYEdge], width: 14)
                     .overlay(alignment: enLaDerecha ? .leading : .trailing) {
                         AISidebarResizeView(kurthEnFlotante: true)
@@ -263,27 +258,6 @@ struct KurthAgentHoverOverlay: View {
         }
         .onChange(of: fijada) { _, ahora in
             if ahora { hover.reveal() } else { hover.revisarAhora() }
-        }
-    }
-}
-
-/// Vidrio (Liquid Glass con el tema encima, a `velo`) o el material del panel fijo (el mismo que la
-/// barra lateral flotante): el switch del encabezado alterna para comparar.
-private struct KurthAgentCardMaterial: ViewModifier {
-    let vidrio: Bool
-
-    func body(content: Content) -> some View {
-        if vidrio {
-            content
-                .background { KurthHoverTheme(soloTema: true).opacity(KurthAgentHoverOverlay.velo) }
-                .clipShape(KurthChrome.overlayShape)
-                .glassEffect(.regular, in: KurthChrome.overlayShape)
-                .nookElevation(.floating)
-        } else {
-            content
-                .background { KurthHoverTheme() }
-                .clipShape(KurthChrome.overlayShape)
-                .nookElevation(.floating)
         }
     }
 }

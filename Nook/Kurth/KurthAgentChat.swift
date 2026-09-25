@@ -57,9 +57,10 @@ struct KurthAgentChat: View {
     @AppStorage("kurth.hairline") private var hairlineOpacity = 0.1
     @AppStorage("kurth.capsuleBlur") private var capsuleBlur = false
     @Environment(\.displayScale) private var displayScale
-    /// La tarjeta que se asoma con hover (KurthAgentHoverOverlay): fijarla y su material.
+    /// La tarjeta que se asoma con hover (KurthAgentHoverOverlay) se puede fijar.
     @AppStorage(KurthAgentHoverManager.claveFijada) private var tarjetaFijada = false
-    @AppStorage("kurth.agentCardMaterial") private var materialDeTarjeta = "glass"
+    /// El material de todas las barras (KurthPanelMaterial).
+    @AppStorage(KurthPanelMaterial.clave) private var material = KurthPanelMaterial.porDefecto
 
     private var esCapsulas: Bool { barStyle != "tinted" }
     /// Las alturas de KurthTopBarView: 44 deja 8 pt alrededor de cápsulas de 28; con tinte, 40.
@@ -132,11 +133,10 @@ struct KurthAgentChat: View {
 
     // MARK: - Encabezado
 
-    /// La misma fila que la barra de la página: título a la izquierda donde ella lleva el dominio,
-    /// acciones a la derecha donde ella lleva extensiones y chat, en su cápsula si la barra va en
-    /// cápsulas. El título va sin cápsula en los dos modos: en vidrio "como que no queda" (Kurth,
-    /// 24 sep); en negritas y un poco más grande se sostiene solo. Sin botón de cerrar: lo cierra
-    /// el mismo botón de chat de la barra que lo abrió.
+    /// La misma fila que la barra de la página: a la izquierda, donde ella lleva el dominio, solo el
+    /// estado cuando pide atención (ya sin el título "Agente"); a la derecha, donde ella lleva
+    /// extensiones y chat, las acciones en su cápsula si la barra va en cápsulas. Sin botón de
+    /// cerrar: lo cierra el mismo botón de chat de la barra que lo abrió.
     private var encabezado: some View {
         HStack(spacing: 8) {
             titulo
@@ -151,11 +151,10 @@ struct KurthAgentChat: View {
         .animation(NookDesign.Motion.standard, value: barStyle)
     }
 
+    /// Sin "Agente" (Kurth, 25 sep: quítalo del fijo y del flotante): a la izquierda solo sale lo
+    /// que pide atención, un permiso esperando o un error.
     private var titulo: some View {
         HStack(spacing: 6) {
-            Text("Agente")
-                .font(NookDesign.Font.title.weight(.bold))
-                .foregroundStyle(Color.primary.opacity(0.9))
             if let detalle = detalleDeEstado {
                 Text(detalle)
                     .font(NookDesign.Font.caption)
@@ -189,16 +188,16 @@ struct KurthAgentChat: View {
                 .help("Marcas en esta página")
             }
 
-            if flotante {
-                // Para comparar los dos materiales en la misma tarjeta (Kurth, 25 sep); cuando
-                // elija uno, este botón sobra.
-                Button(materialDeTarjeta == "panel" ? "Pasar a vidrio" : "Pasar al material del panel",
-                       systemImage: "circle.lefthalf.filled") {
-                    materialDeTarjeta = materialDeTarjeta == "panel" ? "glass" : "panel"
-                }
-                .kurthBarIcon(size: medidaDeIcono)
-                .help(materialDeTarjeta == "panel" ? "Material del panel fijo · clic: vidrio" : "Vidrio · clic: material del panel fijo")
+            // Para comparar los dos materiales en todas las barras (Kurth, 25 sep); cuando elija
+            // uno, este botón sobra.
+            Button(material == "glass" ? "Pasar al material de antes" : "Pasar a vidrio",
+                   systemImage: "circle.lefthalf.filled") {
+                material = material == "glass" ? "panel" : "glass"
+            }
+            .kurthBarIcon(size: medidaDeIcono)
+            .help(material == "glass" ? "Barras en vidrio · clic: el material de antes" : "Barras con el material de antes · clic: vidrio")
 
+            if flotante {
                 Button(tarjetaFijada ? "Soltar" : "Fijar", systemImage: tarjetaFijada ? "pin.fill" : "pin") {
                     tarjetaFijada.toggle()
                 }
@@ -252,7 +251,8 @@ struct KurthAgentChat: View {
         // Abrir la sesión se dice arriba de la caja de texto, no aquí (Kurth, 25 sep: salía dos veces).
         case .arrancando: return nil
         case .listo: return nil
-        case .trabajando: return agente.permiso == nil ? "trabajando…" : "esperando tu respuesta"
+        // "trabajando…" ya lo dice la línea de actividad con su brillo.
+        case .trabajando: return agente.permiso == nil ? nil : "esperando tu respuesta"
         case .error(let motivo): return motivo
         }
     }
