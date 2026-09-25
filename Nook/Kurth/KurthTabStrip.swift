@@ -183,14 +183,17 @@ struct KurthTabStrip: View {
     /// El segmento seleccionado de un control segmentado: relleno con un borde apenas. En 0.17 (antes
     /// 0.12): la activa no se distinguía lo suficiente (Kurth, 25 sep: "un poquito más oscuro").
     /// Gris para el contraste y, encima, un toque del color dominante del tema del Space, para que
-    /// la cápsula diga en qué Space estás (Kurth, 25 sep). Sin tema, el gris solo, como antes.
+    /// la cápsula diga en qué Space estás (Kurth, 25 sep). El color va en modo multiplicar: sobre
+    /// el gris solo puede oscurecer o colorear, nunca aclarar, así que con un tema blanco el gris
+    /// se ve tal cual (antes la capa blanca lo borraba).
     private var activePill: some View {
         let tinte = KurthWindowTheme.theme(window: windowState, tabs: tabs).primaryHex
             .map { KurthThemeMath.paintColor(hex: $0, opacity: 1) }
         return Capsule()
-            .fill(.primary.opacity(tinte == nil ? 0.17 : 0.10))
-            .overlay { if let tinte { Capsule().fill(tinte.opacity(0.12)) } }
-            .overlay(Capsule().strokeBorder(tinte?.opacity(0.18) ?? Color.primary.opacity(0.08), lineWidth: 1))
+            .fill(.primary.opacity(0.17))
+            .overlay { if let tinte { Capsule().fill(tinte.opacity(0.12)).blendMode(.multiply) } }
+            .overlay(Capsule().strokeBorder(.primary.opacity(0.08), lineWidth: 1))
+            .overlay { if let tinte { Capsule().strokeBorder(tinte.opacity(0.18), lineWidth: 1).blendMode(.multiply) } }
     }
 
     // MARK: - Reordenar arrastrando
