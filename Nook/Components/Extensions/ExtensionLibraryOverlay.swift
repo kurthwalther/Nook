@@ -51,9 +51,14 @@ struct ExtensionLibraryOverlay: View {
                 let menuOnLeft = isShowingMoreMenu && libraryX + menuWidth + gap + moreMenuWidth > proxy.size.width - gap
 
                 ZStack(alignment: .topLeading) {
+                    // kurth: cierra al soltar el mouse, sin exigir que no se haya movido (un clic
+                    // real de mouse se mueve un pixel y el "toque" no se cumplía: nada pasaba). Y no
+                    // cubre la barra: sus botones responden con el panel abierto, así extensiones
+                    // lo cierra y chat abre el chat (Kurth, 25 sep).
                     Color.clear
                         .contentShape(Rectangle())
-                        .onTapGesture { close() }
+                        .gesture(DragGesture(minimumDistance: 0).onEnded { _ in close() })
+                        .padding(.top, KurthChrome.floatingTopBar ? 44 : 0)
 
                     HStack(alignment: .top, spacing: gap) {
                         if menuOnLeft { moreMenu(anchor: .topTrailing) }
