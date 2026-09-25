@@ -33,26 +33,13 @@ struct AISidebarResizeView: View {
         nookSettings.sidebarPosition == .left
     }
 
-    private var indicatorOffset: CGFloat {
-        aiSitsOnRight ? 3 : -3
-    }
-
     private var hitAreaOffset: CGFloat {
         aiSitsOnRight ? 5 : -5
     }
 
     var body: some View {
         ZStack {
-            if isHovering || isResizing {
-                NookDesign.Radius.shape(NookDesign.Radius.xs)
-                    .fill(Color.accentColor)
-                    .frame(width: 2)
-                    .frame(maxHeight: .infinity)
-                    .offset(x: indicatorOffset)
-                    .animation(NookDesign.Motion.quick, value: isResizing)
-                    .animation(NookDesign.Motion.quick, value: isHovering)
-                    .padding(.vertical, 30)
-            }
+            // kurth: sin línea en la orilla, como Finder o Mail: solo el cursor ↔ (Kurth, 25 sep).
 
             Rectangle()
                 .fill(Color.clear)

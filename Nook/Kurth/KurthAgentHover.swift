@@ -262,8 +262,8 @@ struct KurthAgentHoverOverlay: View {
     }
 }
 
-/// La orilla de arriba de la tarjeta: se arrastra para cambiar el alto, con la misma línea de acento
-/// que la orilla del ancho (AISidebarResizeView). Mientras se arrastra, el hover no la esconde.
+/// La orilla de arriba de la tarjeta: se arrastra para cambiar el alto. Sin línea, como las orillas
+/// del ancho: solo el cursor ↕ (Kurth, 25 sep). Mientras se arrastra, el hover no la esconde.
 private struct KurthAgentCardAltura: View {
     let alto: CGFloat
     /// El alto nuevo; `true` al soltar, para guardarlo.
@@ -274,14 +274,6 @@ private struct KurthAgentCardAltura: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            if encima || altoAlEmpezar != nil {
-                Capsule()
-                    .fill(Color.accentColor)
-                    .frame(height: 2)
-                    .padding(.horizontal, 30)
-                    .padding(.top, 1)
-                    .transition(.opacity)
-            }
             Color.clear
                 .frame(height: 8)
                 .padding(.horizontal, 30)
@@ -309,6 +301,5 @@ private struct KurthAgentCardAltura: View {
                         }
                 )
         }
-        .animation(NookDesign.Motion.quick, value: encima)
     }
 }

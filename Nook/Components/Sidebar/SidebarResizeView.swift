@@ -35,28 +35,14 @@ struct SidebarResizeView: View {
         nookSettings.sidebarPosition == .right
     }
 
-    private var indicatorOffset: CGFloat {
-        sitsOnRight ? 3 : -3
-    }
-
     private var hitAreaOffset: CGFloat {
         sitsOnRight ? 5 : -5
     }
 
     var body: some View {
         ZStack {
-            if isHovering || isResizing {
-                // kurth: la línea de acento de 2 pt del panel del agente (AISidebarResizeView). La
-                // cápsula gris de 4 pt de arriba abajo parecía la barra de scroll (Kurth, 25 sep).
-                NookDesign.Radius.shape(NookDesign.Radius.xs)
-                    .fill(Color.accentColor)
-                    .frame(width: 2)
-                    .frame(maxHeight: .infinity)
-                    .offset(x: indicatorOffset)
-                    .animation(NookDesign.Motion.quick, value: isResizing)
-                    .animation(NookDesign.Motion.quick, value: isHovering)
-                    .padding(.vertical, 30)
-            }
+            // kurth: sin línea en la orilla, como Finder o Mail: solo el cursor ↔ (Kurth, 25 sep). La
+            // cápsula gris que había parecía la barra de scroll.
 
             Rectangle()
                 .fill(Color.clear)
