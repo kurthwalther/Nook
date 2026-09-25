@@ -153,7 +153,9 @@ struct KurthTabStrip: View {
         return HStack(spacing: 0) {
             ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
                 if index > 0 {
-                    divider(hidden: dragging != nil || touchesHighlight(entries[index - 1].id) || touchesHighlight(entry.id))
+                    // Siempre, también junto a la activa y a la del mouse (Kurth, 25 sep: "que no
+                    // solo dividan las que están en reposo"); solo se van mientras se arrastra.
+                    divider(hidden: dragging != nil)
                 }
                 segment(entry)
                     .offset(x: shift(of: entry.id, in: entries))
@@ -242,7 +244,6 @@ struct KurthTabStrip: View {
 
     /// Los separadores desaparecen junto a la pestaña activa y a la que tiene el mouse encima,
     /// como en el control segmentado de Apple.
-    private func touchesHighlight(_ id: UUID) -> Bool { id == selectedID || id == hovered || id == dragging }
 
     /// La línea ligera de Safari entre pestañas. Estaba en 0.14 y 14 pt: sobre el vidrio oscuro de una
     /// página negra no se veía y las pestañas parecían un solo bloque (Kurth, 25 sep: "necesitan una
@@ -378,9 +379,9 @@ struct KurthTabStrip: View {
             }
         }
         .frame(width: NookDesign.Size.favicon, height: NookDesign.Size.favicon)
-        // Solo ícono: la X como bolita en la esquina de arriba a la derecha; el resto del
-        // favicon sigue entrando a la pestaña.
-        .overlay(alignment: .topTrailing) {
+        // Solo ícono: la X como bolita en la esquina de arriba a la izquierda, donde macOS pone
+        // cerrar (semáforos, pestañas de Safari); el resto del favicon sigue entrando a la pestaña.
+        .overlay(alignment: .topLeading) {
             if closeBadge {
                 Button("Cerrar pestaña", systemImage: "xmark") {
                     tabs.close(entry.item.id)
@@ -391,7 +392,7 @@ struct KurthTabStrip: View {
                 .foregroundStyle(Color(nsColor: .windowBackgroundColor))
                 .frame(width: 11, height: 11)
                 .background(Circle().fill(Color.primary.opacity(0.7)))
-                .offset(x: 4, y: -4)
+                .offset(x: -4, y: -4)
                 .transition(.opacity.combined(with: .scale(scale: 0.6)))
                 .help("Cerrar pestaña")
             }
