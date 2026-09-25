@@ -16,6 +16,8 @@ Detalle de Zen en `kurth/plan-zen.md`.
 - **Material de las barras:** el ◐ del encabezado del agente es temporal; quitarlo cuando elija
   vidrio o clásico (también está en Settings › Appearance).
 - underPageBackgroundColor con el tema: "por ahora no".
+- ✅ **Hecho el mismo 25 sep (`KurthAccesos`), falta que Kurth lo pruebe con clics:** el indicador es el
+  resaltado de siempre, arriba y abajo a la vez (no puntito). Lo de abajo era la propuesta.
 - **Favoritos y guardados como accesos rápidos (idea de Kurth al irse):** tocarlos abre (o lleva a)
   una pestaña normal abajo, en las del día; ellos nunca se "abren". Así todo lo que consume memoria
   se ve en una sola lista (el error de Arc que señaló). Propuesta de José: si ya hay una pestaña
