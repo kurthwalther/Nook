@@ -431,6 +431,9 @@ extension View {
     func kurthBarIcon(size: CGFloat = NookDesign.Size.iconButton) -> some View {
         self
             .labelStyle(.iconOnly)
+            // El glifo a la escala de la barra: sin esto, en "Grande" crecía el botón pero no el
+            // ícono (Kurth, 25 sep). 13 es el tamaño que ya tenía en normal.
+            .font(KurthEscala.fuente(13))
             .buttonStyle(KurthBarButtonStyle(size: size))
             .foregroundStyle(.secondary)
     }
