@@ -46,9 +46,11 @@ struct SidebarResizeView: View {
     var body: some View {
         ZStack {
             if isHovering || isResizing {
-                Capsule()
-                    .fill(Color.secondary)
-                    .frame(width: 4)
+                // kurth: la línea de acento de 2 pt del panel del agente (AISidebarResizeView). La
+                // cápsula gris de 4 pt de arriba abajo parecía la barra de scroll (Kurth, 25 sep).
+                NookDesign.Radius.shape(NookDesign.Radius.xs)
+                    .fill(Color.accentColor)
+                    .frame(width: 2)
                     .frame(maxHeight: .infinity)
                     .offset(x: indicatorOffset)
                     .animation(NookDesign.Motion.quick, value: isResizing)
