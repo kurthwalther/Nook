@@ -59,7 +59,7 @@ enum KurthMCPTools {
         Setting(key: "kurth.passwords", type: "bool", defaultValue: true,
                 info: "Llave de contraseñas de Apple en los campos de usuario y contraseña de las páginas (Touch ID → llena la página). Se aplica a las páginas que se abran después de reiniciar Nook"),
         Setting(key: "kurth.aiSidebarWidth", type: "number", defaultValue: 330.0,
-                info: "Ancho del panel del agente en pt (234–520). Es el último que dejó el usuario al soltar el borde; cambiarlo aquí aplica a las ventanas que se abran después"),
+                info: "Ancho del panel del agente en pt (200–520). Es el último que dejó el usuario al soltar el borde; cambiarlo aquí aplica a las ventanas que se abran después"),
     ]
 
     static let tools: [AIToolDefinition] = [

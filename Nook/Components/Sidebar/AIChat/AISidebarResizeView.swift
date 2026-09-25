@@ -26,7 +26,7 @@ struct AISidebarResizeView: View {
     /// arrastra, KurthAgentHoverManager no lo esconde.
     var kurthEnFlotante = false
 
-    private let minWidth: CGFloat = 234 // kurth: 10 % más angosto que 260 (Kurth, 24 sep)
+    private let minWidth: CGFloat = 200 // kurth: 260 → 234 (24 sep) → 220 → 200 (25 sep), a petición de Kurth; la caja del agente se encoge por partes (KurthAgentInput)
     private let maxWidth: CGFloat = 520
 
     private var aiSitsOnRight: Bool {
