@@ -275,9 +275,12 @@ struct KurthTabStrip: View {
             }
         } label: {
             HStack(spacing: 6) {
-                // Solo ícono: sin X al pasar el mouse, o no queda por dónde entrar a la pestaña
-                // (Kurth, 24 sep). Se cierra con clic derecho.
-                leadingIcon(entry, session: session, isActive: isActive, showsClose: isHovered && (isActive || showsTitle))
+                // Con título, el favicon se vuelve la X al pasar el mouse. Solo ícono: la X va como
+                // una bolita en la esquina del favicon, que sigue a la vista, o no quedaría por
+                // dónde entrar a la pestaña (Kurth, 24 y 25 sep).
+                leadingIcon(entry, session: session, isActive: isActive,
+                            showsClose: isHovered && (isActive || showsTitle),
+                            closeBadge: isHovered && !isActive && !showsTitle)
                 if isActive {
                     // La cápsula de siempre: dominio y recargar. Copiar la URL vive en el clic
                     // derecho y en ⌘⇧C; un ícono más al pasar el mouse sobraba (Kurth, 25 sep).
@@ -354,7 +357,7 @@ struct KurthTabStrip: View {
     /// Aquí solo va estado sin acción: lo que se puede tocar (silenciar) tiene su propio lugar,
     /// speakerButton, porque este hueco ya es la X al pasar el mouse (Kurth, 25 sep).
     @ViewBuilder
-    private func leadingIcon(_ entry: Entry, session: PageSession?, isActive: Bool, showsClose: Bool) -> some View {
+    private func leadingIcon(_ entry: Entry, session: PageSession?, isActive: Bool, showsClose: Bool, closeBadge: Bool = false) -> some View {
         ZStack {
             if showsClose {
                 Button("Cerrar pestaña", systemImage: "xmark") {
@@ -375,6 +378,24 @@ struct KurthTabStrip: View {
             }
         }
         .frame(width: NookDesign.Size.favicon, height: NookDesign.Size.favicon)
+        // Solo ícono: la X como bolita en la esquina de arriba a la derecha; el resto del
+        // favicon sigue entrando a la pestaña.
+        .overlay(alignment: .topTrailing) {
+            if closeBadge {
+                Button("Cerrar pestaña", systemImage: "xmark") {
+                    tabs.close(entry.item.id)
+                }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.plain)
+                .font(.system(size: 6, weight: .bold))
+                .foregroundStyle(Color(nsColor: .windowBackgroundColor))
+                .frame(width: 11, height: 11)
+                .background(Circle().fill(Color.primary.opacity(0.7)))
+                .offset(x: 4, y: -4)
+                .transition(.opacity.combined(with: .scale(scale: 0.6)))
+                .help("Cerrar pestaña")
+            }
+        }
     }
 
     /// Pausa/play y bocina: existen mientras la pestaña suena, está silenciada o Kurth la pausó
