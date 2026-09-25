@@ -11,6 +11,7 @@
 //
 
 import AppKit
+import SwiftUI
 import Foundation
 import NookWeb
 
@@ -91,6 +92,14 @@ enum KurthMCPTools {
             ]]
         ),
         AIToolDefinition(
+            name: "kurth_panel",
+            description: "Abre o cierra la barra lateral (cual: lateral) o el panel del agente (cual: agente) de la ventana activa, con su animación. visible: true/false; sin ella, alterna.",
+            parameters: ["type": "object", "properties": [
+                "cual": ["type": "string", "enum": ["lateral", "agente"]],
+                "visible": ["type": "boolean"],
+            ], "required": ["cual"]]
+        ),
+        AIToolDefinition(
             name: "kurth_tab_grid",
             description: "Abre o cierra la cuadrícula de pestañas de la ventana activa (la misma del pellizco y ⇧⌘\\). abierta: true/false; sin ella, alterna.",
             parameters: ["type": "object", "properties": ["abierta": ["type": "boolean"]]]
@@ -102,6 +111,14 @@ enum KurthMCPTools {
         if let resultado = KurthSync.llamar(name) { return resultado }
         if let resultado = KurthPasswords.llamar(name, args) { return resultado }
         switch name {
+        case "kurth_panel":
+            let agente = (args["cual"] as? String) == "agente"
+            let actual = agente ? window.isSidebarAIChatVisible : window.isSidebarVisible
+            let visible = (args["visible"] as? Bool) ?? !actual
+            withAnimation(.easeInOut(duration: 0.2)) {
+                if agente { window.isSidebarAIChatVisible = visible } else { window.isSidebarVisible = visible }
+            }
+            return text((agente ? "Agente " : "Barra lateral ") + (visible ? "abierta" : "cerrada"))
         case "kurth_tab_grid":
             let gestos = KurthGestos.de(window)
             let abrir = (args["abierta"] as? Bool) ?? (gestos.progreso < 1)
