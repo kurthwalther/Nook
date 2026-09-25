@@ -228,10 +228,11 @@ struct KurthTabStrip: View {
 
     /// La línea ligera de Safari entre pestañas. Estaba en 0.14 y 14 pt: sobre el vidrio oscuro de una
     /// página negra no se veía y las pestañas parecían un solo bloque (Kurth, 25 sep: "necesitan una
-    /// separación más notable"). Igual con solo íconos que con títulos.
+    /// separación más notable"; en 0.3 "se pierde un poco", quedó en 0.4). Igual con solo íconos que
+    /// con títulos.
     private func divider(hidden: Bool) -> some View {
         Capsule()
-            .fill(.primary.opacity(0.3))
+            .fill(.primary.opacity(0.4))
             .frame(width: 1, height: 16)
             .opacity(hidden ? 0 : 1)
     }
