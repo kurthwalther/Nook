@@ -40,6 +40,24 @@ esconden del MCP (las reemplazan).
   `select` nativo (el menú es modal); evaluar la SPI de agentes de WebKit (`_performInteraction:`,
   `_extractDebugTextWithConfiguration:`), macOS 26.4+. Informe del Researcher del 24 sep.
 
+## Contraseñas de Apple (24 sep noche) — instalado, falta que Kurth pruebe con Touch ID
+
+`Nook/Kurth/KurthPasswords.swift` + `KurthPasswords.js`: llave dentro del campo de usuario o contraseña
+con foco → campos nativos invisibles encima → AppKit dibuja "Passwords…" (vive en una `SPRoundedWindow`
+propia, sin subvistas; se le manda un clic sintético en proceso) → Touch ID → el sistema llena los
+nativos → se escriben en la página (setter nativo + input/change). La credencial se recuerda 2 min por
+host para el paso 2 de Google. Ajuste `kurth.passwords`; diagnóstico en `kurth_passwords_status`.
+- Verificado por MCP: llave visible, petición abierta, ventana del botón encontrada y, tras el clic, la app
+  pierde la activación (el panel del sistema la toma). **No verificado:** el llenado tras Touch ID (José
+  no tiene huella); probar en Gmail. Si el sistema no llena el campo de usuario, ver el orden de los
+  campos nativos.
+- Por qué no la extensión oficial: su ayudante tiene un launch constraint (lista de navegadores de Apple
+  o entitlement `web-browser.public-key-credential`). Ese mismo entitlement daría passkeys en WKWebView
+  (camino B: formulario de Apple, App ID propio + perfil; no exige App Store).
+- Arreglo de paso: los user scripts de Señalar y de contraseñas llevan el prefijo "// Nook" (los tweaks
+  vacían los scripts en cada navegación y solo reponen los marcados); Señalar no restauraba marcas al cargar.
+- Pendiente: passkeys (solo con el entitlement); guardar contraseñas nuevas; iframes de login.
+
 ## Hecho el 24 sep
 
 - ✅ Guardados como Arc: la sección de fijadas siempre a la vista (vacía: "Arrastra aquí lo que

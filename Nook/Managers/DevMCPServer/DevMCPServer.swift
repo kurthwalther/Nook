@@ -286,7 +286,7 @@ final class DevMCPServer {
     /// `evaluate` (see callTool), and the chat's description of it is wrong for that behaviour.
     /// The alias stays so an agent registered against the old name keeps working.
     // kurth: + ajustes de la capa y el copiloto (KurthCopilot); sin las dos que el copiloto reemplaza.
-    private static let toolList: [[String: Any]] = (BrowserTools.allTools.filter { $0.name != "executeJavaScript" && !KurthCopilot.reemplazadas.contains($0.name) } + devTools + KurthMCPTools.tools + KurthCopilot.tools + KurthSync.herramientas).map { // kurth: sincronización
+    private static let toolList: [[String: Any]] = (BrowserTools.allTools.filter { $0.name != "executeJavaScript" && !KurthCopilot.reemplazadas.contains($0.name) } + devTools + KurthMCPTools.tools + KurthCopilot.tools + KurthSync.herramientas + KurthPasswords.tools).map { // kurth: sincronización
         ["name": $0.name, "description": $0.description, "inputSchema": $0.parameters]
     }
 

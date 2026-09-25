@@ -97,6 +97,7 @@ final class KurthPageState {
     static func attach(to webView: FocusableWKWebView) {
         installOnce()
         KurthSenalar.instalar(en: webView) // script del copiloto y canal de marcas en cada página
+        KurthPasswords.instalar(en: webView)
         guard objc_getAssociatedObject(webView, &observedKey) == nil else { return }
         objc_setAssociatedObject(webView, &observedKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         let selector = NSSelectorFromString("_setNeedsScrollGeometryUpdates:")

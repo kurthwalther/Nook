@@ -54,6 +54,8 @@ enum KurthMCPTools {
                 info: "Dejar que WebKit extienda el color del borde superior de la página bajo la barra"),
         Setting(key: "kurth.scrollPocket", type: "bool", defaultValue: false,
                 info: "Mostrar el scroll pocket de WebKit (el velo al hacer scroll bajo la barra)"),
+        Setting(key: "kurth.passwords", type: "bool", defaultValue: true,
+                info: "Llave de contraseñas de Apple en los campos de usuario y contraseña de las páginas (Touch ID → llena la página). Se aplica a las páginas que se abran después de reiniciar Nook"),
         Setting(key: "kurth.aiSidebarWidth", type: "number", defaultValue: 330.0,
                 info: "Ancho del panel del agente en pt (234–520). Es el último que dejó el usuario al soltar el borde; cambiarlo aquí aplica a las ventanas que se abran después"),
     ]
@@ -83,6 +85,7 @@ enum KurthMCPTools {
     /// nil si la herramienta no es de la capa Kurth.
     static func call(_ name: String, _ args: [String: Any], window: BrowserWindowState, tabs: TabsController) -> [String: Any]? {
         if let resultado = KurthSync.llamar(name) { return resultado }
+        if let resultado = KurthPasswords.llamar(name, args) { return resultado }
         switch name {
         case "kurth_get_settings":
             return text(json(snapshot(window: window, tabs: tabs)))

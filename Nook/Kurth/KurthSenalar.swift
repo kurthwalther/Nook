@@ -16,6 +16,7 @@
 import AppKit
 import SwiftUI
 import WebKit
+import NookBlocker
 import NookWeb
 
 @MainActor
@@ -246,7 +247,8 @@ final class KurthSenalar {
         guard controladores.insert(ObjectIdentifier(controlador)).inserted else { return }
         controlador.add(canal, contentWorld: KurthCopilot.mundo, name: "kurthSenalar")
         if let fuente = KurthCopilot.fuenteDelScript {
-            controlador.addUserScript(WKUserScript(source: fuente, injectionTime: .atDocumentEnd,
+            // "// Nook" al frente: sin el marcador de NookOwned los tweaks lo quitaban en la primera navegación.
+            controlador.addUserScript(WKUserScript(source: WKUserScript.nookOwnedPrefix + " kurth: copiloto\n" + fuente, injectionTime: .atDocumentEnd,
                                                    forMainFrameOnly: true, in: KurthCopilot.mundo))
         }
     }
