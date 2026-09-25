@@ -303,7 +303,7 @@ struct KurthTabStrip: View {
                     .frame(width: mostrarCopiar && anchoDominio > 0 ? anchoDominio : nil, alignment: .leading)
                     .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { if !mostrarCopiar { anchoDominio = $0 } }
                     .animation(NookDesign.Motion.quick, value: mostrarCopiar)
-                    if let session, session.hasAudioContent || session.isAudioMuted { speakerButton(session) }
+                    if let session, session.hasAudioContent || session.isAudioMuted { mediaButtons(session) }
                     reloadButton
                 } else if showsTitle {
                     Text(tabs.title(for: entry.item))
@@ -313,7 +313,7 @@ struct KurthTabStrip: View {
                         .truncationMode(.tail)
                         .frame(maxWidth: Self.titleMaxWidth)
                 }
-                if !isActive, let session, session.hasAudioContent || session.isAudioMuted { speakerButton(session) }
+                if !isActive, let session, session.hasAudioContent || session.isAudioMuted { mediaButtons(session) }
             }
             .padding(.horizontal, KurthTopBarView.capsuleInset)
             .frame(height: Self.segmentHeight)
@@ -393,17 +393,25 @@ struct KurthTabStrip: View {
         .frame(width: NookDesign.Size.favicon, height: NookDesign.Size.favicon)
     }
 
-    /// La bocina: solo existe mientras la pestaña suena o está silenciada, al final del segmento
-    /// (antes de recargar en la activa), como en Safari, y un clic silencia o devuelve el sonido.
-    /// El segmento crece esos 26 pt mientras dura el sonido; en Safari pasa igual.
-    private func speakerButton(_ session: PageSession) -> some View {
-        Button(session.isAudioMuted ? "Activar sonido" : "Silenciar pestaña",
-               systemImage: session.isAudioMuted ? "speaker.slash.fill" : "speaker.wave.2.fill") {
-            session.toggleMute()
+    /// Pausa y bocina: solo existen mientras la pestaña suena (o está silenciada), al final del
+    /// segmento, antes de recargar en la activa. Van siempre a la vista, no al pasar el mouse, para
+    /// que la pestaña no cambie de ancho al entrar y salir (Kurth, 25 sep). Pausa detiene todo el
+    /// audio y video de la página (PageSession.pause); al detenerse, los dos desaparecen solos.
+    private func mediaButtons(_ session: PageSession) -> some View {
+        HStack(spacing: 0) {
+            if session.hasAudioContent {
+                Button("Pausar", systemImage: "pause.fill") { session.pause() }
+                    .kurthFieldIcon()
+                    .help("Pausar")
+            }
+            Button(session.isAudioMuted ? "Activar sonido" : "Silenciar pestaña",
+                   systemImage: session.isAudioMuted ? "speaker.slash.fill" : "speaker.wave.2.fill") {
+                session.toggleMute()
+            }
+            .kurthFieldIcon()
+            .help(session.isAudioMuted ? "Activar sonido" : "Silenciar pestaña")
         }
-        .kurthFieldIcon()
         .transition(.opacity)
-        .help(session.isAudioMuted ? "Activar sonido" : "Silenciar pestaña")
     }
 
     /// Copiar la URL de la pestaña activa: aparece al pasar el mouse por la pestaña, a la izquierda
