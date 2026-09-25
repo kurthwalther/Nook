@@ -61,8 +61,10 @@ struct KurthTabStrip: View {
     private var tabs: TabsController { browserManager.tabs }
     private var selectedID: UUID? { tabs.selectedItemID(in: windowState) }
 
-    /// Un segmento por pestaña: favoritos primero y luego lo que muestra la barra lateral, en su
-    /// orden, sin carpetas.
+    /// Un segmento por pestaña abierta: favoritos primero y luego lo que muestra la barra lateral, en
+    /// su orden, sin carpetas. Favoritos y guardados solo si están abiertos (página cargada) o son la
+    /// elegida: en reposo son accesos, no pestañas (Kurth, 25 sep: cerró todo, tocó un favorito y en
+    /// la tira salieron los tres).
     private struct Entry: Identifiable {
         let item: Item
         var id: UUID { item.id }
@@ -70,8 +72,13 @@ struct KurthTabStrip: View {
 
     private var entries: [Entry] {
         guard let spaceID = windowState.spaceID else { return [] }
-        let favorites = tabs.favorites(of: spaceID).map { Entry(item: $0) }
-        let rows = tabs.rows(space: spaceID).filter { !$0.item.isFolder }.map { Entry(item: $0.item) }
+        let abierta: (Item) -> Bool = { item in
+            item.id == selectedID || (tabs.session(for: item.id).map { !$0.isUnloaded } ?? false)
+        }
+        let favorites = tabs.favorites(of: spaceID).filter(abierta).map { Entry(item: $0) }
+        let rows = tabs.rows(space: spaceID)
+            .filter { !$0.item.isFolder && ($0.section != .pinned || abierta($0.item)) }
+            .map { Entry(item: $0.item) }
         return favorites + rows
     }
 
