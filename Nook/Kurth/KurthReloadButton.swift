@@ -112,13 +112,10 @@ struct KurthLoadingIndicator: View {
             // (0 % 1/0, 50 % 45/−17, 100 % 45/−62 de dasharray/dashoffset), en ease-in-out por
             // tramo. El desfase negativo del SVG es aquí un giro extra del guion.
             reloj(1400) { fase in
-                let suave = { (x: Double) in x * x * (3 - 2 * x) }
-                let largo: Double, inicio: Double
-                if fase < 0.5 { let u = suave(fase / 0.5); largo = 1 + 44 * u; inicio = 17 * u }
-                else { let u = suave((fase - 0.5) / 0.5); largo = 45; inicio = 17 + 45 * u }
-                arco(hasta: largo / perimetro)
+                let guion = Self.serpiente(fase)
+                arco(hasta: guion.largo / perimetro)
                     .frame(width: diametro, height: diametro)
-                    .rotationEffect(.degrees((inicio / perimetro + fase) * 360))
+                    .rotationEffect(.degrees((guion.inicio / perimetro + fase) * 360))
             }
         default:
             // Arco: un guion de 18 de 62.8, 800 ms.
@@ -128,6 +125,15 @@ struct KurthLoadingIndicator: View {
                     .rotationEffect(.degrees(fase * 360))
             }
         }
+    }
+
+    /// El guion de la serpiente en una fase: largo e inicio en unidades del lienzo, con el
+    /// ease-in-out de CSS aproximado por tramo (x²(3 − 2x)).
+    private static func serpiente(_ fase: Double) -> (largo: Double, inicio: Double) {
+        let suave = { (x: Double) in x * x * (3 - 2 * x) }
+        if fase < 0.5 { let u = suave(fase / 0.5); return (1 + 44 * u, 17 * u) }
+        let u = suave((fase - 0.5) / 0.5)
+        return (45, 17 + 45 * u)
     }
 
     /// Un tramo del círculo desde las 3 en punto, con el trazo y las puntas redondas de loading.dev.
