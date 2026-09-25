@@ -48,6 +48,10 @@ struct WindowView: View {
                 .environmentObject(hoverSidebarManager)
                 .environment(windowState)
 
+            // kurth: el panel del agente también se asoma por su orilla (Nook/Kurth/KurthAgentHover.swift).
+            KurthAgentHoverOverlay()
+                .environment(windowState)
+
             CommandPaletteView()
             DialogView()
             KurthThemePickerOverlay() // kurth

@@ -29,6 +29,10 @@ struct KurthAgentChat: View {
     @Environment(KurthAgentService.self) private var agente
     @EnvironmentObject private var browserManager: BrowserManager
 
+    /// En el panel flotante (KurthAgentHoverOverlay): no toma el foco al asomarse, y avisa al
+    /// gestor del hover cuando hay un borrador para que no se esconda a media frase.
+    var flotante = false
+
     @State private var texto = ""
     @FocusState private var escribiendo: Bool
     /// Si este panel ya se contó como abierto en el servicio (ver onAppear / onDisappear).
@@ -107,10 +111,14 @@ struct KurthAgentChat: View {
             // La marca evita contar dos veces si SwiftUI repite onAppear sin onDisappear.
             .onAppear {
                 if !panelRegistrado { panelRegistrado = true; agente.panelAbierto() }
-                escribiendo = true
+                if !flotante { escribiendo = true }
             }
             .onDisappear {
                 if panelRegistrado { panelRegistrado = false; agente.panelCerrado() }
+                if flotante { KurthAgentHoverManager.conBorrador = false }
+            }
+            .onChange(of: texto) { _, nuevo in
+                if flotante { KurthAgentHoverManager.conBorrador = !nuevo.isEmpty }
             }
             // Si al entrar al campo hay texto seleccionado en la página, va como chip (Señalar).
             .onChange(of: escribiendo) { _, enfocado in

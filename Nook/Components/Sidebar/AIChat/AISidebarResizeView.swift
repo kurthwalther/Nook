@@ -22,6 +22,10 @@ struct AISidebarResizeView: View {
     @StateObject private var dragLockManager = DragLockManager.shared
     @State private var dragSessionID: String = UUID().uuidString
 
+    /// kurth: en el panel flotante (KurthAgentHoverOverlay) también se redimensiona; mientras se
+    /// arrastra, KurthAgentHoverManager no lo esconde.
+    var kurthEnFlotante = false
+
     private let minWidth: CGFloat = 234 // kurth: 10 % más angosto que 260 (Kurth, 24 sep)
     private let maxWidth: CGFloat = 520
 
@@ -57,7 +61,7 @@ struct AISidebarResizeView: View {
                 .offset(x: hitAreaOffset)
                 .contentShape(.interaction, .rect)
                 .onHoverTracking { hovering in
-                    guard windowState.isSidebarAIChatVisible else { return }
+                    guard windowState.isSidebarAIChatVisible || kurthEnFlotante else { return } // kurth
 
                     isHovering = hovering
 
@@ -70,13 +74,14 @@ struct AISidebarResizeView: View {
                 .gesture(
                     DragGesture(minimumDistance: 0, coordinateSpace: .global)
                         .onChanged { value in
-                            guard windowState.isSidebarAIChatVisible else { return }
+                            guard windowState.isSidebarAIChatVisible || kurthEnFlotante else { return } // kurth
 
                             if !isResizing {
                                 guard dragLockManager.startDrag(ownerID: dragSessionID) else {
                                     return
                                 }
 
+                                if kurthEnFlotante { KurthAgentHoverManager.redimensionando = true } // kurth
                                 startingWidth = windowState.aiSidebarWidth
                                 startingMouseX = value.startLocation.x
                                 isResizing = true
@@ -92,6 +97,7 @@ struct AISidebarResizeView: View {
                         }
                         .onEnded { _ in
                             isResizing = false
+                            KurthAgentHoverManager.redimensionando = false // kurth
                             dragLockManager.endDrag(ownerID: dragSessionID)
                             KurthPrefs.shared.aiSidebarWidth = windowState.aiSidebarWidth // kurth: se recuerda entre reinicios
 
