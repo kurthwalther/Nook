@@ -5,15 +5,15 @@
 //
 //  Tamaño de la barra: un solo factor que leen la barra, la tira compacta, el campo sin pestaña,
 //  el indicador de carga y el encabezado del panel del agente (que copia a la barra). "Normal" es 1
-//  y "Grande" 1.25 (`kurth.barScale`, clic derecho en la barra): Kurth lo pidió el 25 sep para
-//  quien la vea chica; probó 1.5 y "fue mucho". Todo lo que mide puntos pasa por `pt`, y lo que
-//  es letra por `fuente`.
+//  y "Grande" 1.2 (`kurth.barScale`, clic derecho en la barra): Kurth lo pidió el 25 sep para
+//  quien la vea chica; probó 1.5 ("fue mucho") y 1.25 ("lo sigo viendo grande"). Todo lo que
+//  mide puntos pasa por `pt`, y lo que es letra por `fuente`.
 //
 
 import SwiftUI
 
 enum KurthEscala {
-    static let grande: CGFloat = 1.25
+    static let grande: CGFloat = 1.2
 
     /// Cualquier valor guardado arriba de 1 cuenta como "grande" (un 1.5 viejo también).
     static var factor: CGFloat {

@@ -640,10 +640,10 @@ struct KurthBarSettingsMenu: View {
     var body: some View {
         Toggle("Ocultar la barra (aparece al pasar el mouse)", isOn: $autoHide)
         Picker("Tamaño de la barra", selection: Binding(
-            get: { barScale > 1 ? 1.25 : 1.0 },
+            get: { barScale > 1 ? 1.2 : 1.0 },
             set: { barScale = $0 })) {
             Text("Normal").tag(1.0)
-            Text("Grande (25 % más)").tag(1.25)
+            Text("Grande (20 % más)").tag(1.2)
         }
         Divider()
         Picker("Estilo de barra", selection: $barStyle) {

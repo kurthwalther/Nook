@@ -64,6 +64,8 @@ enum KurthMCPTools {
                 info: "Material de las cuatro barras (lateral y agente, fijas y con hover): glass (Liquid Glass; en las fijas, el fondo de la ventana pasa a vidrio) o panel (el clásico, el de antes: las fijas sin fondo propio y las flotantes con el material de la ventana)"),
         Setting(key: "kurth.agentCardPinned", type: "bool", defaultValue: false,
                 info: "Tarjeta del agente fijada: se queda abierta aunque el mouse se vaya (el pin de su encabezado)"),
+        Setting(key: "kurth.barScale", type: "number", defaultValue: 1.0,
+                info: "Tamaño de la barra y del encabezado del panel del agente: 1 normal; más de 1 = grande (1.2)"),
         Setting(key: "kurth.aiSidebarWidth", type: "number", defaultValue: 330.0,
                 info: "Ancho del panel del agente en pt (200–520). Es el último que dejó el usuario al soltar el borde; cambiarlo aquí aplica a las ventanas que se abran después"),
     ]

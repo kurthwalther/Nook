@@ -56,6 +56,7 @@ struct KurthAgentChat: View {
     @AppStorage("kurth.tintOpacity") private var tintOpacity = 0.72
     @AppStorage("kurth.hairline") private var hairlineOpacity = 0.1
     @AppStorage("kurth.capsuleBlur") private var capsuleBlur = false
+    @AppStorage("kurth.barScale") private var barScale = 1.0
     @Environment(\.displayScale) private var displayScale
     /// La tarjeta que se asoma con hover (KurthAgentHoverOverlay) se puede fijar.
     @AppStorage(KurthAgentHoverManager.claveFijada) private var tarjetaFijada = false
@@ -64,8 +65,8 @@ struct KurthAgentChat: View {
 
     private var esCapsulas: Bool { barStyle != "tinted" }
     /// Las alturas de KurthTopBarView: 44 deja 8 pt alrededor de cápsulas de 28; con tinte, 40.
-    private var altoDeBarra: CGFloat { esCapsulas ? 44 : KurthChrome.topBarHeight }
-    private var medidaDeIcono: CGFloat { esCapsulas ? 24 : NookDesign.Size.iconButton }
+    private var altoDeBarra: CGFloat { esCapsulas ? KurthEscala.pt(44) : KurthChrome.topBarHeight }
+    private var medidaDeIcono: CGFloat { KurthEscala.pt(esCapsulas ? 24 : NookDesign.Size.iconButton) }
     /// Como la barra: con tinte siempre difumina lo que pasa por detrás; con cápsulas, solo si se pidió.
     private var conBlur: Bool { !esCapsulas || capsuleBlur }
     /// Cuánto se ve del texto que pasa bajo el encabezado. La barra con tinte pone el color de la
