@@ -37,8 +37,7 @@ esconden del MCP (las reemplazan).
   diálogo aceptado. La pestaña del agente sin ventana se crea a 1280×800.
 - Un diálogo detiene el JS de la página: las acciones esperan "lo primero que pase" y avisan.
 - Pendiente: eventos nativos en segundo plano (necesitan una ventana invisible, como Bun.WebView);
-  `select` nativo (el menú es modal); evaluar la SPI de agentes de WebKit (`_performInteraction:`,
-  `_extractDebugTextWithConfiguration:`), macOS 26.4+. Informe del Researcher del 24 sep.
+  `select` nativo (el menú es modal); la SPI de agentes de WebKit ya está (page_text y act, 25 sep, `28890ed`): lee solo pestañas a la vista; filtros de WebKit apagados por defecto (el clasificador quitaba contenido legítimo).
 
 ## Contraseñas de Apple (24 sep noche) — instalado, falta que Kurth pruebe con Touch ID
 
