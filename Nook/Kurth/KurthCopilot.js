@@ -575,10 +575,41 @@
         }
         return null;
       };
+      // Menús fijos escondidos justo arriba de lo visible (ultrajewels: top -60, bottom 0) dejan
+      // caer su sombra bajo la barra: una franja gris de corte duro de lado a lado (Kurth, 25 sep).
+      // Mientras están enteros arriba se les quita la sombra; al empezar a entrar, se les regresa.
+      // La lista de fijos se arma al cargar y se refresca como mucho cada 5 s: recorrer todo el DOM
+      // en cada scroll sí costaría.
+      let fijos = [], ultimoBarrido = 0;
+      const apagadas = new Map();
+      const barrer = () => {
+        ultimoBarrido = performance.now();
+        fijos = [];
+        for (const el of document.body ? document.body.getElementsByTagName('*') : []) {
+          const p = getComputedStyle(el).position;
+          if (p === 'fixed' || p === 'sticky') fijos.push(el);
+        }
+      };
+      const sombras = () => {
+        if (!ultimoBarrido || performance.now() - ultimoBarrido > 5000) barrer();
+        for (const el of fijos) {
+          const r = el.getBoundingClientRect();
+          const escondido = r.height > 0 && r.bottom <= 1;
+          if (escondido && !apagadas.has(el) && getComputedStyle(el).boxShadow !== 'none') {
+            apagadas.set(el, [el.style.getPropertyValue('box-shadow'), el.style.getPropertyPriority('box-shadow')]);
+            el.style.setProperty('box-shadow', 'none', 'important');
+          } else if (!escondido && apagadas.has(el)) {
+            const [valor, prioridad] = apagadas.get(el);
+            if (valor) el.style.setProperty('box-shadow', valor, prioridad); else el.style.removeProperty('box-shadow');
+            apagadas.delete(el);
+          }
+        }
+      };
       let ultimo = 'inicio', agendado = false, ultimaVez = 0;
       const revisar = () => {
         agendado = false;
         ultimaVez = performance.now();
+        try { sombras(); } catch (e) { /* una página rara no debe tumbar lo del color */ }
         const c = buscar();
         const clave = c ? c.join(',') : '';
         if (clave === ultimo) return;
@@ -592,8 +623,13 @@
       };
       addEventListener('scroll', alMover, { passive: true, capture: true });
       addEventListener('resize', alMover, { passive: true });
+      // Un menú que se esconde con animación termina de salir después del último scroll: se revisa
+      // otra vez cuando acaba su transición.
+      addEventListener('transitionend', alMover, { passive: true, capture: true });
+      addEventListener('animationend', alMover, { passive: true, capture: true });
       revisar();
-      setTimeout(revisar, 1200);
+      // Muchas páginas arman su menú después de cargar: segundo barrido completo.
+      setTimeout(() => { barrer(); revisar(); }, 1200);
     }
   } catch (e) { /* sin canal o sin canvas: la barra se queda como WebKit la deje */ }
 
