@@ -191,10 +191,10 @@ struct KurthTabStrip: View {
         let tinte = KurthWindowTheme.theme(window: windowState, tabs: tabs).primaryHex
             .map { KurthThemeMath.paintColor(hex: $0, opacity: 1) }
         return Capsule()
-            // Claro: gris 40 %, color 20 %. Oscuro: gris 60 %, color 35 % (Kurth, 25 sep: sobre
+            // Claro: gris 40 %, color 20 %. Oscuro: gris 65 %, color 40 % (Kurth, 25 sep: sobre
             // negro el ojo necesita más alfa que sobre blanco para ver la misma diferencia).
-            .fill(.primary.opacity(scheme == .dark ? 0.60 : 0.40))
-            .overlay { if let tinte { Capsule().fill(tinte.opacity(scheme == .dark ? 0.35 : 0.20)).blendMode(.multiply) } }
+            .fill(.primary.opacity(scheme == .dark ? 0.65 : 0.40))
+            .overlay { if let tinte { Capsule().fill(tinte.opacity(scheme == .dark ? 0.40 : 0.20)).blendMode(.multiply) } }
             // Sin borde (Kurth, 25 sep): el relleno solo, como el segmento elegido de macOS.
     }
 
