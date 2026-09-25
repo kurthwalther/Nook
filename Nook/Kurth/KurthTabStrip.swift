@@ -57,10 +57,6 @@ struct KurthTabStrip: View {
     @State private var segmentsWidth: CGFloat = 0
     @State private var plusWidth: CGFloat = 0
     @State private var slotWidth: CGFloat = 0
-    /// Margen entre el borde derecho de la tira y el de su ranura, medido en reposo. Mientras la X
-    /// de solo íconos está puesta, la tira se ancla por la derecha a ese margen: el lado derecho no
-    /// se mueve pase lo que pase con el ancho (Kurth, 25 sep).
-    @State private var margenDerecho: CGFloat = 0
 
     private var tabs: TabsController { browserManager.tabs }
     private var selectedID: UUID? { tabs.selectedItemID(in: windowState) }
@@ -81,7 +77,7 @@ struct KurthTabStrip: View {
 
     /// Alto del resalte de la pestaña activa: la cápsula (28) menos 3 pt por lado.
     static var segmentHeight: CGFloat { KurthTopBarView.capsuleHeight - KurthEscala.pt(6) }
-    static let segmentInset: CGFloat = 3
+    static let segmentInset: CGFloat = 6  // 25 sep: con 3 la cápsula activa parecía tocar el borde
     /// Un título de pestaña inactiva no pasa de esto; más largo se corta con puntos.
     static var titleMaxWidth: CGFloat { KurthEscala.pt(150) }
     /// Tope de la tira aunque sobre ranura: unas 7 pestañas de ancho medio (Kurth, 24 sep). Más
@@ -89,9 +85,8 @@ struct KurthTabStrip: View {
     static var maxWidth: CGFloat { KurthEscala.pt(7 * 120) }
 
     /// Cuánto crece el segmento con el mouse cuando le entra la X (solo íconos, en reposo): el ancho
-    /// de la X más la separación. La tira se corre eso hacia la izquierda para que el favicon y todo
-    /// lo de su derecha se queden donde estaban; solo lo de la izquierda se recorre (Kurth, 25 sep:
-    /// si el favicon se mueve justo cuando vas a darle clic, la X queda bajo el cursor).
+    /// de la X más la separación. No cuenta para pasar a modo scroll, y con scroll el contenido se
+    /// corre eso a la izquierda para que el favicon no quede bajo la X (Kurth, 25 sep).
     private var crecimientoDeX: CGFloat {
         guard iconsOnly, let h = hovered, h != selectedID, dragging == nil else { return 0 }
         return KurthEscala.pt(NookDesign.Size.favicon) + 6
@@ -102,18 +97,16 @@ struct KurthTabStrip: View {
         // La X de solo íconos suma 22 pt mientras está; no cuenta para pasar a modo scroll, o la tira
         // brincaba al ancho fijo y crecía a los dos lados (Kurth, 25 sep).
         let overflows = available > 0 && segmentsWidth - crecimientoDeX + plusWidth + 2 * Self.segmentInset > available
-        let anclada = !overflows && crecimientoDeX > 0
         Color.clear
             .frame(maxWidth: .infinity)
             .frame(height: KurthTopBarView.capsuleHeight)
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { slotWidth = $0 }
-            // Centrada en reposo; con la X puesta, pegada por la derecha a su margen de reposo.
-            .overlay(alignment: anclada ? .trailing : .center) {
+            // Centrada: cuando entra la X de solo íconos, crece la mitad a cada lado (Kurth, 25 sep:
+            // prefirió eso a un anclaje que en su pantalla no se comportaba). El favicon se mueve 11
+            // pt y un clic rápido donde estaba cae en el hueco entre la X y el favicon, que sigue
+            // seleccionando la pestaña.
+            .overlay {
                 capsule(overflows: overflows, width: available)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { ancho in
-                        if !anclada { margenDerecho = max(0, (slotWidth - ancho) / 2) }
-                    }
-                    .padding(.trailing, anclada ? margenDerecho : 0)
             }
     }
 
