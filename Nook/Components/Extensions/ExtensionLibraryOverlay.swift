@@ -45,6 +45,10 @@ struct ExtensionLibraryOverlay: View {
         var boton = CGRect.zero
         var panel = CGRect.zero
     }
+    /// Tamaño del par (biblioteca + submenú). El marco del panel se arma con esto y con el
+    /// desplazamiento que se le aplica: `frame(in:)` de SwiftUI no incluye un `.offset`, y con ese
+    /// marco todo clic adentro del panel se tomaba como afuera y lo cerraba (Kurth, 25 sep).
+    @State private var tamañoPanel = CGSize.zero
 
     private let menuWidth: CGFloat = 300
     private let gap: CGFloat = 6
@@ -62,6 +66,8 @@ struct ExtensionLibraryOverlay: View {
                 // kurth: el submenú se abre del lado donde cabe. Con el panel del agente abierto la
                 // biblioteca queda pegada a la orilla derecha y el submenú se cortaba (Kurth, 25 sep).
                 let menuOnLeft = isShowingMoreMenu && libraryX + menuWidth + gap + moreMenuWidth > proxy.size.width - gap
+                let panelX = menuOnLeft ? libraryX - (moreMenuWidth + gap) : libraryX
+                let _ = { marcos.panel = CGRect(x: panelX, y: buttonFrame.maxY + gap, width: tamañoPanel.width, height: tamañoPanel.height) }()
 
                 ZStack(alignment: .topLeading) {
                     HStack(alignment: .top, spacing: gap) {
@@ -81,12 +87,10 @@ struct ExtensionLibraryOverlay: View {
                     }
                     .fixedSize()
                     // A la izquierda, el par se corre lo que mide el submenú: la biblioteca no se mueve.
-                    .offset(x: menuOnLeft ? libraryX - (moreMenuWidth + gap) : libraryX,
-                            y: buttonFrame.maxY + gap)
-                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("extlib")) } action: { marcos.panel = $0 }
+                    .onGeometryChange(for: CGSize.self) { $0.size } action: { tamañoPanel = $0 }
+                    .offset(x: panelX, y: buttonFrame.maxY + gap)
                 }
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
-                .coordinateSpace(name: "extlib")
                 .animation(NookDesign.Motion.quick, value: isShowingMoreMenu)
                 .onExitCommand { close() }
                 .onChange(of: windowState.selectedItemID) { _, _ in close() }
