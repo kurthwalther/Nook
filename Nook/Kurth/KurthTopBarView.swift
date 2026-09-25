@@ -578,9 +578,6 @@ struct KurthBarSettingsMenu: View {
     @AppStorage("kurth.capsuleBlur") private var capsuleBlur = false
     @AppStorage("kurth.tabLayout") private var tabLayout = "separate"
     @AppStorage("kurth.compactTabs") private var compactTabs = "titles"
-    /// Indicador de carga del botón de recargar (KurthReloadButton) y su modo de prueba.
-    @AppStorage("kurth.loadingStyle") private var loadingStyle = "dots"
-    @AppStorage("kurth.loadingDemo") private var loadingDemo = false
 
     var body: some View {
         Picker("Estilo de barra", selection: $barStyle) {
@@ -603,11 +600,6 @@ struct KurthBarSettingsMenu: View {
                 get: { compactTabs == "icons" },
                 set: { compactTabs = $0 ? "icons" : "titles" }))
         }
-        Divider()
-        Picker("Indicador de carga", selection: $loadingStyle) {
-            ForEach(KurthLoadingIndicator.estilos, id: \.clave) { Text($0.nombre).tag($0.clave) }
-        }
-        Toggle("Ver el indicador sin cargar (prueba)", isOn: $loadingDemo)
         Divider()
         Button("Editar tema…") {
             KurthThemeStore.shared.openPicker(window: windowState, tabs: browserManager.tabs)
