@@ -40,6 +40,9 @@ struct KurthTabStrip: View {
     @State private var copiado = false
     /// Ancho del dominio de la pestaña activa en reposo; se fija mientras se ve el ícono de copiar.
     @State private var anchoDominio: CGFloat = 0
+    /// Cuando la tira se desplaza por dentro: si está en el inicio o en el final, para el desvanecido.
+    @State private var alInicio = true
+    @State private var alFinal = true
     /// Arrastre para reordenar: qué segmento, cuánto se ha movido y dónde estaba cada uno al
     /// empezar (las medidas en vivo ya incluyen los desplazamientos, así que no sirven).
     @State private var dragging: UUID?
@@ -106,6 +109,19 @@ struct KurthTabStrip: View {
                         segments
                     }
                     .scrollEdgeEffectHidden(true, for: .horizontal)
+                    // Desvanecido en la punta hacia la que hay más pestañas; en la que ya no hay,
+                    // nada, para no apagar la primera o la última (Kurth, 25 sep).
+                    .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.x <= 1 } action: { _, v in alInicio = v }
+                    .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.x + $0.containerSize.width >= $0.contentSize.width - 1 } action: { _, v in alFinal = v }
+                    .mask {
+                        HStack(spacing: 0) {
+                            LinearGradient(colors: [alInicio ? .black : .clear, .black], startPoint: .leading, endPoint: .trailing).frame(width: 18)
+                            Color.black
+                            LinearGradient(colors: [.black, alFinal ? .black : .clear], startPoint: .leading, endPoint: .trailing).frame(width: 18)
+                        }
+                    }
+                    .animation(NookDesign.Motion.quick, value: alInicio)
+                    .animation(NookDesign.Motion.quick, value: alFinal)
                     // La activa siempre a la vista: al cambiar de pestaña la tira se desplaza sola.
                     .onChange(of: selectedID, initial: true) { _, id in
                         guard let id else { return }
@@ -263,7 +279,7 @@ struct KurthTabStrip: View {
             HStack(spacing: 6) {
                 // Solo ícono: sin X al pasar el mouse, o no queda por dónde entrar a la pestaña
                 // (Kurth, 24 sep). Se cierra con clic derecho.
-                leadingIcon(entry, session: session, showsClose: isHovered && (isActive || showsTitle))
+                leadingIcon(entry, session: session, isActive: isActive, showsClose: isHovered && (isActive || showsTitle))
                 if isActive {
                     // La cápsula de siempre: dominio y recargar. Al pasar el mouse, copiar entra
                     // entre los dos y el dominio se corta por el principio para hacerle lugar: el
@@ -320,6 +336,12 @@ struct KurthTabStrip: View {
                     NSPasteboard.general.setString(url.absoluteString, forType: .string)
                 }
             }
+            if let session, session.hasAudioContent || session.isAudioMuted {
+                Button(session.isAudioMuted ? "Activar sonido" : "Silenciar pestaña",
+                       systemImage: session.isAudioMuted ? "speaker.wave.2" : "speaker.slash") {
+                    session.toggleMute()
+                }
+            }
             Button("Cerrar pestaña", systemImage: "xmark", role: .destructive) {
                 tabs.close(id)
             }
@@ -329,9 +351,13 @@ struct KurthTabStrip: View {
         .help(tabs.title(for: entry.item))
     }
 
-    /// El favicon, que al pasar el mouse se vuelve la X de cerrar (Safari 15 hacía lo mismo).
+    /// El favicon, que al pasar el mouse se vuelve la X de cerrar (Safari 15 hacía lo mismo). Es el
+    /// único hueco de información de una pestaña de 22 pt, así que también dice si la pestaña está
+    /// cargando (el cometa; solo en las que no son la activa, que lo dice en recargar) y si suena
+    /// (bocina, tachada si está silenciada; silenciar va en el clic derecho). Kurth, 25 sep.
     @ViewBuilder
-    private func leadingIcon(_ entry: Entry, session: PageSession?, showsClose: Bool) -> some View {
+    private func leadingIcon(_ entry: Entry, session: PageSession?, isActive: Bool, showsClose: Bool) -> some View {
+        let silenciada = session?.isAudioMuted == true
         ZStack {
             if showsClose {
                 Button("Cerrar pestaña", systemImage: "xmark") {
@@ -342,6 +368,15 @@ struct KurthTabStrip: View {
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .transition(.opacity)
+            } else if !isActive, session?.isLoading == true {
+                KurthLoadingIndicator()
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity)
+            } else if session?.hasAudioContent == true || silenciada {
+                Image(systemName: silenciada ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity)
             } else {
                 ItemFavicon(item: entry.item, session: session)
                     .transition(.opacity)
