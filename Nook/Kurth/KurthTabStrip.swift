@@ -189,8 +189,8 @@ struct KurthTabStrip: View {
             .map { KurthThemeMath.paintColor(hex: $0, opacity: 1) }
         return Capsule()
             .fill(.primary.opacity(tinte == nil ? 0.17 : 0.10))
-            .overlay { if let tinte { Capsule().fill(tinte.opacity(0.24)) } }
-            .overlay(Capsule().strokeBorder(tinte?.opacity(0.35) ?? Color.primary.opacity(0.08), lineWidth: 1))
+            .overlay { if let tinte { Capsule().fill(tinte.opacity(0.12)) } }
+            .overlay(Capsule().strokeBorder(tinte?.opacity(0.18) ?? Color.primary.opacity(0.08), lineWidth: 1))
     }
 
     // MARK: - Reordenar arrastrando
