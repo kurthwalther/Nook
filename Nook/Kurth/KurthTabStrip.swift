@@ -155,7 +155,9 @@ struct KurthTabStrip: View {
                 if index > 0 {
                     // Siempre, también junto a la activa y a la del mouse (Kurth, 25 sep: "que no
                     // solo dividan las que están en reposo"); solo se van mientras se arrastra.
-                    divider(hidden: dragging != nil)
+                    divider(hidden: dragging != nil,
+                            antesActiva: entries[index - 1].id == selectedID,
+                            despuesActiva: entry.id == selectedID)
                 }
                 segment(entry)
                     .offset(x: shift(of: entry.id, in: entries))
@@ -249,12 +251,16 @@ struct KurthTabStrip: View {
     /// página negra no se veía y las pestañas parecían un solo bloque (Kurth, 25 sep: "necesitan una
     /// separación más notable"; en 0.3 "se pierde un poco", quedó en 0.4). Igual con solo íconos que
     /// con títulos.
-    private func divider(hidden: Bool) -> some View {
+    /// La línea guarda 3 pt con el segmento vecino, que a su vez trae 8 de relleno antes del favicon:
+    /// 11 hasta el ícono. La cápsula de la activa cubre ese relleno, así que del lado donde está
+    /// ella se agregan los 8: la línea queda a 11 del borde de la cápsula, igual que de un favicon.
+    /// El ancla es el borde del selector, no el favicon (Kurth, 25 sep).
+    private func divider(hidden: Bool, antesActiva: Bool = false, despuesActiva: Bool = false) -> some View {
         Capsule()
             .fill(.primary.opacity(0.4))
             .frame(width: 1, height: 16)
-            // Aire a los lados: pegado a la cápsula de la activa se veía como parte de ella (Kurth, 25 sep).
-            .padding(.horizontal, 3)
+            .padding(.leading, 3 + (antesActiva ? KurthTopBarView.capsuleInset : 0))
+            .padding(.trailing, 3 + (despuesActiva ? KurthTopBarView.capsuleInset : 0))
             .opacity(hidden ? 0 : 1)
     }
 
