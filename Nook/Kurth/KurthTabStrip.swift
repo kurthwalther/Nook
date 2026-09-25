@@ -4,10 +4,12 @@
 //  Nook (rama kurth)
 //
 //  Pestañas compactas como las de Safari 15 (macOS Monterey): las pestañas del Space viven en la
-//  misma cápsula que la dirección, como segmentos de un control segmentado. La activa muestra el
-//  dominio y recargar; las demás, ícono y título, que se encogen a solo ícono cuando no caben o
-//  cuando Kurth lo pide (kurth.compactTabs = icons, como en iPad). Los favoritos van siempre como
-//  ícono, igual que las fijadas de Safari.
+//  misma cápsula que la dirección, como segmentos de un control segmentado. La activa es la cápsula
+//  de siempre (dominio y recargar) con un relleno que la distingue; las demás, ícono y título, o
+//  solo ícono si Kurth lo pide (kurth.compactTabs = icons, como en iPad). Los favoritos van siempre
+//  como ícono, igual que las fijadas de Safari.
+//  La tira mide lo que mide su contenido y va centrada, como la cápsula sola (Kurth, 24 sep: "no
+//  hacerse una barra enorme"). Si no cabe, se desplaza de lado en vez de encimarse a los botones.
 //  Se enciende con kurth.tabLayout = compact (clic derecho en la barra o kurth_set_settings).
 //
 
@@ -30,6 +32,8 @@ struct KurthTabStrip: View {
 
     @Namespace private var strip
     @State private var hovered: UUID?
+    /// Ancho del hueco entre las cápsulas de los lados: la tira se centra en él mientras quepa.
+    @State private var slotWidth: CGFloat = 0
 
     private var tabs: TabsController { browserManager.tabs }
     private var selectedID: UUID? { tabs.selectedItemID(in: windowState) }
@@ -52,10 +56,25 @@ struct KurthTabStrip: View {
     /// Alto del resalte de la pestaña activa: la cápsula (28) menos 3 pt por lado.
     static let segmentHeight: CGFloat = KurthTopBarView.capsuleHeight - 6
     static let segmentInset: CGFloat = 3
+    /// Un título de pestaña inactiva no pasa de esto; más largo se corta con puntos.
+    static let titleMaxWidth: CGFloat = 150
+    /// Aire vertical para que la sombra de la cápsula no se recorte en el ScrollView.
+    private static let verticalRoom: CGFloat = 8
 
     var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            capsule
+                .padding(.vertical, Self.verticalRoom)
+                // Mientras la tira quepa, va centrada en el hueco; si no, se desplaza.
+                .frame(minWidth: slotWidth)
+        }
+        .frame(height: KurthTopBarView.capsuleHeight + Self.verticalRoom * 2)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { slotWidth = $0 }
+    }
+
+    private var capsule: some View {
         let entries = entries
-        HStack(spacing: 0) {
+        return HStack(spacing: 0) {
             ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
                 if index > 0 {
                     divider(hidden: touchesHighlight(entries[index - 1].id) || touchesHighlight(entry.id))
@@ -68,17 +87,23 @@ struct KurthTabStrip: View {
         // El resalte de la activa sigue al segmento seleccionado y se desliza al cambiar.
         .background(alignment: .leading) {
             if let selectedID {
-                Capsule()
-                    .fill(.primary.opacity(0.09))
-                    .matchedGeometryEffect(id: selectedID, in: strip, isSource: false)
+                activePill.matchedGeometryEffect(id: selectedID, in: strip, isSource: false)
             }
         }
         .frame(height: KurthTopBarView.capsuleHeight)
-        .frame(maxWidth: .infinity)
+        // Mide lo que mide su contenido: nada se estira para llenar la barra.
+        .fixedSize(horizontal: true, vertical: false)
         .clipShape(Capsule())
         .modifier(StripSurface(glass: glass, tint: tint))
         .animation(NookDesign.Motion.standard, value: selectedID)
         .animation(NookDesign.Motion.quick, value: hovered)
+    }
+
+    /// El segmento seleccionado de un control segmentado: relleno claro con un borde apenas.
+    private var activePill: some View {
+        Capsule()
+            .fill(.primary.opacity(0.12))
+            .overlay(Capsule().strokeBorder(.primary.opacity(0.08), lineWidth: 1))
     }
 
     /// Los separadores desaparecen junto a la pestaña activa y a la que tiene el mouse encima,
@@ -110,36 +135,28 @@ struct KurthTabStrip: View {
                 tabs.select(id, in: windowState)
             }
         } label: {
-            ViewThatFits(in: .horizontal) {
-                if isActive {
-                    HStack(spacing: 6) {
-                        leadingIcon(entry, session: session, isHovered: isHovered)
-                        Text(url.map(KurthTopBarView.shortHost) ?? tabs.title(for: entry.item))
-                            .font(NookDesign.Font.body)
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                            .truncationMode(.head)
-                            .frame(minWidth: 60)
-                        reloadButton
-                    }
-                } else if showsTitle {
-                    HStack(spacing: 6) {
-                        leadingIcon(entry, session: session, isHovered: isHovered)
-                        Text(tabs.title(for: entry.item))
-                            .font(NookDesign.Font.bodyRegular)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
-                    // Con menos de esto el título ya no dice nada: mejor solo el ícono.
-                    .frame(minWidth: 72, maxWidth: .infinity)
-                }
+            HStack(spacing: 6) {
                 leadingIcon(entry, session: session, isHovered: isHovered)
-                    .frame(maxWidth: isActive ? nil : .infinity)
+                if isActive {
+                    // La cápsula de siempre: dominio y recargar.
+                    Text(url.map(KurthTopBarView.shortHost) ?? tabs.title(for: entry.item))
+                        .font(NookDesign.Font.body)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                        .frame(minWidth: KurthTopBarView.addressMinWidth - 2 * KurthTopBarView.capsuleInset - 2 * (NookDesign.Size.favicon + 6))
+                    reloadButton
+                } else if showsTitle {
+                    Text(tabs.title(for: entry.item))
+                        .font(NookDesign.Font.bodyRegular)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: Self.titleMaxWidth)
+                }
             }
             .padding(.horizontal, KurthTopBarView.capsuleInset)
             .frame(height: Self.segmentHeight)
-            .frame(maxWidth: isActive ? nil : .infinity)
             .background {
                 if isHovered && !isActive {
                     Capsule().fill(.primary.opacity(0.05))
@@ -150,9 +167,6 @@ struct KurthTabStrip: View {
             .matchedGeometryEffect(id: id, in: strip, isSource: true)
         }
         .buttonStyle(.plain)
-        // La activa mide lo que necesita; las demás se reparten lo que sobra.
-        .fixedSize(horizontal: isActive, vertical: false)
-        .layoutPriority(isActive ? 1 : 0)
         .opacity(!isActive && (session?.isUnloaded ?? true) ? NookDesign.Surface.unloadedOpacity : 1)
         .onHoverTracking { inside in
             if inside { hovered = id } else if hovered == id { hovered = nil }
