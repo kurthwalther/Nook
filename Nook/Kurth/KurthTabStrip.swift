@@ -31,9 +31,6 @@ struct KurthTabStrip: View {
     let tint: Color?
     /// Todas las pestañas menos la activa como ícono, aunque quepa el título.
     let iconsOnly: Bool
-    /// Ancho que la barra le deja a la tira (lo que hay entre las cápsulas de los lados). La tira
-    /// mide su contenido y, sin este dato, empujaría la ranura en vez de recortarse.
-    let available: CGFloat
 
     @Namespace private var strip
     @State private var hovered: UUID?
@@ -43,10 +40,13 @@ struct KurthTabStrip: View {
     @State private var dragTranslation: CGFloat = 0
     @State private var frames: [UUID: CGRect] = [:]
     @State private var dragFrames: [UUID: CGRect] = [:]
-    /// Ancho natural de la tira: mientras quepa en `available` va centrada tal cual; solo si no
-    /// cabe se mete en un ScrollView (que en macOS 26 dibuja su propio efecto de borde sobre el
-    /// vidrio, y por eso no se usa siempre).
+    /// Ancho natural de la tira y ancho de la ranura que la barra le deja. La tira va como capa
+    /// (overlay) sobre una ranura vacía y flexible: así la ranura mide lo que de verdad hay entre
+    /// las cápsulas de los lados y nunca la empuja (medida sobre la barra, la barra crecía con la
+    /// tira y siempre "cabía"). Mientras quepa va centrada tal cual; si no, se mete en un
+    /// ScrollView, que solo se usa entonces porque en macOS 26 pinta su efecto de borde.
     @State private var stripWidth: CGFloat = 0
+    @State private var slotWidth: CGFloat = 0
     /// Acaba de haber un arrastre: el clic de ese mismo soltar no cuenta como selección.
     @State private var justDragged = false
 
@@ -74,28 +74,34 @@ struct KurthTabStrip: View {
     static let titleMaxWidth: CGFloat = 150
     /// Aire vertical para que la sombra de la cápsula no se recorte en el ScrollView.
     private static let verticalRoom: CGFloat = 8
+    /// Tope de la tira aunque sobre ranura: unas 7 pestañas de ancho medio (Kurth, 24 sep). Más
+    /// que eso se desplaza.
+    static let maxWidth: CGFloat = 7 * 120
 
     var body: some View {
-        Group {
-            if available > 0, stripWidth > available {
-                ScrollViewReader { proxy in
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        capsule.padding(.vertical, Self.verticalRoom)
+        let available = min(slotWidth, Self.maxWidth)
+        Color.clear
+            .frame(maxWidth: .infinity)
+            .frame(height: KurthTopBarView.capsuleHeight + Self.verticalRoom * 2)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { slotWidth = $0 }
+            .overlay {
+                if available > 0, stripWidth > available {
+                    ScrollViewReader { proxy in
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            capsule.padding(.vertical, Self.verticalRoom)
+                        }
+                        .scrollEdgeEffectHidden(true, for: .horizontal)
+                        .frame(width: available)
+                        // La activa siempre a la vista: al cambiar de pestaña la tira se desplaza sola.
+                        .onChange(of: selectedID, initial: true) { _, id in
+                            guard let id else { return }
+                            withAnimation(NookDesign.Motion.standard) { proxy.scrollTo(id) }
+                        }
                     }
-                    .scrollEdgeEffectHidden(true, for: .horizontal)
-                    .frame(width: available)
-                    // La activa siempre a la vista: al cambiar de pestaña la tira se desplaza sola.
-                    .onChange(of: selectedID, initial: true) { _, id in
-                        guard let id else { return }
-                        withAnimation(NookDesign.Motion.standard) { proxy.scrollTo(id) }
-                    }
+                } else {
+                    capsule
                 }
-            } else {
-                capsule
             }
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: KurthTopBarView.capsuleHeight + Self.verticalRoom * 2)
     }
 
     private var capsule: some View {
