@@ -74,6 +74,8 @@ final class KurthGestos {
     @ObservationIgnored var zonaDeDeslizar: CGRect?
     @ObservationIgnored var marcoDePagina: CGRect = .zero
 
+    /// La paleta de esta ventana: con ella abierta, Esc es suyo (la cierra a ella, no a la cuadrícula).
+    @ObservationIgnored weak var paleta: CommandPalette?
     @ObservationIgnored private weak var ventana: BrowserWindowState?
     @ObservationIgnored private weak var browserManager: BrowserManager?
     @ObservationIgnored private var monitores: [Any] = []
@@ -351,7 +353,7 @@ final class KurthGestos {
 
     private func tecla(_ e: NSEvent) -> NSEvent? {
         // Esc cierra la cuadrícula de esta ventana.
-        guard progreso > 0, e.keyCode == 53, e.window === ventana?.window else { return e }
+        guard progreso > 0, e.keyCode == 53, e.window === ventana?.window, paleta?.isVisible != true else { return e }
         cerrarCuadricula()
         return nil
     }

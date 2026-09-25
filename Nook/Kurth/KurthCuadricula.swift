@@ -8,9 +8,13 @@
 //  pestaña, aunque sea de otro Space; la X la cierra; Esc, abrir los dedos o un clic en el fondo
 //  la cierran. Cubre la columna de la página: la barra lateral y el agente siguen a la mano.
 //
-//  Se reordena arrastrando (las demás se hacen a un lado mientras tanto) y se puede llevar una
-//  pestaña a otro Space; al soltar, entra junto a la que queda antes, en su misma sección, igual
-//  que en la tira de arriba. Al final de cada Space, «Nueva pestaña».
+//  Se reordena arrastrando: la miniatura sigue al mouse y las demás se hacen a un lado. Se puede
+//  llevar a otro Space; al soltar entra junto a la que queda antes, en su misma sección, igual
+//  que en la tira de arriba. Es un DragGesture simultáneo, como el de la tira: el arrastre del
+//  sistema (onDrag) no arrancaba sobre un botón (probado el 25 sep).
+//
+//  Al final de cada Space, «Nueva pestaña»: abre el campo de dirección encima de la cuadrícula,
+//  que sigue abierta detrás; se cierra sola cuando la pestaña nueva queda elegida.
 //
 //  Las miniaturas son la última imagen de cada pestaña (KurthCapturas). La de la pestaña actual
 //  se toma al abrir; las demás, de cuando se vieron por última vez: WebKit no dibuja las páginas
@@ -18,7 +22,6 @@
 //
 
 import SwiftUI
-import UniformTypeIdentifiers
 import NookDesign
 import NookWeb
 import NookUI
@@ -29,17 +32,26 @@ struct KurthCuadricula: View {
     @Environment(CommandPalette.self) private var commandPalette
     @EnvironmentObject private var browserManager: BrowserManager
 
-    /// Dónde caería la pestaña que se arrastra: antes de otra, o al final de un Space.
-    enum Destino: Equatable {
-        case antesDe(UUID)
-        case alFinal(UUID)
+    /// Dónde caería la pestaña que se arrastra: en qué Space y en qué lugar de su lista (contada
+    /// sin ella).
+    struct Destino: Equatable {
+        let espacio: UUID
+        let indice: Int
     }
 
     @State private var arrastrando: Item?
     @State private var destino: Destino?
-
-    /// Solo dentro de Nook: que soltarla en otro lado no la tome por texto.
-    static let tipo = UTType(exportedAs: "com.kurthwalther.nook.pestana")
+    /// Dónde va el mouse y dónde se agarró la miniatura, en el espacio de la cuadrícula.
+    @State private var puntero: CGPoint = .zero
+    @State private var agarre: CGSize = .zero
+    /// El marco de cada celda (las de «Nueva pestaña», con el id de su Space).
+    @State private var marcos: [UUID: CGRect] = [:]
+    /// La última celda en la que entró el mouse: se reacomoda al entrar a otra, no a cada paso.
+    @State private var sobre: UUID?
+    /// El clic del mismo soltar no cuenta como elegir la pestaña.
+    @State private var recienArrastrada = false
+    /// Se pidió una pestaña nueva: la que estaba elegida al abrir el campo.
+    @State private var esperandoNueva: UUID??
 
     var body: some View {
         let gestos = KurthGestos.de(ventana)
@@ -48,7 +60,19 @@ struct KurthCuadricula: View {
                 .opacity(Double(gestos.progreso))
                 .scaleEffect(1.04 - 0.04 * gestos.progreso)
                 .allowsHitTesting(gestos.progreso >= 1)
-                .onDisappear { arrastrando = nil; destino = nil }
+                .onAppear { gestos.paleta = commandPalette }
+                .onDisappear {
+                    arrastrando = nil
+                    destino = nil
+                    esperandoNueva = nil
+                    marcos = [:] // de pestañas que quizá ya no existan
+                }
+                // La pestaña nueva ya quedó elegida: a ella.
+                .onChange(of: browserManager.tabs.selectedItemID(in: ventana)) { _, elegida in
+                    guard let antes = esperandoNueva, elegida != antes else { return }
+                    esperandoNueva = nil
+                    gestos.cerrarCuadricula()
+                }
         }
     }
 
@@ -75,20 +99,17 @@ struct KurthCuadricula: View {
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 190, maximum: 280), spacing: 18)],
                                       alignment: .leading, spacing: 18) {
                                 ForEach(lista(espacio.id), id: \.id) { item in
-                                    KurthCeldaDePestaña(item: item, gestos: gestos)
-                                        .onDrag {
-                                            arrastrando = item
-                                            destino = nil
-                                            return Self.proveedor(item)
-                                        }
-                                        .onDrop(of: [Self.tipo], delegate: KurthSoltarEnCuadricula(
-                                            aqui: .antesDe(item.id), arrastrado: arrastrando?.id,
-                                            destino: $destino, soltar: soltar))
+                                    KurthCeldaDePestaña(item: item) {
+                                        guard !recienArrastrada else { return }
+                                        gestos.elegir(item.id)
+                                    }
+                                    // Su lugar se queda como fantasma mientras la copia sigue al mouse.
+                                    .opacity(arrastrando?.id == item.id ? 0.25 : 1)
+                                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("cuadricula")) } action: { marcos[item.id] = $0 }
+                                    .simultaneousGesture(arrastre(item))
                                 }
-                                celdaNueva(espacio.id, gestos: gestos)
-                                    .onDrop(of: [Self.tipo], delegate: KurthSoltarEnCuadricula(
-                                        aqui: .alFinal(espacio.id), arrastrado: arrastrando?.id,
-                                        destino: $destino, soltar: soltar))
+                                celdaNueva(espacio.id)
+                                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("cuadricula")) } action: { marcos[espacio.id] = $0 }
                             }
                             .animation(.spring(duration: 0.28, bounce: 0.1), value: destino)
                         }
@@ -98,11 +119,20 @@ struct KurthCuadricula: View {
                 // Libra los botones de la ventana y la barra de arriba.
                 .padding(.top, 56)
                 .padding(.bottom, 28)
+                .coordinateSpace(name: "cuadricula")
+                // La copia que sigue al mouse.
+                .overlay(alignment: .topLeading) {
+                    if let arrastrando, let marco = marcos[arrastrando.id] {
+                        KurthCeldaDePestaña(item: arrastrando) {}
+                            .frame(width: marco.width, height: marco.height)
+                            .scaleEffect(1.04)
+                            .shadow(color: .black.opacity(0.22), radius: 16, y: 8)
+                            .offset(x: puntero.x - agarre.width, y: puntero.y - agarre.height)
+                            .allowsHitTesting(false)
+                    }
+                }
             }
             .scrollEdgeEffectHidden(true, for: .vertical)
-            // Soltar entre celdas o en el fondo cuenta con el último lugar que se marcó.
-            .onDrop(of: [Self.tipo], delegate: KurthSoltarEnCuadricula(
-                aqui: nil, arrastrado: arrastrando?.id, destino: $destino, soltar: soltar))
         }
     }
 
@@ -113,61 +143,108 @@ struct KurthCuadricula: View {
         var lista = KurthGestos.pestañas(browserManager.tabs, espacio: espacio)
         guard let arrastrando, let destino else { return lista }
         lista.removeAll { $0.id == arrastrando.id }
-        switch destino {
-        case .antesDe(let id):
-            if let i = lista.firstIndex(where: { $0.id == id }) { lista.insert(arrastrando, at: i) }
-        case .alFinal(let id):
-            if id == espacio { lista.append(arrastrando) }
-        }
+        if destino.espacio == espacio { lista.insert(arrastrando, at: min(destino.indice, lista.count)) }
         return lista
+    }
+
+    private func arrastre(_ item: Item) -> some Gesture {
+        DragGesture(minimumDistance: 6, coordinateSpace: .named("cuadricula"))
+            .onChanged { valor in
+                if arrastrando?.id != item.id {
+                    let origen = marcos[item.id]?.origin ?? valor.startLocation
+                    agarre = CGSize(width: valor.startLocation.x - origen.x, height: valor.startLocation.y - origen.y)
+                    recienArrastrada = true
+                    sobre = nil
+                    if let espacio = browserManager.tabs.spaceID(of: item.id),
+                       let i = KurthGestos.pestañas(browserManager.tabs, espacio: espacio).firstIndex(where: { $0.id == item.id }) {
+                        destino = Destino(espacio: espacio, indice: i)
+                    }
+                    arrastrando = item
+                }
+                puntero = valor.location
+                reacomodar(en: valor.location)
+            }
+            .onEnded { _ in
+                soltar()
+                // El botón dispara con el mismo mouse-up que termina el arrastre: se deja pasar.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { recienArrastrada = false }
+            }
+    }
+
+    /// Al entrar a otra celda: la arrastrada toma su lugar. Si venía de antes, queda después de
+    /// ella; si venía de después, antes (así se mueve hacia donde va el mouse).
+    private func reacomodar(en punto: CGPoint) {
+        guard let arrastrando else { return }
+        let bajo = marcos.first { $0.key != arrastrando.id && $0.value.contains(punto) }?.key
+        guard bajo != sobre else { return }
+        sobre = bajo
+        guard let bajo else { return }
+        let tabs = browserManager.tabs
+        let nuevo: Destino
+        if tabs.space(bajo) != nil {
+            // «Nueva pestaña» de ese Space: al final.
+            let sinElla = lista(bajo).filter { $0.id != arrastrando.id }
+            nuevo = Destino(espacio: bajo, indice: sinElla.count)
+        } else {
+            guard let espacio = tabs.spaceID(of: bajo) else { return }
+            let actual = lista(espacio)
+            let sinElla = actual.filter { $0.id != arrastrando.id }
+            guard let q = actual.firstIndex(where: { $0.id == bajo }),
+                  let qSinElla = sinElla.firstIndex(where: { $0.id == bajo }) else { return }
+            let p = actual.firstIndex { $0.id == arrastrando.id }
+            nuevo = Destino(espacio: espacio, indice: p.map { q > $0 } == true ? qSinElla + 1 : qSinElla)
+        }
+        if nuevo != destino { destino = nuevo }
     }
 
     /// Al soltar: entra después de la que le queda antes y en su misma sección (favoritos,
     /// guardados, del día o una carpeta), como al reordenar la tira. Si queda primera, al principio
-    /// de la sección de la que tiene delante.
+    /// de la sección de la que tiene delante; sola en un Space vacío, a las del día.
     private func soltar() {
-        defer { arrastrando = nil; destino = nil }
-        guard let arrastrando, let destino else { return }
-        let tabs = browserManager.tabs
-        switch destino {
-        case .alFinal(let espacio):
-            let seccion = Parent.tabs(spaceID: espacio)
-            let ultima = tabs.children(of: seccion).last { $0.id != arrastrando.id }
-            tabs.move(arrastrando.id, to: seccion, after: ultima?.id)
-        case .antesDe(let id):
-            guard let espacio = tabs.spaceID(of: id) else { return }
-            let lista = lista(espacio)
-            guard let i = lista.firstIndex(where: { $0.id == arrastrando.id }) else { return }
-            let previa = i > 0 ? lista[i - 1] : nil
-            let seccion = previa?.parent ?? lista.first { $0.id != arrastrando.id }?.parent ?? .tabs(spaceID: espacio)
-            tabs.move(arrastrando.id, to: seccion, after: previa?.id)
+        defer {
+            var sinAnimar = Transaction()
+            sinAnimar.disablesAnimations = true
+            withTransaction(sinAnimar) {
+                arrastrando = nil
+                destino = nil
+                sobre = nil
+            }
         }
+        guard let arrastrando, let destino else { return }
+        let lista = lista(destino.espacio)
+        guard let i = lista.firstIndex(where: { $0.id == arrastrando.id }) else { return }
+        let previa = i > 0 ? lista[i - 1] : nil
+        let siguiente = i + 1 < lista.count ? lista[i + 1] : nil
+        let seccion = previa?.parent ?? siguiente?.parent ?? .tabs(spaceID: destino.espacio)
+        guard seccion != arrastrando.parent || previa?.id != anterior(de: arrastrando) else { return }
+        browserManager.tabs.move(arrastrando.id, to: seccion, after: previa?.id)
     }
 
-    private static func proveedor(_ item: Item) -> NSItemProvider {
-        let proveedor = NSItemProvider()
-        proveedor.registerDataRepresentation(forTypeIdentifier: tipo.identifier, visibility: .ownProcess) { listo in
-            listo(Data(item.id.uuidString.utf8), nil)
-            return nil
-        }
-        return proveedor
+    /// La que tenía antes en el orden guardado, para no mover nada si se soltó donde estaba.
+    private func anterior(de item: Item) -> UUID? {
+        guard let espacio = browserManager.tabs.spaceID(of: item.id) else { return nil }
+        let guardada = KurthGestos.pestañas(browserManager.tabs, espacio: espacio)
+        guard let i = guardada.firstIndex(where: { $0.id == item.id }), i > 0 else { return nil }
+        return guardada[i - 1].id
     }
 
     // MARK: - Nueva pestaña
 
-    /// La última celda de cada Space: abre el campo de dirección para una pestaña nueva ahí.
-    private func celdaNueva(_ espacio: UUID, gestos: KurthGestos) -> some View {
+    /// La última celda de cada Space: el campo de dirección para una pestaña nueva ahí, encima de
+    /// la cuadrícula (Kurth, 25 sep: "debería abrir el pop up sobre esa vista").
+    private func celdaNueva(_ espacio: UUID) -> some View {
         let forma = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        let marcada = arrastrando != nil && sobre == espacio
         return Button {
-            gestos.cerrarCuadricula()
             if ventana.spaceID != espacio { browserManager.tabs.setSpace(espacio, in: ventana) }
+            esperandoNueva = .some(browserManager.tabs.selectedItemID(in: ventana))
             commandPalette.open()
         } label: {
             VStack(alignment: .leading, spacing: 8) {
                 forma
                     .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
-                    .foregroundStyle(Color.primary.opacity(destino == .alFinal(espacio) ? 0.4 : 0.18))
-                    .background(forma.fill(Color.primary.opacity(destino == .alFinal(espacio) ? 0.06 : 0.02)))
+                    .foregroundStyle(Color.primary.opacity(marcada ? 0.4 : 0.18))
+                    .background(forma.fill(Color.primary.opacity(marcada ? 0.06 : 0.02)))
                     .overlay {
                         Image(systemName: "plus")
                             .font(.system(size: 20, weight: .medium))
@@ -187,35 +264,11 @@ struct KurthCuadricula: View {
     }
 }
 
-/// Soltar en la cuadrícula. Al entrar a una celda marca ese lugar (las demás se reacomodan); la
-/// celda de la propia pestaña no cuenta, o se quitaría a sí misma de la lista. `aqui` nil es el
-/// fondo: no marca nada y al soltar usa el último lugar marcado.
-private struct KurthSoltarEnCuadricula: DropDelegate {
-    let aqui: KurthCuadricula.Destino?
-    let arrastrado: UUID?
-    @Binding var destino: KurthCuadricula.Destino?
-    let soltar: () -> Void
-
-    func validateDrop(info: DropInfo) -> Bool { arrastrado != nil }
-
-    func dropEntered(info: DropInfo) {
-        guard let aqui, arrastrado != nil, aqui != .antesDe(arrastrado!), destino != aqui else { return }
-        destino = aqui
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
-
-    func performDrop(info: DropInfo) -> Bool {
-        soltar()
-        return true
-    }
-}
-
 /// Una pestaña: su imagen en proporción 16:10, el ícono y el título. Al pasar el mouse, la X para
 /// cerrarla y un leve realce; la actual lleva el borde de acento.
 private struct KurthCeldaDePestaña: View {
     let item: Item
-    let gestos: KurthGestos
+    let elegir: () -> Void
     @Environment(BrowserWindowState.self) private var ventana
     @EnvironmentObject private var browserManager: BrowserManager
     @State private var encima = false
@@ -225,7 +278,7 @@ private struct KurthCeldaDePestaña: View {
 
     var body: some View {
         let tabs = browserManager.tabs
-        Button { gestos.elegir(item.id) } label: {
+        Button(action: elegir) {
             VStack(alignment: .leading, spacing: 8) {
                 miniatura
                     .aspectRatio(16 / 10, contentMode: .fit)
