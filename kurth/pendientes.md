@@ -42,6 +42,11 @@ esconden del MCP (las reemplazan).
 
 ## Hecho el 24 sep
 
+- ✅ Guardados como Arc: la sección de fijadas siempre a la vista (vacía: "Arrastra aquí lo que
+  quieras guardar", se acorta según el ancho); las carpetas solo viven ahí (createFolder y move en
+  TabsController); al arrancar suben las que hayan quedado abajo (KurthGuardados.swift). Falta que
+  Kurth lo pruebe arrastrando y cerrando una guardada.
+
 - ✅ Sin pestañas: "Ah, peace.", barra lateral a la vista y la URL lista para escribir (`bf01f69`).
 - ✅ Modelo, esfuerzo, permisos y rápido en el chat del agente (`b12f15b`).
 - ✅ Barra lateral flotante con el mismo material que la fija (`865b4dc`) y redimensionable (`42e7f34`).

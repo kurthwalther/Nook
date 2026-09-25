@@ -74,6 +74,7 @@ struct NookApp: App {
                     .onAppear {
                         setupApplicationLifecycle()
                         setupAIServices()
+                        KurthGuardados.acomodar(tabs: browserManager.tabs) // kurth: carpetas solo en Guardados
                         KurthSync.shared.arrancar(tabs: browserManager.tabs) // kurth: iCloud Drive (KurthSync.swift)
                     }
                 

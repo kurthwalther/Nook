@@ -58,10 +58,10 @@ struct SpaceView: View {
 
         ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: NookDesign.Spacing.sectionGap) {
-                if !pinned.isEmpty {
-                    sectionList(.pinned(spaceID: spaceID), rows: pinned, split: split, showsTail: false)
-                        .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .top)))
-                }
+                // kurth: Guardados siempre a la vista, también vacía (KurthGuardados.swift): sin ella
+                // no había dónde soltar ni dónde crear una carpeta, y todo terminaba abajo.
+                sectionList(.pinned(spaceID: spaceID), rows: pinned, split: split, showsTail: false)
+                    .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .top)))
 
                 VStack(spacing: NookDesign.Spacing.sectionGap) {
                     separatorAndNewTab(regular: regular)
@@ -112,6 +112,10 @@ struct SpaceView: View {
                                 }
                             }
                     }
+                }
+
+                if allRows.isEmpty, case .pinned = section {
+                    KurthGuardadosVacio() // kurth
                 }
 
                 if showsTail {

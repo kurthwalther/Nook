@@ -343,6 +343,13 @@ extension TabsController {
     // MARK: - Move
 
     public func move(_ itemID: UUID, to parent: Parent, after: UUID?) {
+        // kurth: una carpeta no baja a las pestañas del día: va al final de Guardados (las fijadas
+        // de ese Space), como en Arc. Lo que está en una carpeta se guarda (Kurth, 24 sep).
+        var parent = parent, after = after
+        if case .tabs(let spaceID) = parent, item(itemID)?.isFolder == true {
+            parent = .pinned(spaceID: spaceID)
+            after = children(of: parent).last(where: { $0.id != itemID })?.id
+        }
         guard let owner = owner(ofItem: itemID) else { return }
         let current = session(for: itemID)
         let wasSynced = tree(owner).scope(of: itemID) == .synced
@@ -444,6 +451,12 @@ extension TabsController {
 
     @discardableResult
     public func createFolder(title: String, in parent: Parent, after: UUID?) -> UUID? {
+        // kurth: una carpeta nueva pedida en las pestañas del día se crea al final de Guardados.
+        var parent = parent, after = after
+        if case .tabs(let spaceID) = parent {
+            parent = .pinned(spaceID: spaceID)
+            after = children(of: parent).last?.id
+        }
         let owner: TabsController.Owner?
         switch parent {
         case .favorites(let spaceID), .pinned(let spaceID), .tabs(let spaceID): owner = self.owner(ofSpace: spaceID)
