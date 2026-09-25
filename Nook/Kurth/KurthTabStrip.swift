@@ -38,6 +38,8 @@ struct KurthTabStrip: View {
     @State private var hovered: UUID?
     /// Acaba de copiar la URL: el ícono es una palomita 1.2 s.
     @State private var copiado = false
+    /// Ancho del dominio de la pestaña activa en reposo; se fija mientras se ve el ícono de copiar.
+    @State private var anchoDominio: CGFloat = 0
     /// Arrastre para reordenar: qué segmento, cuánto se ha movido y dónde estaba cada uno al
     /// empezar (las medidas en vivo ya incluyen los desplazamientos, así que no sirven).
     @State private var dragging: UUID?
@@ -263,14 +265,24 @@ struct KurthTabStrip: View {
                 // (Kurth, 24 sep). Se cierra con clic derecho.
                 leadingIcon(entry, session: session, showsClose: isHovered && (isActive || showsTitle))
                 if isActive {
-                    // La cápsula de siempre: dominio y recargar.
-                    Text(url.map(KurthTopBarView.shortHost) ?? tabs.title(for: entry.item))
-                        .font(NookDesign.Font.body)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .truncationMode(.head)
-                        .frame(minWidth: KurthTopBarView.addressMinWidth - 2 * KurthTopBarView.capsuleInset - 2 * (NookDesign.Size.favicon + 6))
-                    if let url { copyButton(url, visible: isHovered) }
+                    // La cápsula de siempre: dominio y recargar. Al pasar el mouse, copiar entra
+                    // entre los dos y el dominio se corta por el principio para hacerle lugar: el
+                    // ancho en reposo se mide y se fija mientras el ícono está, así la pestaña no
+                    // cambia de tamaño. Un hueco reservado "se ve feo" (Kurth, 25 sep).
+                    let mostrarCopiar = url != nil && (isHovered || copiado)
+                    let minimo = KurthTopBarView.addressMinWidth - 2 * KurthTopBarView.capsuleInset - 2 * (NookDesign.Size.favicon + 6)
+                    HStack(spacing: 6) {
+                        Text(url.map(KurthTopBarView.shortHost) ?? tabs.title(for: entry.item))
+                            .font(NookDesign.Font.body)
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                            .truncationMode(.head)
+                            .frame(minWidth: mostrarCopiar ? nil : minimo)
+                        if mostrarCopiar, let url { copyButton(url).transition(.opacity) }
+                    }
+                    .frame(width: mostrarCopiar && anchoDominio > 0 ? anchoDominio : nil, alignment: .trailing)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { if !mostrarCopiar { anchoDominio = $0 } }
+                    .animation(NookDesign.Motion.quick, value: mostrarCopiar)
                     reloadButton
                 } else if showsTitle {
                     Text(tabs.title(for: entry.item))
@@ -335,9 +347,8 @@ struct KurthTabStrip: View {
     }
 
     /// Copiar la URL de la pestaña activa: aparece al pasar el mouse por la pestaña, a la izquierda
-    /// de recargar, como en Arc. El hueco queda siempre para que la tira no cambie de ancho al
-    /// entrar y salir el mouse (Kurth, 25 sep). ⌘⇧C hace lo mismo.
-    private func copyButton(_ url: URL, visible: Bool) -> some View {
+    /// de recargar, como en Arc, y se queda mientras muestra la palomita. ⌘⇧C hace lo mismo.
+    private func copyButton(_ url: URL) -> some View {
         Button("Copiar URL", systemImage: copiado ? "checkmark" : "link") {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(url.absoluteString, forType: .string)
@@ -347,9 +358,6 @@ struct KurthTabStrip: View {
             }
         }
         .kurthFieldIcon()
-        .opacity(visible || copiado ? 1 : 0)
-        .allowsHitTesting(visible || copiado)
-        .animation(NookDesign.Motion.quick, value: visible)
         .help("Copiar URL (⌘⇧C)")
     }
 
