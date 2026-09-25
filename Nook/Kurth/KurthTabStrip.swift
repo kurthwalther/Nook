@@ -6,8 +6,8 @@
 //  Pestañas compactas como las de Safari 15 (macOS Monterey): las pestañas del Space viven en la
 //  misma cápsula que la dirección, como segmentos de un control segmentado. La activa es la cápsula
 //  de siempre (dominio y recargar) con un relleno que la distingue; las demás, ícono y título, o
-//  solo ícono si Kurth lo pide (kurth.compactTabs = icons, como en iPad). Los favoritos van siempre
-//  como ícono, igual que las fijadas de Safari.
+//  solo ícono si Kurth lo pide (kurth.compactTabs = icons, como en iPad). Los favoritos van igual
+//  que el resto: Kurth no quiso que se encogieran solos (24 sep).
 //  La tira mide lo que mide su contenido y va centrada, como la cápsula sola (Kurth, 24 sep: "no
 //  hacerse una barra enorme"). Si no cabe, se desplaza de lado en vez de encimarse a los botones.
 //  Se enciende con kurth.tabLayout = compact (clic derecho en la barra o kurth_set_settings).
@@ -38,18 +38,17 @@ struct KurthTabStrip: View {
     private var tabs: TabsController { browserManager.tabs }
     private var selectedID: UUID? { tabs.selectedItemID(in: windowState) }
 
-    /// Un segmento por pestaña: favoritos primero (solo ícono) y luego lo que muestra la barra
-    /// lateral, en su orden, sin carpetas.
+    /// Un segmento por pestaña: favoritos primero y luego lo que muestra la barra lateral, en su
+    /// orden, sin carpetas.
     private struct Entry: Identifiable {
         let item: Item
-        let iconOnly: Bool
         var id: UUID { item.id }
     }
 
     private var entries: [Entry] {
         guard let spaceID = windowState.spaceID else { return [] }
-        let favorites = tabs.favorites(of: spaceID).map { Entry(item: $0, iconOnly: true) }
-        let rows = tabs.rows(space: spaceID).filter { !$0.item.isFolder }.map { Entry(item: $0.item, iconOnly: false) }
+        let favorites = tabs.favorites(of: spaceID).map { Entry(item: $0) }
+        let rows = tabs.rows(space: spaceID).filter { !$0.item.isFolder }.map { Entry(item: $0.item) }
         return favorites + rows
     }
 
@@ -124,7 +123,7 @@ struct KurthTabStrip: View {
         let isActive = id == selectedID
         let isHovered = hovered == id
         let session = tabs.session(for: id)
-        let showsTitle = !entry.iconOnly && !iconsOnly
+        let showsTitle = !iconsOnly
         let url = tabs.currentURL(for: entry.item)
 
         return Button {
