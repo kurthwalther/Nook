@@ -57,7 +57,7 @@ enum KurthMCPTools {
         Setting(key: "kurth.passwords", type: "bool", defaultValue: true,
                 info: "Llave de contraseñas de Apple en los campos de usuario y contraseña de las páginas (Touch ID → llena la página). Se aplica a las páginas que se abran después de reiniciar Nook"),
         Setting(key: "kurth.loadingStyle", type: "string", defaultValue: "dots",
-                info: "Indicador de carga del botón de recargar: dots (símbolo de progreso), spinner (rueda de macOS), rotate (la flecha girando) o ring (arco fino)"),
+                info: "Indicador de carga del botón de recargar: dots, claude (la flor), rays, dotted, spinner (rueda de macOS), rotate (la flecha girando), ring (arco fino), bounce (tres puntos) o bars (tres barras)"),
         Setting(key: "kurth.loadingDemo", type: "bool", defaultValue: false,
                 info: "Deja el botón de recargar en estado de carga para comparar indicadores sin esperar a una página"),
         Setting(key: "kurth.aiSidebarWidth", type: "number", defaultValue: 330.0,

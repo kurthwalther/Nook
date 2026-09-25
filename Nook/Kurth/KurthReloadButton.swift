@@ -49,20 +49,45 @@ struct KurthReloadButton: View {
     }
 }
 
-/// Las cuatro variantes del indicador, todas en el gris de los íconos de la barra.
+/// Las variantes del indicador, todas en el gris de los íconos de la barra y de 11 a 14 pt.
+/// Un loader de CSS o de Lottie no entra tal cual en un botón nativo, pero casi todos son formas
+/// simples animadas: se reconstruyen aquí con TimelineView (un reloj que redibuja la vista en
+/// cada cuadro) o con los efectos de SF Symbols.
 struct KurthLoadingIndicator: View {
     let estilo: String
     @State private var giro = false
 
     static let estilos: [(clave: String, nombre: String)] = [
         ("dots", "Puntos (símbolo de progreso)"),
+        ("claude", "Flor de Claude (como este chat)"),
+        ("rays", "Rayos (rueda, versión SF)"),
+        ("dotted", "Anillo de puntos"),
         ("spinner", "Rueda clásica de macOS"),
         ("rotate", "La flecha girando"),
         ("ring", "Arco fino"),
+        ("bounce", "Tres puntos que brincan"),
+        ("bars", "Tres barras"),
     ]
+
+    /// Los cuadros del spinner de Claude Code: la flor crece y se cierra. El asterisco de ocho
+    /// puntas lleva el selector de presentación de texto para que no salga como emoji.
+    private static let flor = ["·", "✢", "✳\u{FE0E}", "✶", "✻", "✽", "✻", "✶", "✳\u{FE0E}", "✢"]
 
     var body: some View {
         switch estilo {
+        case "claude":
+            TimelineView(.periodic(from: .now, by: 0.1)) { ctx in
+                let i = Int(ctx.date.timeIntervalSinceReferenceDate * 10) % Self.flor.count
+                Text(Self.flor[i])
+                    .font(.system(size: 14, weight: .medium))
+                    .frame(width: 14, height: 14)
+            }
+        case "rays":
+            Image(systemName: "rays")
+                .symbolEffect(.variableColor.iterative.dimInactiveLayers.nonReversing, isActive: true)
+        case "dotted":
+            Image(systemName: "circle.dotted")
+                .symbolEffect(.variableColor.cumulative.dimInactiveLayers.nonReversing, isActive: true)
         case "spinner":
             // El NSProgressIndicator de siempre: la rueda de rayos que se apagan.
             ProgressView()
@@ -83,6 +108,31 @@ struct KurthLoadingIndicator: View {
                 .rotationEffect(.degrees(giro ? 360 : 0))
                 .animation(.linear(duration: 0.9).repeatForever(autoreverses: false), value: giro)
                 .onAppear { giro = true }
+        case "bounce":
+            // Tres puntos que brincan por turnos, como el "escribiendo…" de Mensajes.
+            TimelineView(.animation) { ctx in
+                let t = ctx.date.timeIntervalSinceReferenceDate
+                HStack(spacing: 2) {
+                    ForEach(0..<3, id: \.self) { i in
+                        Circle()
+                            .frame(width: 3, height: 3)
+                            .offset(y: -max(0, sin(t * 7 - Double(i) * 1.1)) * 3)
+                    }
+                }
+                .frame(width: 14, height: 12)
+            }
+        case "bars":
+            // Tres barras que suben y bajan desfasadas, como un ecualizador chico.
+            TimelineView(.animation) { ctx in
+                let t = ctx.date.timeIntervalSinceReferenceDate
+                HStack(spacing: 2) {
+                    ForEach(0..<3, id: \.self) { i in
+                        RoundedRectangle(cornerRadius: 1)
+                            .frame(width: 2.5, height: 5 + 7 * (0.5 + 0.5 * sin(t * 7 - Double(i) * 1.1)))
+                    }
+                }
+                .frame(width: 14, height: 12)
+            }
         default:
             // El símbolo de progreso de SF con su efecto de color por capas.
             Image(systemName: "progress.indicator")
