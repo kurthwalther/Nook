@@ -84,27 +84,13 @@ struct KurthTabStrip: View {
     /// que eso se desplaza por dentro.
     static var maxWidth: CGFloat { KurthEscala.pt(7 * 120) }
 
-    /// Cuánto crece el segmento con el mouse cuando le entra la X (solo íconos, en reposo): el ancho
-    /// de la X más la separación. No cuenta para pasar a modo scroll, y con scroll el contenido se
-    /// corre eso a la izquierda para que el favicon no quede bajo la X (Kurth, 25 sep).
-    private var crecimientoDeX: CGFloat {
-        guard iconsOnly, let h = hovered, h != selectedID, dragging == nil else { return 0 }
-        return KurthEscala.pt(NookDesign.Size.favicon) + 6
-    }
-
     var body: some View {
         let available = min(slotWidth, Self.maxWidth)
-        // La X de solo íconos suma 22 pt mientras está; no cuenta para pasar a modo scroll, o la tira
-        // brincaba al ancho fijo y crecía a los dos lados (Kurth, 25 sep).
-        let overflows = available > 0 && segmentsWidth - crecimientoDeX + plusWidth + 2 * Self.segmentInset > available
+        let overflows = available > 0 && segmentsWidth + plusWidth + 2 * Self.segmentInset > available
         Color.clear
             .frame(maxWidth: .infinity)
             .frame(height: KurthTopBarView.capsuleHeight)
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { slotWidth = $0 }
-            // Centrada: cuando entra la X de solo íconos, crece la mitad a cada lado (Kurth, 25 sep:
-            // prefirió eso a un anclaje que en su pantalla no se comportaba). El favicon se mueve 11
-            // pt y un clic rápido donde estaba cae en el hueco entre la X y el favicon, que sigue
-            // seleccionando la pestaña.
             .overlay {
                 capsule(overflows: overflows, width: available)
             }
@@ -119,10 +105,7 @@ struct KurthTabStrip: View {
             if overflows {
                 ScrollViewReader { proxy in
                     ScrollView(.horizontal, showsIndicators: false) {
-                        // Con scroll el contenido crece a la derecha: se corre entero a la izquierda
-                        // lo que creció (salvo en la primera pestaña, que no tiene nada a su izquierda).
                         segments
-                            .offset(x: hovered == entries.first?.id ? 0 : -crecimientoDeX)
                     }
                     .scrollEdgeEffectHidden(true, for: .horizontal)
                     // Desvanecido en la punta hacia la que hay más pestañas; en la que ya no hay,
@@ -175,15 +158,21 @@ struct KurthTabStrip: View {
                 if index > 0 {
                     // Siempre, también junto a la activa y a la del mouse (Kurth, 25 sep: "que no
                     // solo dividan las que están en reposo"); solo se van mientras se arrastra.
-                    divider(hidden: dragging != nil,
+                    // En solo íconos, la X de cerrar se dibuja sobre este hueco: a la izquierda de la
+                    // pestaña con el mouse, o a la derecha si es la primera. Ahí la línea se esconde.
+                    let xAqui = iconsOnly && dragging == nil
+                        && ((hovered == entry.id && entry.id != selectedID)
+                            || (index == 1 && hovered == entries[0].id && entries[0].id != selectedID))
+                    divider(hidden: dragging != nil || xAqui,
                             antesActiva: entries[index - 1].id == selectedID,
                             despuesActiva: entry.id == selectedID)
                 }
-                segment(entry)
+                segment(entry, esPrimera: index == 0)
                     .offset(x: shift(of: entry.id, in: entries))
                     // Los demás se corren con resorte; el arrastrado sigue al mouse sin retraso.
                     .animation(dragging == entry.id ? nil : NookDesign.Motion.spring, value: insertion)
-                    .zIndex(dragging == entry.id ? 1 : 0)
+                    // El arrastrado y el que tiene el mouse (su X se asoma sobre el vecino) van encima.
+                    .zIndex(dragging == entry.id || hovered == entry.id ? 1 : 0)
                     .id(entry.id)
                     .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("strip")) } action: { frames[entry.id] = $0 }
                     .simultaneousGesture(reorderGesture(entry, in: entries))
@@ -296,7 +285,7 @@ struct KurthTabStrip: View {
 
     // MARK: - Segmento
 
-    private func segment(_ entry: Entry) -> some View {
+    private func segment(_ entry: Entry, esPrimera: Bool) -> some View {
         let id = entry.item.id
         let isActive = id == selectedID
         let isHovered = hovered == id
@@ -315,12 +304,20 @@ struct KurthTabStrip: View {
         } label: {
             HStack(spacing: 6) {
                 // Con título (o activa), el favicon se vuelve la X al pasar el mouse. Solo ícono: la X
-                // entra completa a la izquierda del favicon; la tira compensa el crecimiento (ver
-                // `crecimientoDeX`) para que el favicon y lo de la derecha no se muevan (Kurth, 25 sep).
-                if isHovered && !isActive && !showsTitle {
-                    closeButton(entry).transition(.opacity)
-                }
+                // no entra al layout (movería el favicon justo cuando el usuario va a darle clic); se
+                // dibuja como capa sobre el hueco de 23 pt que ya hay entre favicons, a la izquierda,
+                // o a la derecha si es la primera pestaña (Kurth, 25 sep).
                 leadingIcon(entry, session: session, isActive: isActive, showsClose: isHovered && (isActive || showsTitle))
+                    .overlay(alignment: esPrimera ? .trailing : .leading) {
+                        if isHovered && !isActive && !showsTitle {
+                            // Centrada en el hueco: 8 de relleno + 7 de línea + 8 de relleno = 23; la X
+                            // de 16 va a 3.5 de cada favicon.
+                            let salto = KurthEscala.pt(NookDesign.Size.favicon) + 3.5
+                            closeButton(entry)
+                                .offset(x: esPrimera ? salto : -salto)
+                                .transition(.opacity)
+                        }
+                    }
                 if isActive {
                     // La cápsula de siempre: dominio y recargar. Copiar la URL vive en el clic
                     // derecho y en ⌘⇧C; un ícono más al pasar el mouse sobraba (Kurth, 25 sep).
@@ -349,7 +346,9 @@ struct KurthTabStrip: View {
                     Capsule().fill(.primary.opacity(0.05))
                 }
             }
-            .contentShape(Capsule())
+            // En solo íconos el área que sostiene el hover y el clic se extiende al hueco vecino, donde
+            // vive la X: si no, al ir por la X el mouse salía del segmento y la X desaparecía.
+            .contentShape(iconsOnly && !isActive ? AnyShape(Capsule().inset(by: -12)) : AnyShape(Capsule()))
             // Fuente del resalte: el fondo de la tira toma el marco del segmento seleccionado.
             .matchedGeometryEffect(id: id, in: strip, isSource: true)
         }
