@@ -501,7 +501,10 @@
       if (!sel || sel.isCollapsed || !clean(sel.toString())) return null;
       const r = sel.getRangeAt(0);
       const c = contexto(r, 40);
-      return { texto: cut(clean(r.toString()), 2000), prefijo: c.prefijo, sufijo: c.sufijo };
+      // Dónde está en pantalla (px CSS del viewport): Nook saca de ahí el recorte de captura.
+      const b = r.getBoundingClientRect();
+      return { texto: cut(clean(r.toString()), 2000), prefijo: c.prefijo, sufijo: c.sufijo,
+               rect: { x: b.left, y: b.top, w: b.width, h: b.height } };
     },
 
     // Vuelve a dibujar marcas guardadas (persistencia). Cajas: por su contenedor y posición

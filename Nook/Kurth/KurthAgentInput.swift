@@ -210,9 +210,19 @@ struct KurthAgentInput: View {
                 .foregroundStyle(.white)
                 .frame(minWidth: 16, minHeight: 16)
                 .background(Color(red: 0.04, green: 0.52, blue: 1), in: Circle())
-            Image(systemName: ref.tipo == "texto" ? "text.quote" : "viewfinder")
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
+            // Con recorte de captura, su miniatura: así se ve que va la imagen, no solo el código.
+            if let datos = ref.recorte, let imagen = NSImage(data: datos) {
+                Image(nsImage: imagen)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 22, height: 16)
+                    .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 3, style: .continuous).strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5))
+            } else {
+                Image(systemName: ref.tipo == "texto" ? "text.quote" : "viewfinder")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
             Text(ref.resumen)
                 .font(NookDesign.Font.caption)
                 .lineLimit(1)

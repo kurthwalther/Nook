@@ -121,10 +121,24 @@ final class KurthSenalar {
         let id = "k" + UUID().uuidString.prefix(6).lowercased()
         let numero = siguienteNumero
         siguienteNumero += 1
+        // Como se ve y como está en el código (Kurth, 25 sep: "a veces el código puede ser diferente
+        // al front"): el recorte de captura del texto con aire alrededor, y los elementos de esa zona.
+        var recorte: Data?
+        var elementos: [String] = []
+        if let r = sel["rect"] as? [String: Any],
+           let x = (r["x"] as? NSNumber)?.doubleValue, let y = (r["y"] as? NSNumber)?.doubleValue,
+           let w = (r["w"] as? NSNumber)?.doubleValue, let h = (r["h"] as? NSNumber)?.doubleValue, w > 0, h > 0 {
+            let css = CGRect(x: x, y: y, width: w, height: h)
+            let contenido = try? await KurthCopilot.enMarcas(webView, "return window.__kurth.marcas.contenido({x, y, w, h})",
+                                                             ["x": x, "y": y, "w": w, "h": h]) as? [String: Any]
+            elementos = contenido?["elementos"] as? [String] ?? []
+            let enVista = Self.aVista(css, webView).insetBy(dx: -32, dy: -24).intersection(webView.bounds)
+            if !enVista.isEmpty { recorte = await Self.recorte(webView, enVista) }
+        }
         _ = try? await KurthCopilot.enMarcas(webView, "return window.__kurth.marcas.texto({id, autor: 'tu', texto, prefijo, sufijo, numero})",
                                            ["id": id, "texto": texto, "prefijo": sel["prefijo"] ?? "", "sufijo": sel["sufijo"] ?? "", "numero": numero])
         referencias.append(Referencia(id: id, numero: numero, tipo: "texto", tabId: sesion.itemID, url: sesion.url.absoluteString,
-                                      titulo: sesion.title, texto: texto, elementos: [], imagenes: [], recorte: nil))
+                                      titulo: sesion.title, texto: texto, elementos: elementos, imagenes: [], recorte: recorte))
         pestañaDeMarca[id] = sesion.itemID
         guardarMarca(url: sesion.url, ["id": id, "autor": "tu", "tipo": "texto", "numero": numero,
                                        "cita": texto, "prefijo": sel["prefijo"] ?? "", "sufijo": sel["sufijo"] ?? "", "nota": ""])
@@ -149,7 +163,9 @@ final class KurthSenalar {
     /// El texto que describe una referencia para el agente.
     static func descripcion(_ r: Referencia) -> String {
         var s = "[Señalado \(r.numero)] Kurth señaló "
-        s += r.tipo == "texto" ? "este texto" : "esta zona (va el recorte de captura)"
+        s += r.tipo == "texto" ? "este texto" : "esta zona"
+        // El recorte es cómo lo ve él: si no cuadra con el código, manda lo que se ve.
+        if r.recorte != nil { s += " (va el recorte de captura: así lo ve él; si no cuadra con el código, manda lo que se ve)" }
         s += " en «\(r.titulo)» (\(r.url)):"
         if !r.texto.isEmpty { s += "\nTexto: «\(r.texto)»" }
         if !r.elementos.isEmpty { s += "\nElementos adentro:\n" + r.elementos.joined(separator: "\n") }
@@ -283,6 +299,13 @@ final class KurthSenalar {
         let escala = max(webView.pageZoom * webView.magnification, 0.01)
         let m = webView.obscuredContentInsets
         return CGRect(x: (r.minX - m.left) / escala, y: (r.minY - m.top) / escala, width: r.width / escala, height: r.height / escala)
+    }
+
+    /// Al revés que aViewport: px CSS del viewport → puntos de la vista web.
+    static func aVista(_ r: CGRect, _ webView: WKWebView) -> CGRect {
+        let escala = max(webView.pageZoom * webView.magnification, 0.01)
+        let m = webView.obscuredContentInsets
+        return CGRect(x: r.minX * escala + m.left, y: r.minY * escala + m.top, width: r.width * escala, height: r.height * escala)
     }
 
     private static func recorte(_ webView: WKWebView, _ r: CGRect) async -> Data? {
