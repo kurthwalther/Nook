@@ -75,13 +75,13 @@ struct KurthTabStrip: View {
     }
 
     /// Alto del resalte de la pestaña activa: la cápsula (28) menos 3 pt por lado.
-    static let segmentHeight: CGFloat = KurthTopBarView.capsuleHeight - 6
+    static var segmentHeight: CGFloat { KurthTopBarView.capsuleHeight - KurthEscala.pt(6) }
     static let segmentInset: CGFloat = 3
     /// Un título de pestaña inactiva no pasa de esto; más largo se corta con puntos.
-    static let titleMaxWidth: CGFloat = 150
+    static var titleMaxWidth: CGFloat { KurthEscala.pt(150) }
     /// Tope de la tira aunque sobre ranura: unas 7 pestañas de ancho medio (Kurth, 24 sep). Más
     /// que eso se desplaza por dentro.
-    static let maxWidth: CGFloat = 7 * 120
+    static var maxWidth: CGFloat { KurthEscala.pt(7 * 120) }
 
     var body: some View {
         let available = min(slotWidth, Self.maxWidth)
@@ -259,7 +259,7 @@ struct KurthTabStrip: View {
     private func divider(hidden: Bool, antesActiva: Bool = false, despuesActiva: Bool = false) -> some View {
         Capsule()
             .fill(.primary.opacity(0.4))
-            .frame(width: 1, height: 16)
+            .frame(width: 1, height: KurthEscala.pt(16))
             .padding(.leading, 3 + (antesActiva ? KurthTopBarView.capsuleInset : 0))
             .padding(.trailing, 3 + (despuesActiva ? KurthTopBarView.capsuleInset : 0))
             .opacity(hidden ? 0 : 1)
@@ -296,16 +296,16 @@ struct KurthTabStrip: View {
                     // La cápsula de siempre: dominio y recargar. Copiar la URL vive en el clic
                     // derecho y en ⌘⇧C; un ícono más al pasar el mouse sobraba (Kurth, 25 sep).
                     Text(url.map(KurthTopBarView.shortHost) ?? tabs.title(for: entry.item))
-                        .font(NookDesign.Font.body)
+                        .font(KurthEscala.fuente(13))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                         .truncationMode(.tail)
-                        .frame(minWidth: KurthTopBarView.addressMinWidth - 2 * KurthTopBarView.capsuleInset - 2 * (NookDesign.Size.favicon + 6))
+                        .frame(minWidth: KurthTopBarView.addressMinWidth - 2 * KurthTopBarView.capsuleInset - 2 * (KurthEscala.pt(NookDesign.Size.favicon) + 6))
                     if let session, session.hasAudioContent || session.isAudioMuted || pausadas.contains(id) { mediaButtons(session, id: id) }
                     reloadButton
                 } else if showsTitle {
                     Text(tabs.title(for: entry.item))
-                        .font(NookDesign.Font.bodyRegular)
+                        .font(KurthEscala.fuente(13, .regular))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -381,7 +381,7 @@ struct KurthTabStrip: View {
                     .transition(.opacity)
             }
         }
-        .frame(width: NookDesign.Size.favicon, height: NookDesign.Size.favicon)
+        .frame(width: KurthEscala.pt(NookDesign.Size.favicon), height: KurthEscala.pt(NookDesign.Size.favicon))
     }
 
     /// La X de cerrar, del tamaño del favicon.
@@ -391,9 +391,9 @@ struct KurthTabStrip: View {
         }
         .labelStyle(.iconOnly)
         .buttonStyle(.plain)
-        .font(.system(size: 10, weight: .semibold))
+        .font(KurthEscala.fuente(10, .semibold))
         .foregroundStyle(.secondary)
-        .frame(width: NookDesign.Size.favicon, height: NookDesign.Size.favicon)
+        .frame(width: KurthEscala.pt(NookDesign.Size.favicon), height: KurthEscala.pt(NookDesign.Size.favicon))
     }
 
     /// Pausa/play y bocina: existen mientras la pestaña suena, está silenciada o Kurth la pausó

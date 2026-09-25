@@ -40,6 +40,8 @@ struct KurthTopBarView: View {
     @AppStorage("kurth.capsuleBlur") private var capsuleBlur = false
     /// En "capsules", capa ligera del color del sitio dentro del vidrio, para legibilidad.
     @AppStorage("kurth.capsuleTintOpacity") private var capsuleTintOpacity = 0.35
+    /// Tamaño de la barra (KurthEscala); aquí solo para que la vista se redibuje al cambiarlo.
+    @AppStorage("kurth.barScale") private var barScale = 1.0
     /// Pestañas: "separate" (solo en la barra lateral) o "compact" (en la barra, como Safari 15).
     @AppStorage("kurth.tabLayout") private var tabLayout = "separate"
     /// En compact, "titles" (ícono y título) o "icons" (solo ícono, como iPad).
@@ -63,11 +65,11 @@ struct KurthTopBarView: View {
     private var isCompact: Bool { tabLayout == "compact" }
 
     /// Con cápsulas de 28 pt, 44 deja 8 pt arriba y abajo, igual que a los lados; en "tinted" 40.
-    private var barHeight: CGFloat { isCapsules ? 44 : KurthChrome.topBarHeight }
+    private var barHeight: CGFloat { isCapsules ? KurthEscala.pt(44) : KurthChrome.topBarHeight }
     /// Separación de las cápsulas con la orilla de la página: la misma arriba y al lado (8/8),
     /// que es el equilibrio que queda cuando una cápsula no puede ser concéntrica con la esquina.
-    private var sidePadding: CGFloat { isCapsules ? 8 : NookDesign.Spacing.sm }
-    private var iconSize: CGFloat { isCapsules ? 24 : NookDesign.Size.iconButton }
+    private var sidePadding: CGFloat { KurthEscala.pt(isCapsules ? 8 : NookDesign.Spacing.sm) }
+    private var iconSize: CGFloat { KurthEscala.pt(isCapsules ? 24 : NookDesign.Size.iconButton) }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -266,7 +268,7 @@ struct KurthTopBarView: View {
                 // Cápsula: el dominio centrado y los íconos anclados a las orillas, no al texto.
                 // Mide lo que ocupa el dominio (mínimo `addressMinWidth`) y crece si es largo.
                 hostText(tab)
-                    .padding(.horizontal, Self.capsuleInset + 20 + NookDesign.Spacing.lg)
+                    .padding(.horizontal, Self.capsuleInset + KurthEscala.pt(20) + NookDesign.Spacing.lg)
                     .frame(minWidth: Self.addressMinWidth)
                     .frame(height: Self.capsuleHeight)
                     .overlay(alignment: .leading) {
@@ -298,14 +300,15 @@ struct KurthTopBarView: View {
         }
     }
 
-    static let addressMinWidth: CGFloat = 130
-    static let capsuleHeight: CGFloat = 28
+    /// Medidas base de la barra, a la escala de KurthEscala (normal 130 / 28 / 8).
+    static var addressMinWidth: CGFloat { KurthEscala.pt(130) }
+    static var capsuleHeight: CGFloat { KurthEscala.pt(28) }
     /// Aire entre los íconos y la orilla de cada cápsula.
-    static let capsuleInset: CGFloat = 8
+    static var capsuleInset: CGFloat { KurthEscala.pt(8) }
 
     private func hostText(_ tab: PageSession) -> some View {
         Text(Self.shortHost(tab.url))
-            .font(NookDesign.Font.body)
+            .font(KurthEscala.fuente(13))
             .foregroundStyle(isHoveringAddress ? .primary : .secondary)
             .truncationMode(.head)
             .lineLimit(1)
@@ -429,8 +432,8 @@ extension View {
     func kurthFieldIcon() -> some View {
         self
             .labelStyle(.iconOnly)
-            .font(NookDesign.Font.caption)
-            .buttonStyle(KurthBarButtonStyle(size: 20))
+            .font(KurthEscala.fuente(11))
+            .buttonStyle(KurthBarButtonStyle(size: KurthEscala.pt(20)))
             .foregroundStyle(.secondary)
     }
 }
@@ -632,9 +635,16 @@ struct KurthBarSettingsMenu: View {
     @AppStorage("kurth.tabLayout") private var tabLayout = "separate"
     @AppStorage("kurth.compactTabs") private var compactTabs = "titles"
     @AppStorage("kurth.barAutoHide") private var autoHide = false
+    @AppStorage("kurth.barScale") private var barScale = 1.0
 
     var body: some View {
         Toggle("Ocultar la barra (aparece al pasar el mouse)", isOn: $autoHide)
+        Picker("Tamaño de la barra", selection: Binding(
+            get: { barScale > 1 ? 1.25 : 1.0 },
+            set: { barScale = $0 })) {
+            Text("Normal").tag(1.0)
+            Text("Grande (25 % más)").tag(1.25)
+        }
         Divider()
         Picker("Estilo de barra", selection: $barStyle) {
             Text("Cápsulas (tipo Safari)").tag("capsules")

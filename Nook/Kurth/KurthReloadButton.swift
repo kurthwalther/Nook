@@ -54,7 +54,7 @@ struct KurthReloadButton: View {
 struct KurthLoadingIndicator: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private let lado: CGFloat = 12
+    private var lado: CGFloat { KurthEscala.pt(12) }
     private let ms: Double = 700
 
     var body: some View {

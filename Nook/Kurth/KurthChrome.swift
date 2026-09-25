@@ -15,7 +15,8 @@ enum KurthChrome {
     /// La barra superior flota sobre la página, con blur, en lugar de ir apilada encima de ella.
     static let floatingTopBar = true
 
-    static let topBarHeight: CGFloat = 40
+    /// A la escala de la barra (KurthEscala): 40 en normal, 60 en grande.
+    static var topBarHeight: CGFloat { KurthEscala.pt(40) }
     /// Desvanecido bajo la barra: el blur se apaga poco a poco en vez de cortar con una línea.
     static let topBarFade: CGFloat = 12
 

@@ -38,15 +38,15 @@ struct KurthAddressInput: View {
     @Environment(CommandPalette.self) private var commandPalette
     @State private var alPasar = false
 
-    static let width: CGFloat = 300
+    static var width: CGFloat { KurthEscala.pt(300) }
 
     var body: some View {
         HStack(spacing: NookDesign.Spacing.sm) {
             Image(systemName: "magnifyingglass")
-                .font(NookDesign.Font.caption)
+                .font(KurthEscala.fuente(11))
                 .foregroundStyle(.secondary)
             Text("Busca o escribe una dirección")
-                .font(NookDesign.Font.body)
+                .font(KurthEscala.fuente(13))
                 .foregroundStyle(alPasar ? .primary : .secondary)
                 .lineLimit(1)
             Spacer(minLength: 0)
