@@ -31,7 +31,7 @@ struct SpaceCreationDialog: DialogPresentable {
         DialogHeader(
             icon: "folder.badge.plus",
             title: "Create a New Space",
-            subtitle: "Organize your tabs into a new space"
+            subtitle: "Its own tabs, logins, cookies and history, separate from your other spaces"
         )
     }
 

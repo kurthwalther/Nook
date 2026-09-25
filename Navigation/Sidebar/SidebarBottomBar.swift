@@ -72,12 +72,8 @@ struct SidebarBottomBar: View {
                     tabs.createFolderForRename(in: .tabs(spaceID: spaceID), after: nil)
                 }
             }
-            
-            Divider()
-            
-            Button("New Profile", systemImage: "person.badge.plus") {
-                // TODO: Show profile creation dialog
-            }
+            // "New Profile" lived here with an empty action: since spaces own their data
+            // (Packages/NookWeb/Profile.swift) a space *is* the profile, so the item is gone.
         } label:{
             Label("Actions", systemImage: "plus")
                 .labelStyle(.iconOnly)
