@@ -282,12 +282,8 @@ struct KurthTopBarView: View {
         .help("Copiar URL")
     }
 
-    private var reloadButton: Button<Label<Text, Image>> {
-        Button(session?.isLoading == true ? "Detener" : "Recargar",
-               systemImage: session?.isLoading == true ? "xmark" : "arrow.clockwise") {
-            if session?.isLoading == true { session?.stop() } else { session?.refresh() }
-        }
-    }
+    /// Recargar, cargando (gira) o detener (X, solo al pasar el mouse): KurthReloadButton.swift.
+    private var reloadButton: some View { KurthReloadButton(session: session) }
 
     /// Solo el dominio, sin "www.": la ruta y el título salen de la barra.
     static func shortHost(_ url: URL) -> String {

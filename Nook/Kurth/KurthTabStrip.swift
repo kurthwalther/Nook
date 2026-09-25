@@ -331,15 +331,13 @@ struct KurthTabStrip: View {
         .frame(width: NookDesign.Size.favicon, height: NookDesign.Size.favicon)
     }
 
-    /// Recargar o detener, sobre la página de esta ventana (inerte si otra ventana la tiene).
+    /// Recargar, cargando (gira) o detener (X, solo al pasar el mouse), sobre la página de esta
+    /// ventana (inerte si otra ventana la tiene). El botón vive en KurthReloadButton.swift.
     private var reloadButton: some View {
         let session = tabs.controllableSession(in: windowState)
-        let loading = session?.isLoading == true
-        return Button(loading ? "Detener" : "Recargar", systemImage: loading ? "xmark" : "arrow.clockwise") {
-            if loading { session?.stop() } else { session?.refresh() }
-        }
-        .kurthFieldIcon()
-        .disabled(session == nil)
+        return KurthReloadButton(session: session)
+            .kurthFieldIcon()
+            .disabled(session == nil)
     }
 
     private var newTabButton: some View {
