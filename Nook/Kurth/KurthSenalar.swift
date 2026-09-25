@@ -255,8 +255,17 @@ final class KurthSenalar {
 
     private final class Canal: NSObject, WKScriptMessageHandler {
         func userContentController(_ controller: WKUserContentController, didReceive mensaje: WKScriptMessage) {
-            guard let cuerpo = mensaje.body as? [String: Any], cuerpo["tipo"] as? String == "pedirMarcas",
-                  let texto = cuerpo["url"] as? String, let webView = mensaje.webView else { return }
+            guard let cuerpo = mensaje.body as? [String: Any], let webView = mensaje.webView else { return }
+            // El encabezado fijo que el script ve pegado arriba (KurthPageState.scriptHeaderColor).
+            if cuerpo["tipo"] as? String == "encabezado" {
+                let rgba = (cuerpo["rgba"] as? [NSNumber])?.map { CGFloat($0.doubleValue) / 255 }
+                MainActor.assumeIsolated {
+                    let color = rgba.flatMap { $0.count == 4 ? NSColor(srgbRed: $0[0], green: $0[1], blue: $0[2], alpha: $0[3]) : nil }
+                    KurthPageState.of(webView).setScriptHeaderColor(color)
+                }
+                return
+            }
+            guard cuerpo["tipo"] as? String == "pedirMarcas", let texto = cuerpo["url"] as? String else { return }
             MainActor.assumeIsolated {
                 let lista = KurthSenalar.shared.marcasGuardadas(para: URL(string: texto))
                 guard !lista.isEmpty else { return }

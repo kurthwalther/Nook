@@ -28,8 +28,16 @@ final class KurthPageState {
     /// Color del encabezado fijo pegado arriba (YouTube, Gmail), o nil si la página no tiene.
     /// Es lo que WebKit usa para su extensión de color sobre la franja tapada.
     private(set) var topHeaderColor: NSColor?
+    /// El mismo encabezado, visto por el script de la página (KurthCopilot.js). WebKit solo lo
+    /// detecta si va de orilla a orilla; el de Robb Report deja 76 pt de cada lado y la página se
+    /// asomaba entre la barra y él (Kurth, 25 sep). Con este, la barra pinta la franja ella misma.
+    private(set) var scriptHeaderColor: NSColor?
 
-    var hasTopHeader: Bool { topHeaderColor != nil }
+    var hasTopHeader: Bool { topHeaderColor != nil || scriptHeaderColor != nil }
+
+    func setScriptHeaderColor(_ color: NSColor?) {
+        if color != scriptHeaderColor { scriptHeaderColor = color }
+    }
 
     var isAtTop: Bool { scrollY <= 1 }
 

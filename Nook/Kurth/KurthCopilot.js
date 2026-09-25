@@ -533,6 +533,70 @@
     if (h && window.top === window) setTimeout(() => h.postMessage({ tipo: 'pedirMarcas', url: location.href }), 600);
   } catch (e) { /* sin canal: marcas solo en vivo */ }
 
+  // Encabezado fijo pegado arriba de lo visible (Robb Report al bajar): su color va a Nook para
+  // pintar la franja detrás de la barra (KurthPageState.scriptHeaderColor). WebKit solo rellena
+  // los encabezados que van de orilla a orilla; este deja márgenes y la página se asomaba encima.
+  // Solo mientras hay scroll, como mucho cada 100 ms, sin frenarlo (passive), y solo avisa si cambia.
+  try {
+    const canal = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.kurthSenalar;
+    if (canal && window.top === window) {
+      const lienzo = document.createElement('canvas');
+      lienzo.width = lienzo.height = 1;
+      const ctx = lienzo.getContext('2d', { willReadFrequently: true });
+      const cache = new Map();
+      // Cualquier color de CSS (rgb, oklch, color(display-p3…)) a [r, g, b, a] de 0 a 255.
+      const aRGBA = (css) => {
+        if (cache.has(css)) return cache.get(css);
+        ctx.clearRect(0, 0, 1, 1);
+        ctx.fillStyle = '#000';
+        ctx.fillStyle = css;
+        ctx.fillRect(0, 0, 1, 1);
+        const d = Array.from(ctx.getImageData(0, 0, 1, 1).data);
+        cache.set(css, d);
+        return d;
+      };
+      const transparente = (css) => !css || css === 'transparent' || /^rgba\(.*,\s*0\)$/.test(css) || /\/\s*0\)$/.test(css);
+      const buscar = () => {
+        const w = innerWidth;
+        for (const f of [0.5, 0.25, 0.75]) {
+          let e = document.elementFromPoint(w * f, 1), color = null;
+          while (e && e !== document.documentElement && e !== document.body) {
+            const s = getComputedStyle(e);
+            if (!color && !transparente(s.backgroundColor)) color = s.backgroundColor;
+            if (s.position === 'fixed' || s.position === 'sticky') {
+              const r = e.getBoundingClientRect();
+              // Su propio fondo manda (es lo que se ve en sus orillas); si no tiene, el de adentro.
+              const propio = transparente(s.backgroundColor) ? color : s.backgroundColor;
+              if (r.top <= 1 && r.height >= 20 && r.width >= w * 0.5 && propio) return aRGBA(propio);
+              break;
+            }
+            e = e.parentElement;
+          }
+        }
+        return null;
+      };
+      let ultimo = 'inicio', agendado = false, ultimaVez = 0;
+      const revisar = () => {
+        agendado = false;
+        ultimaVez = performance.now();
+        const c = buscar();
+        const clave = c ? c.join(',') : '';
+        if (clave === ultimo) return;
+        ultimo = clave;
+        canal.postMessage({ tipo: 'encabezado', rgba: c });
+      };
+      const alMover = () => {
+        if (agendado) return;
+        agendado = true;
+        setTimeout(() => requestAnimationFrame(revisar), Math.max(0, 100 - (performance.now() - ultimaVez)));
+      };
+      addEventListener('scroll', alMover, { passive: true, capture: true });
+      addEventListener('resize', alMover, { passive: true });
+      revisar();
+      setTimeout(revisar, 1200);
+    }
+  } catch (e) { /* sin canal o sin canvas: la barra se queda como WebKit la deje */ }
+
   window.__kurth = {
     marcas,
 

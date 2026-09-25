@@ -110,6 +110,15 @@ struct KurthTopBarView: View {
                 .opacity(colorOpacity)
                 .allowsHitTesting(false)
 
+            // Encabezado fijo que WebKit no rellena porque no va de orilla a orilla: la franja
+            // toma su color para que la página no se asome entre la barra y él (Kurth, 25 sep).
+            topCorners
+                .fill(Color(nsColor: headerFill ?? .clear))
+                .frame(height: barHeight)
+                .opacity(headerFill == nil ? 0 : 1)
+                .allowsHitTesting(false)
+                .animation(.easeOut(duration: 0.15), value: headerFill)
+
             Rectangle()
                 .fill(.primary.opacity(hairlineOpacity))
                 .frame(height: 1 / displayScale)
@@ -138,6 +147,13 @@ struct KurthTopBarView: View {
     }
 
     private var showsBlur: Bool { hasPage && (!isCapsules || capsuleBlur) }
+
+    /// El color del encabezado que solo vio el script (KurthPageState.scriptHeaderColor), mientras
+    /// la página no está hasta arriba. Si WebKit ya lo ve, su propio relleno se encarga.
+    private var headerFill: NSColor? {
+        guard hasPage, !isAtTop, let state = pageState, state.topHeaderColor == nil else { return nil }
+        return state.scriptHeaderColor
+    }
 
     /// Con la capa del sitio las cápsulas se leen mejor, salvo cuando la página tiene encabezado
     /// fijo (YouTube): ahí quedan pegadas a él y el vidrio puro se ve mejor que la capa encima.
@@ -344,7 +360,8 @@ struct KurthTopBarView: View {
 
     /// Íconos grises claros u oscuros según lo que haya detrás.
     private var pageScheme: ColorScheme? {
-        pageColor.map { $0.isPerceivedDark ? .dark : .light }
+        // Con la franja del encabezado pintada, los íconos van sobre su color.
+        (headerFill ?? pageColor).map { $0.isPerceivedDark ? .dark : .light }
     }
 
     /// Semáforos solo con barra lateral a la vista: la fija o la que sale al pasar por el borde.
