@@ -59,6 +59,9 @@ struct KurthWindowTheme: View {
 struct KurthHoverTheme: View {
     @Environment(BrowserWindowState.self) private var windowState
     @Environment(TabsController.self) private var tabs
+    /// Solo el tema, sin el material de abajo: para ponerlo sobre Liquid Glass (la tarjeta del
+    /// agente, KurthAgentHoverOverlay), donde el difuminado ya lo hace el vidrio.
+    var soloTema = false
 
     var body: some View {
         let theme = KurthWindowTheme.theme(window: windowState, tabs: tabs)
@@ -66,7 +69,9 @@ struct KurthHoverTheme: View {
             // El mismo material y el mismo vidrio que el fondo fijo (KurthWindowTheme), pero
             // difuminando la página de abajo. Antes era Liquid Glass y no casaba con el fijo
             // (Kurth, 24 sep: "que sea como el fijo").
-            KurthVibrancy(tint: KurthVibrancy.tint(forOpacity: theme.opacity), blending: .withinWindow)
+            if !soloTema {
+                KurthVibrancy(tint: KurthVibrancy.tint(forOpacity: theme.opacity), blending: .withinWindow)
+            }
             GeometryReader { geo in
                 let frame = geo.frame(in: .global)
                 let window = windowState.window?.contentView?.bounds.size ?? frame.size

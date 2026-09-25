@@ -14,6 +14,13 @@
 //  No hay franja invisible sobre la página: los monitores de NSEvent ya detectan la orilla, y una
 //  vista ahí se comería los clics a la barra de scroll.
 //
+//  Desde el 25 sep es una tarjeta, no una columna (Kurth: "más bello con el glass… y que no tenga
+//  todo el alto de la ventana sino la mitad"): mitad del alto, abajo en la esquina, con el campo de
+//  texto donde lo tiene el panel fijo, y Liquid Glass como las cápsulas de la barra. La barra
+//  lateral flotante sigue con el material del panel fijo; esta ya no es una barra lateral.
+//  Se abre y se queda abierta en la misma franja que antes, de todo el alto: si solo contara la
+//  tarjeta, al abrirla desde arriba de la orilla se cerraba antes de que el mouse bajara a ella.
+//
 
 import AppKit
 import SwiftUI
@@ -157,8 +164,8 @@ final class KurthAgentHoverManager: ObservableObject {
     }
 }
 
-/// El panel flotante: el mismo KurthAgentChat, con el material de la barra flotante, en la orilla
-/// del agente, con su ancho guardado y la orilla arrastrable.
+/// El panel flotante: el mismo KurthAgentChat en una tarjeta de vidrio, abajo en la orilla del
+/// agente, con su ancho guardado y la orilla arrastrable.
 struct KurthAgentHoverOverlay: View {
     @EnvironmentObject var browserManager: BrowserManager
     @Environment(BrowserWindowState.self) private var windowState
@@ -170,17 +177,29 @@ struct KurthAgentHoverOverlay: View {
 
     private var enLaDerecha: Bool { nookSettings.sidebarPosition == .left }
 
+    /// La mitad del alto, pero no menos de 360 pt: en una ventana baja, el campo, los controles
+    /// y un par de mensajes tienen que caber.
+    static func alto(en altoDeVentana: CGFloat) -> CGFloat {
+        let disponible = altoDeVentana - 2 * KurthChrome.overlayInset
+        return min(disponible, max(360, altoDeVentana * 0.5))
+    }
+
+    /// Cuánto del tema va sobre el vidrio. El tema solo ya es casi opaco (0.75, KurthTheme.opacity)
+    /// y taparía el vidrio; sin nada, el texto largo se pierde sobre una página movida.
+    static let velo = 0.55
+
     var body: some View {
-        ZStack(alignment: enLaDerecha ? .trailing : .leading) {
+        GeometryReader { ventana in
+        ZStack(alignment: enLaDerecha ? .bottomTrailing : .bottomLeading) {
             if !windowState.isSidebarAIChatVisible, hover.isOverlayVisible {
                 KurthAgentChat(flotante: true)
-                    .frame(width: windowState.aiSidebarWidth)
-                    .frame(maxHeight: .infinity)
+                    .frame(width: windowState.aiSidebarWidth, height: Self.alto(en: ventana.size.height))
                     .environmentObject(browserManager)
                     .environment(windowState)
                     .environment(nookSettings)
-                    .background { KurthHoverTheme() }
+                    .background { KurthHoverTheme(soloTema: true).opacity(Self.velo) }
                     .clipShape(KurthChrome.overlayShape)
+                    .glassEffect(.regular, in: KurthChrome.overlayShape)
                     .nookElevation(.floating)
                     .alwaysArrowCursor(leavingFree: enLaDerecha ? .minXEdge : .maxXEdge, width: 14)
                     .overlay(alignment: enLaDerecha ? .leading : .trailing) {
@@ -190,11 +209,12 @@ struct KurthAgentHoverOverlay: View {
                             .environment(windowState)
                     }
                     .padding(enLaDerecha ? .trailing : .leading, KurthChrome.overlayInset)
-                    .padding(.vertical, KurthChrome.overlayInset)
+                    .padding(.bottom, KurthChrome.overlayInset)
                     .transition(.move(edge: enLaDerecha ? .trailing : .leading).combined(with: .opacity))
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: enLaDerecha ? .topTrailing : .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: enLaDerecha ? .bottomTrailing : .bottomLeading)
+        }
         .animation(KurthMotion.respecting(reduceMotion, hover.isOverlayVisible ? KurthMotion.reveal : KurthMotion.dismiss),
                    value: hover.isOverlayVisible)
         .onAppear {
