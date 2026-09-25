@@ -16,6 +16,13 @@ Detalle de Zen en `kurth/plan-zen.md`.
 - **Material de las barras:** el ◐ del encabezado del agente es temporal; quitarlo cuando elija
   vidrio o clásico (también está en Settings › Appearance).
 - underPageBackgroundColor con el tema: "por ahora no".
+- **Favoritos y guardados como accesos rápidos (idea de Kurth al irse):** tocarlos abre (o lleva a)
+  una pestaña normal abajo, en las del día; ellos nunca se "abren". Así todo lo que consume memoria
+  se ve en una sola lista (el error de Arc que señaló). Propuesta de José: si ya hay una pestaña
+  abierta desde ese acceso, llevar a ella en vez de abrir otra; un puntito bajo el acceso mientras
+  su pestaña está abierta, como el Dock. Se pierde que el favorito guarde su propio estado aparte
+  (los logins no: son por Space). Toca `TabsController.select` o los clics de favoritos y de
+  SpaceTab. Ya hecho mientras tanto: la tira solo muestra favoritos y guardados abiertos (`3bab2034`).
 
 **Instalado y sin probar con su mouse o trackpad:** deslizar la cápsula entre pestañas, pellizco a
 la cuadrícula, reordenar arrastrando en la cuadrícula, recorte de Señalar con texto (miniatura en el
