@@ -158,15 +158,20 @@ struct KurthTabStrip: View {
                 if index > 0 {
                     // Siempre, también junto a la activa y a la del mouse (Kurth, 25 sep: "que no
                     // solo dividan las que están en reposo"); solo se van mientras se arrastra.
-                    divider(hidden: dragging != nil,
+                    // En solo íconos, la X de cerrar se dibuja sobre este hueco: a la izquierda de la
+                    // pestaña con el mouse, o a la derecha si es la primera. Ahí la línea se esconde.
+                    let xAqui = iconsOnly && ((hovered == entry.id && entry.id != selectedID)
+                                              || (index == 1 && hovered == entries[0].id && entries[0].id != selectedID))
+                    divider(hidden: dragging != nil || xAqui,
                             antesActiva: entries[index - 1].id == selectedID,
                             despuesActiva: entry.id == selectedID)
                 }
-                segment(entry)
+                segment(entry, esPrimera: index == 0)
                     .offset(x: shift(of: entry.id, in: entries))
                     // Los demás se corren con resorte; el arrastrado sigue al mouse sin retraso.
                     .animation(dragging == entry.id ? nil : NookDesign.Motion.spring, value: insertion)
-                    .zIndex(dragging == entry.id ? 1 : 0)
+                    // El arrastrado y el que tiene el mouse (su X sale de su marco) van encima.
+                    .zIndex(dragging == entry.id || hovered == entry.id ? 1 : 0)
                     .id(entry.id)
                     .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("strip")) } action: { frames[entry.id] = $0 }
                     .simultaneousGesture(reorderGesture(entry, in: entries))
@@ -279,7 +284,7 @@ struct KurthTabStrip: View {
 
     // MARK: - Segmento
 
-    private func segment(_ entry: Entry) -> some View {
+    private func segment(_ entry: Entry, esPrimera: Bool) -> some View {
         let id = entry.item.id
         let isActive = id == selectedID
         let isHovered = hovered == id
@@ -298,11 +303,8 @@ struct KurthTabStrip: View {
         } label: {
             HStack(spacing: 6) {
                 // Con título (o activa), el favicon se vuelve la X al pasar el mouse. Solo ícono: la X
-                // entra completa a la izquierda del favicon, que sigue a la vista para entrar a la
-                // pestaña (Kurth, 25 sep; la bolita en la esquina no le gustó).
-                if isHovered && !isActive && !showsTitle {
-                    closeButton(entry).transition(.opacity)
-                }
+                // va aparte, sobre el hueco entre pestañas (ver la capa de abajo), para que el
+                // favicon no se mueva justo cuando el usuario va a darle clic (Kurth, 25 sep).
                 leadingIcon(entry, session: session, isActive: isActive, showsClose: isHovered && (isActive || showsTitle))
                 if isActive {
                     // La cápsula de siempre: dominio y recargar. Copiar la URL vive en el clic
@@ -333,6 +335,17 @@ struct KurthTabStrip: View {
                 }
             }
             .contentShape(Capsule())
+            // Solo íconos: la X centrada sobre la línea del hueco vecino (relleno 8 + línea 7 + relleno 8
+            // entre favicons), a la izquierda; la primera pestaña no tiene hueco a la izquierda y la
+            // saca a la derecha. No cambia el ancho de nada.
+            .overlay(alignment: esPrimera ? .trailing : .leading) {
+                if isHovered && !isActive && !showsTitle {
+                    let salto = KurthEscala.pt(NookDesign.Size.favicon) / 2 + 3.5
+                    closeButton(entry)
+                        .offset(x: esPrimera ? salto : -salto)
+                        .transition(.opacity)
+                }
+            }
             // Fuente del resalte: el fondo de la tira toma el marco del segmento seleccionado.
             .matchedGeometryEffect(id: id, in: strip, isSource: true)
         }
