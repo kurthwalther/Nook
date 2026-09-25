@@ -119,7 +119,9 @@ struct KurthTopBarView: View {
                 .frame(height: barHeight)
                 .opacity(headerFill == nil ? 0 : 1)
                 .allowsHitTesting(false)
-                .animation(.easeOut(duration: 0.15), value: headerFill)
+                // Hasta arriba (la página cargando) el color entra de golpe, con la página; el fundido
+                // queda para cuando aparece un menú fijo al hacer scroll.
+                .animation(isAtTop ? nil : .easeOut(duration: 0.15), value: headerFill)
 
             Rectangle()
                 .fill(.primary.opacity(hairlineOpacity))

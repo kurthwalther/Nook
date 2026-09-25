@@ -530,7 +530,12 @@
   // Pide a Nook las marcas guardadas de esta dirección en cuanto carga la página.
   try {
     const h = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.kurthSenalar;
-    if (h && window.top === window) setTimeout(() => h.postMessage({ tipo: 'pedirMarcas', url: location.href }), 600);
+    // El script entra al inicio de la carga (antes del DOM): las marcas se piden ya con la página armada.
+    const pedir = () => setTimeout(() => h.postMessage({ tipo: 'pedirMarcas', url: location.href }), 600);
+    if (h && window.top === window) {
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pedir, { once: true });
+      else pedir();
+    }
   } catch (e) { /* sin canal: marcas solo en vivo */ }
 
   // Encabezado fijo pegado arriba de lo visible (Robb Report al bajar): su color va a Nook para
@@ -540,6 +545,8 @@
   try {
     const canal = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.kurthSenalar;
     if (canal && window.top === window) {
+      // Página nueva: el color de la anterior ya no vale (si no, se arrastra un instante).
+      canal.postMessage({ tipo: 'encabezado', rgba: null });
       const lienzo = document.createElement('canvas');
       lienzo.width = lienzo.height = 1;
       const ctx = lienzo.getContext('2d', { willReadFrequently: true });
@@ -605,7 +612,7 @@
           }
         }
       };
-      let ultimo = 'inicio', agendado = false, ultimaVez = 0;
+      let ultimo = '', agendado = false, ultimaVez = 0;
       const revisar = () => {
         agendado = false;
         ultimaVez = performance.now();
@@ -627,9 +634,22 @@
       // otra vez cuando acaba su transición.
       addEventListener('transitionend', alMover, { passive: true, capture: true });
       addEventListener('animationend', alMover, { passive: true, capture: true });
-      revisar();
-      // Muchas páginas arman su menú después de cargar: segundo barrido completo.
-      setTimeout(() => { barrer(); revisar(); }, 1200);
+      // El script entra al inicio de la carga (Kurth, 25 sep: "que se sume a la carga de la web"): se
+      // revisa en cada cuadro desde ya hasta 1.5 s después de que el DOM está listo, así el color y
+      // la sombra quedan antes de que la página se vea, no un instante después. Cada revisión cuesta
+      // unos microsegundos. Muchas páginas arman su menú después: otro barrido completo a los 1.2 s.
+      let hasta = Infinity;
+      const cuadro = () => { revisar(); if (performance.now() < hasta) requestAnimationFrame(cuadro); };
+      requestAnimationFrame(cuadro);
+      const listo = () => {
+        barrer();
+        revisar();
+        hasta = performance.now() + 1500;
+        setTimeout(() => { barrer(); revisar(); }, 1200);
+      };
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', listo, { once: true });
+      else listo();
+      addEventListener('load', () => { barrer(); revisar(); }, { once: true });
     }
   } catch (e) { /* sin canal o sin canvas: la barra se queda como WebKit la deje */ }
 

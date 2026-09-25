@@ -248,7 +248,9 @@ final class KurthSenalar {
         controlador.add(canal, contentWorld: KurthCopilot.mundo, name: "kurthSenalar")
         if let fuente = KurthCopilot.fuenteDelScript {
             // "// Nook" al frente: sin el marcador de NookOwned los tweaks lo quitaban en la primera navegación.
-            controlador.addUserScript(WKUserScript(source: WKUserScript.nookOwnedPrefix + " kurth: copiloto\n" + fuente, injectionTime: .atDocumentEnd,
+            // Al inicio de la carga, como todos los scripts de la capa (Kurth, 25 sep): lo que arregla la
+            // barra queda antes de que la página se vea. Lo que necesita el DOM espera a DOMContentLoaded.
+            controlador.addUserScript(WKUserScript(source: WKUserScript.nookOwnedPrefix + " kurth: copiloto\n" + fuente, injectionTime: .atDocumentStart,
                                                    forMainFrameOnly: true, in: KurthCopilot.mundo))
         }
     }

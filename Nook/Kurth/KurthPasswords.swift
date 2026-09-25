@@ -58,7 +58,9 @@ final class KurthPasswords {
         // El prefijo "// Nook" es el marcador de WKUserScript+NookOwned: los tweaks (YouTube, Facebook,
         // SponsorBlock…) vacían los scripts en cada navegación y solo vuelven a poner los que lo llevan.
         controlador.addUserScript(WKUserScript(source: WKUserScript.nookOwnedPrefix + " kurth: contraseñas\n" + fuente,
-                                               injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: KurthCopilot.mundo))
+                                               // Al inicio de la carga: escucha el foco antes de que la página
+                                               // enfoque su campo sola (autofocus).
+                                               injectionTime: .atDocumentStart, forMainFrameOnly: true, in: KurthCopilot.mundo))
     }
 
     private final class Canal: NSObject, WKScriptMessageHandler {

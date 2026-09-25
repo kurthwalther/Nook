@@ -6,7 +6,8 @@
 //  Lo que se hace con la página, en el panel del botón de al lado del chat (ExtensionLibraryView),
 //  que ya tenía Copiar enlace, Copiar título, Silenciar y el zoom (Kurth, 25 sep: "todas las
 //  opciones nuevas mételas en el de opciones"):
-//  - una segunda fila con Imprimir, PDF, Archivo web y Captura de la página completa;
+//  - una segunda fila con Imprimir, PDF y Captura de la página completa (Archivo web quedó solo en
+//    el menú Archivo: en el panel no sumaba, Kurth 25 sep); la captura dice dónde quedó;
 //  - "Tamaño del texto" junto a "Page Zoom", con el mismo −/%/+.
 //  Los mismos botones y filas que ya usa el panel, copiados en su forma (allá son privados).
 //
@@ -30,7 +31,11 @@ struct KurthAccionesDePagina: View {
 
     private var titulo: String { browserManager.tabs.selectedSession(in: windowState)?.title ?? "Página" }
 
+    /// La última captura, para decir dónde quedó: sin esto no se sabía (Kurth, 25 sep).
+    @State private var captura: URL?
+
     var body: some View {
+        VStack(spacing: 6) {
         HStack(spacing: 6) {
             KurthBotonDePanel(icono: "printer", texto: "Imprimir") {
                 guard let pagina else { return false }
@@ -44,18 +49,36 @@ struct KurthAccionesDePagina: View {
                 KurthImprimir.exportarPDF(pagina, titulo: titulo)
                 return false
             }
-            KurthBotonDePanel(icono: "archivebox", texto: "Archivo web") {
-                guard let pagina else { return false }
-                onDismiss()
-                KurthImprimir.guardarArchivoWeb(pagina, titulo: titulo)
-                return false
-            }
             KurthBotonDePanel(icono: "camera.viewfinder", texto: "Captura", listo: "Guardada") {
                 guard let pagina else { return false }
-                return await KurthImprimir.capturarPaginaCompleta(pagina, titulo: titulo) != nil
+                let url = await KurthImprimir.capturarPaginaCompleta(pagina, titulo: titulo)
+                withAnimation(NookDesign.Motion.quick) { captura = url }
+                return url != nil
             }
         }
         .disabled(pagina == nil)
+
+        if let captura {
+            // Dónde quedó, con un botón que la abre en Finder ya seleccionada. También quedó copiada.
+            HStack(spacing: 6) {
+                Image(systemName: "photo")
+                    .foregroundStyle(.secondary)
+                Text("En Descargas y copiada")
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                Button("Mostrar") { NSWorkspace.shared.activateFileViewerSelecting([captura]) }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.accentColor)
+            }
+            .font(NookDesign.Font.caption)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(NookDesign.Surface.fill, in: NookDesign.Radius.shape(NookDesign.Radius.sm))
+            .help(captura.lastPathComponent)
+            .transition(.opacity.combined(with: .move(edge: .top)))
+        }
+        }
     }
 }
 
