@@ -497,7 +497,7 @@ final class KurthSync {
                 "ultimaExportacion": s.ultimaExportacion.map { f.string(from: $0) } ?? NSNull(),
                 "ultimaImportacion": s.ultimaImportacion.map { f.string(from: $0) } ?? NSNull(),
                 "alias": s.estado.alias.count,
-                "elementosExportados": s.estado.exportados.count,
+                "exportado": resumen(s.estado.exportados.values),
                 "ajustesQueViajan": s.estado.ajustes.count,
                 "error": s.ultimoError ?? NSNull(),
             ]
@@ -506,6 +506,18 @@ final class KurthSync {
         default:
             return nil
         }
+    }
+
+    /// Lo exportado separado en vivo y borrado. Los borrados se guardan 30 días y son la mayoría:
+    /// contarlos juntos hacía parecer que había 116 favoritos cuando había 2 (24 sep).
+    private static func resumen(_ elementos: some Sequence<Item>) -> [String: Int] {
+        var r = ["favoritos": 0, "fijadas": 0, "carpetas": 0, "borradosGuardados": 0]
+        for e in elementos {
+            if e.deletedAt != nil { r["borradosGuardados", default: 0] += 1; continue }
+            if e.isFolder { r["carpetas", default: 0] += 1; continue }
+            if case .favorites = e.parent { r["favoritos", default: 0] += 1 } else { r["fijadas", default: 0] += 1 }
+        }
+        return r
     }
 
     private static func texto(_ t: String) -> [String: Any] {
