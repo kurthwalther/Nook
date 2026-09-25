@@ -28,6 +28,11 @@ struct ExtensionLibraryOverlay: View {
     @EnvironmentObject var browserManager: BrowserManager
     @Environment(BrowserWindowState.self) private var windowState
     @State private var isShowingMoreMenu = false
+    /// kurth: cuándo se cerró por última vez. Al dar clic en el botón de extensiones con el panel
+    /// abierto, esta capa recibe el clic y cierra, pero el botón de abajo también dispara al soltar
+    /// (rareza de SwiftUI) y lo reabría en el mismo clic. El botón consulta esto y no reabre si el
+    /// cierre fue hace un instante (Kurth, 25 sep).
+    @MainActor static var cerradoEn: Date = .distantPast
 
     private let menuWidth: CGFloat = 300
     private let gap: CGFloat = 6
@@ -101,5 +106,6 @@ struct ExtensionLibraryOverlay: View {
     private func close() {
         isShowingMoreMenu = false
         windowState.isExtensionLibraryVisible = false
+        Self.cerradoEn = Date()
     }
 }

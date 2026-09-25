@@ -358,7 +358,13 @@ struct KurthTopBarView: View {
                 }
 
                 Button("Extensions", systemImage: "slider.horizontal.2.square") {
-                    windowState.isExtensionLibraryVisible.toggle()
+                    // Si la capa del panel lo acaba de cerrar con este mismo clic, no reabrir
+                    // (ver ExtensionLibraryOverlay.cerradoEn).
+                    if windowState.isExtensionLibraryVisible {
+                        windowState.isExtensionLibraryVisible = false
+                    } else if Date().timeIntervalSince(ExtensionLibraryOverlay.cerradoEn) > 0.3 {
+                        windowState.isExtensionLibraryVisible = true
+                    }
                 }
                 .kurthBarIcon(size: iconSize)
                 // El panel de extensiones de WindowView se cuelga de este marco.
