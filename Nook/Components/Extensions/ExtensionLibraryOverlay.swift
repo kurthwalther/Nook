@@ -31,6 +31,8 @@ struct ExtensionLibraryOverlay: View {
 
     private let menuWidth: CGFloat = 300
     private let gap: CGFloat = 6
+    /// kurth: el ancho del submenú (MoreMenuView), para decidir de qué lado cabe.
+    private let moreMenuWidth: CGFloat = 260
 
     var body: some View {
         GeometryReader { proxy in
@@ -38,6 +40,10 @@ struct ExtensionLibraryOverlay: View {
                let settings = browserManager.nookSettings,
                let anchor {
                 let buttonFrame = proxy[anchor]
+                let libraryX = originX(buttonFrame: buttonFrame, container: proxy.size)
+                // kurth: el submenú se abre del lado donde cabe. Con el panel del agente abierto la
+                // biblioteca queda pegada a la orilla derecha y el submenú se cortaba (Kurth, 25 sep).
+                let menuOnLeft = isShowingMoreMenu && libraryX + menuWidth + gap + moreMenuWidth > proxy.size.width - gap
 
                 ZStack(alignment: .topLeading) {
                     Color.clear
@@ -45,6 +51,8 @@ struct ExtensionLibraryOverlay: View {
                         .onTapGesture { close() }
 
                     HStack(alignment: .top, spacing: gap) {
+                        if menuOnLeft { moreMenu(anchor: .topTrailing) }
+
                         ExtensionLibraryView(
                             browserManager: browserManager,
                             windowState: windowState,
@@ -55,18 +63,11 @@ struct ExtensionLibraryOverlay: View {
                         .frame(width: menuWidth)
                         .nookGlassEffect(in: NookDesign.Radius.shape(NookDesign.Radius.lg))
 
-                        if isShowingMoreMenu {
-                            MoreMenuView(
-                                browserManager: browserManager,
-                                windowState: windowState,
-                                onDismiss: { isShowingMoreMenu = false }
-                            )
-                            .nookGlassEffect(in: NookDesign.Radius.shape(NookDesign.Radius.lg))
-                            .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .topLeading)))
-                        }
+                        if isShowingMoreMenu && !menuOnLeft { moreMenu(anchor: .topLeading) }
                     }
                     .fixedSize()
-                    .offset(x: originX(buttonFrame: buttonFrame, container: proxy.size),
+                    // A la izquierda, el par se corre lo que mide el submenú: la biblioteca no se mueve.
+                    .offset(x: menuOnLeft ? libraryX - (moreMenuWidth + gap) : libraryX,
                             y: buttonFrame.maxY + gap)
                 }
                 .animation(NookDesign.Motion.quick, value: isShowingMoreMenu)
@@ -75,6 +76,17 @@ struct ExtensionLibraryOverlay: View {
             }
         }
         .ignoresSafeArea()
+    }
+
+    private func moreMenu(anchor: UnitPoint) -> some View {
+        MoreMenuView(
+            browserManager: browserManager,
+            windowState: windowState,
+            onDismiss: { isShowingMoreMenu = false }
+        )
+        .frame(width: moreMenuWidth)
+        .nookGlassEffect(in: NookDesign.Radius.shape(NookDesign.Radius.lg))
+        .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: anchor)))
     }
 
     /// Centred under the button, clamped so a narrow window cannot push it off screen. Centring
