@@ -224,6 +224,28 @@
     }
   }
 
+  // Los rectángulos de un Range, uno por renglón y en coordenadas del documento. getClientRects
+  // devuelve un rectángulo por cada inline anidado (enlace, negrita) y por cada nodo de texto, así
+  // que se funden los que comparten renglón (misma altura, a 2 px) en uno solo.
+  function renglonesDe(rango) {
+    const salida = [];
+    for (const r of rango.getClientRects()) {
+      if (r.width < 1 || r.height < 1) continue;
+      const d = docRect(r);
+      const igual = salida.find((s) => Math.abs(s.y - d.y) <= 2 && Math.abs(s.h - d.h) <= 2);
+      if (igual) {
+        const x2 = Math.max(igual.x + igual.w, d.x + d.w);
+        igual.x = Math.min(igual.x, d.x); igual.w = x2 - igual.x;
+      } else salida.push(d);
+    }
+    return salida;
+  }
+
+  function union(rects) {
+    const x = Math.min(...rects.map((r) => r.x)), y = Math.min(...rects.map((r) => r.y));
+    return { x, y, w: Math.max(...rects.map((r) => r.x + r.w)) - x, h: Math.max(...rects.map((r) => r.y + r.h)) - y };
+  }
+
   // Dibuja nota y pin junto a un rectángulo del documento.
   function adornos(m, id, rect, numero, nota) {
     if (numero) {
@@ -344,8 +366,19 @@
       const m = { autor: o.autor, tipo: 'texto', nodos: [], rango, nota: o.nota || '' };
       registro.set(o.id, m);
       repintarResaltados();
-      const primero = rango.getClientRects()[0] || rango.getBoundingClientRect();
-      adornos(m, o.id, docRect(primero), o.numero, o.nota);
+      // Además del resaltado del texto, un recuadro por renglón, como las cajas que pone Kurth
+      // (24 sep: "que sus marcas igual sean recuadros, no solo globos"). El ::highlight solo tiñe el
+      // fondo de las letras y en una página clara casi no se nota.
+      const renglones = renglonesDe(rango);
+      const pad = 3;
+      for (const r of renglones) {
+        const n = nodo('caja', o.autor, '');
+        colocar(n, r.x - pad, r.y - pad, r.w + pad * 2, r.h + pad * 2);
+        m.nodos.push(n);
+      }
+      const primero = renglones[0] || docRect(rango.getBoundingClientRect());
+      m.caja = renglones.length ? union(renglones) : primero;
+      adornos(m, o.id, { x: primero.x - pad, y: primero.y - pad, w: primero.w + pad * 2, h: primero.h + pad * 2 }, o.numero, o.nota);
       return clean(rango.toString());
     },
     destellar,
