@@ -11,6 +11,9 @@ import SwiftUI
 
 public struct SettingsAppearanceTab: View {
     @Environment(NookSettingsService.self) var nookSettings
+    // kurth: el material de las barras (Nook/Kurth/KurthPanelMaterial.swift). Misma clave y mismo
+    // default que allá; el ◐ del encabezado del agente cambia el mismo ajuste.
+    @AppStorage("kurth.panelMaterial") private var kurthMaterial = "glass"
 
 
     public init() {}
@@ -24,6 +27,15 @@ public struct SettingsAppearanceTab: View {
                         Text(mode.displayName).tag(mode)
                     }
                 }
+                // kurth: el activo queda marcado en el segmento.
+                Picker(selection: $kurthMaterial) {
+                    Text("Vidrio").tag("glass")
+                    Text("Clásico").tag("panel")
+                } label: {
+                    Text("Material de las barras")
+                    Text("Vidrio: Liquid Glass de macOS 26 en el fondo de la ventana y en las barras que salen con el mouse. Clásico: el difuminado de antes.")
+                }
+                .pickerStyle(.segmented)
             }
 
             // Every row here is about the Mac window: a sidebar side, the

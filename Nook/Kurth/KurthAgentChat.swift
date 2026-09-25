@@ -192,12 +192,12 @@ struct KurthAgentChat: View {
 
             // Para comparar los dos materiales en todas las barras (Kurth, 25 sep); cuando elija
             // uno, este botón sobra.
-            Button(material == "glass" ? "Pasar al material de antes" : "Pasar a vidrio",
+            Button(material == "glass" ? "Pasar al material clásico" : "Pasar a vidrio",
                    systemImage: "circle.lefthalf.filled") {
                 material = material == "glass" ? "panel" : "glass"
             }
             .kurthBarIcon(size: medidaDeIcono)
-            .help(material == "glass" ? "Barras en vidrio · clic: el material de antes" : "Barras con el material de antes · clic: vidrio")
+            .help(material == "glass" ? "Barras en vidrio · clic: clásico" : "Barras en clásico · clic: vidrio. También en Settings › Appearance")
 
             if flotante {
                 Button(tarjetaFijada ? "Soltar" : "Fijar", systemImage: tarjetaFijada ? "pin.fill" : "pin") {
@@ -276,12 +276,17 @@ struct KurthAgentChat: View {
                 .padding(.top, 4)
             }
             // Abajo, el texto se desvanece antes de llegar a la caja en vez de pasar por detrás.
-            // Arriba pasa por debajo del encabezado: entero con cápsulas, atenuado con la barra con
-            // tinte (`pasoBajoEncabezado`). La máscara usa el alto real de cada uno.
+            // Arriba pasa por debajo del encabezado: con cápsulas entero y desvaneciéndose solo en
+            // la orilla, para que se note que sigue hacia arriba (Kurth, 25 sep); con la barra con
+            // tinte, atenuado (`pasoBajoEncabezado`). La máscara usa el alto real de cada uno.
             .mask {
                 VStack(spacing: 0) {
-                    Color.black.opacity(pasoBajoEncabezado).frame(height: altoArriba)
-                    LinearGradient(colors: [.black.opacity(pasoBajoEncabezado), .black], startPoint: .top, endPoint: .bottom).frame(height: 16)
+                    if esCapsulas {
+                        LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: 28)
+                    } else {
+                        Color.black.opacity(pasoBajoEncabezado).frame(height: altoArriba)
+                        LinearGradient(colors: [.black.opacity(pasoBajoEncabezado), .black], startPoint: .top, endPoint: .bottom).frame(height: 16)
+                    }
                     Color.black
                     LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 16)
                     Color.clear.frame(height: altoAbajo + margen)
