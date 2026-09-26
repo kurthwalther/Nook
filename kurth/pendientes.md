@@ -40,6 +40,14 @@ Orden acordado; Trazo (dirección del Creative) descartada por Kurth: "está feo
 6. **Modo "con cabeza"** (M): velo + borde en la pestaña controlada + Detener + tarjeta de plan +
    confirmación antes de publicar/enviar/comprar/borrar. Maqueta aprobada por artifact (26 sep).
 7. **Autoconsent** (S, **opcional, con interruptor**): duckduckgo/autoconsent como user script.
+   ✅ **Hecho 26 sep (rama `kurth-detalles`, `01e52e28`, sin instalar):** `KurthAutoconsent.swift`,
+   autoconsent 16.42.0 en Vendor. **Ojo: la licencia es MPL-2.0, no Apache-2.0** (compatible con
+   GPL-3.0 como archivos aparte sin modificar). Mundo de contenido propio, puente init/eval/optOut/
+   selfTest, siempre rechazar, sin heurísticas; si falla en un sitio queda en
+   `kurth.autoconsentFallidos` y no se reintenta. `kurth.autoconsent` (true), `kurth.autoconsentExcluidos`,
+   interruptor en Settings › Privacy, MCP `kurth_autoconsent`. Prueba sin Nook: `kurth/checks/autoconsent.sh`
+   (15 ✅). **Falta:** sitios reales (un banner de OneTrust o Didomi de verdad) y un CMP en iframe
+   (Sourcepoint/TrustArc), que la prueba local no puede imitar.
 8. ✅ **Split útil** (26 sep, `KurthSplit.swift`, rama `kurth-split`, sin instalar): clic derecho en un
    link → "Abrir en el split" (reemplaza el derecho si ya hay); "Seguir aquí los links" en el menú de
    la pestaña (lateral, mitad del split y tira) con flecha ↳ en la seguidora, se apaga al cerrar el
@@ -51,6 +59,13 @@ Orden acordado; Trazo (dirección del Creative) descartada por Kurth: "está feo
    arrastres (lateral y tira), el ⌥-clic y el clic derecho en un link.
 9. **Traducción on-device** (M): framework Translation; lo difícil es reinyectar el texto traducido.
 10. **Detalles Apple** (S): pull-to-refresh, progreso de carga en la barra, indicador de pestaña suspendida.
+   ✅ **Hecho 26 sep (rama `kurth-detalles`, sin instalar):** jalar para recargar (`24fc2541`,
+   `KurthJalarParaRecargar.swift`; la distancia es el estiramiento real de WebKit, háptico al pasar
+   64 pt; `kurth/checks/jalar.sh` 9 ✅ con gestos sintéticos) y progreso dentro de la cápsula
+   (`76448103`, `KurthProgresoDeCarga.swift`; WebsiteLoadingIndicator no medía nada y se quitó de la
+   barra flotante). El indicador de suspendida ya estaba (punto 2). **Falta que Kurth pruebe con el
+   trackpad:** que el umbral de 64 pt se sienta bien (se cambia en vivo con
+   `kurth.pullToRefreshDistancia`), el golpe háptico, cómo se ve la flecha y la línea de progreso.
 
 ## El cel (Remote Control) — 25 sep noche, instalado
 
