@@ -97,6 +97,10 @@ enum KurthMCPTools {
                 info: "Workflows: encender el micrófono al empezar a grabar (dictado en la Mac, es-MX, sin servidor). Lo cambia también el botón del micrófono del aviso"),
         Setting(key: KurthWorkflows.ajusteProgramados, type: "bool", defaultValue: true,
                 info: "Workflows programados: false pausa todas las corridas programadas sin borrar sus reglas; al reanudar, lo que tocó durante la pausa aparece como saltado (se ofrece correrlo, no se corre solo)"),
+        Setting(key: KurthMemorias.ajuste, type: "bool", defaultValue: true,
+                info: "Memorias de Nook: lo que el navegador sabe (URL e id de cada cuenta, dónde está cada reporte, filtros, quién es quién), para cualquier agente. Herramientas nook_memoria_buscar/guardar/listar/borrar y la pestaña Memorias del botón de Workflows. false las apaga sin borrarlas"),
+        Setting(key: KurthMemorias.ajusteAuto, type: "bool", defaultValue: true,
+                info: "Memorias de Nook: en cada mensaje del panel del agente, agregar (sin mostrarlas en el globo) las 5 que vienen al caso por el texto y el host de la pestaña, para que el agente las tenga aunque no las busque"),
     ]
 
     static let tools: [AIToolDefinition] = [
@@ -145,7 +149,7 @@ enum KurthMCPTools {
         KurthAutoconsent.herramienta,
         KurthBoosts.herramienta,
         KurthWorkflows.herramienta, // se atiende en DevMCPServer.callTool (camino async)
-    ]
+    ] + KurthMemorias.herramientas
 
     /// nil si la herramienta no es de la capa Kurth.
     static func call(_ name: String, _ args: [String: Any], window: BrowserWindowState, tabs: TabsController) -> [String: Any]? {
@@ -155,6 +159,7 @@ enum KurthMCPTools {
         if let resultado = KurthSuspension.llamar(name, args, tabs: tabs) { return resultado }
         if let resultado = KurthSplit.llamar(name, args, window: window, tabs: tabs) { return resultado }
         if let resultado = KurthBoosts.llamar(name, args, window: window, tabs: tabs) { return resultado }
+        if let resultado = KurthMemorias.llamar(name, args) { return resultado }
         switch name {
         case "kurth_panel":
             let agente = (args["cual"] as? String) == "agente"

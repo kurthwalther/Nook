@@ -630,6 +630,14 @@ final class KurthAgentService {
             + menciones.map { "@ " + $0.chip }
         mensajes.append(Mensaje(autor: .usuario, texto: limpio, señalados: chips.isEmpty ? nil : chips))
         let prompt = paraElAgente ?? limpio
+        // kurth: las memorias de Nook que vienen al caso por el texto y la pestaña, ocultas como lo demás
+        // que no va en el globo (KurthMemorias.swift). Se busca con lo que Kurth escribió, no con las
+        // instrucciones largas de un workflow o un boost.
+        let memorias = KurthMemorias.shared.contextoParaMensaje(
+            limpio, url: pagina.flatMap { URL(string: $0.uri) } ?? ultimaURL,
+            sesion: KurthRemoto.shared.encendido ? "cel" : cliente.sessionId)
+        let ocultoConMemorias = [oculto, memorias].compactMap { $0 }.joined(separator: "\n\n")
+        let oculto: String? = ocultoConMemorias.isEmpty ? nil : ocultoConMemorias
         if KurthRemoto.shared.encendido {
             // Al cel: el texto, la pestaña como texto (allá no hay resource links) y lo señalado. El hook
             // de la sesión lo devuelve como eco; se reconoce por el texto y no se pinta dos veces.
@@ -877,6 +885,14 @@ final class KurthAgentService {
         (personal); GA4, Search Console y Merchant con las credenciales de gcloud; Zoho CRM con \
         ~/.zoho-crm.json (consultas COQL en /crm/v7/coql); SerpAPI y Meta en ~/.config/annie/. \
         Nunca escribas una llave en tu respuesta. \
+        El navegador tiene sus propias memorias, las mismas para cualquier agente: cuando un mensaje \
+        trae <memorias-de-nook>, úsalas (URL e id de cada cuenta, dónde está cada reporte) antes de \
+        buscar o preguntar; antes de ir a una cuenta, herramienta o reporte que no venga ahí, busca con \
+        nook_memoria_buscar. Todo lo reutilizable y estable que aprendas navegando (la URL o el id de \
+        una cuenta, una ruta dentro de una herramienta, un filtro que usa Kurth, quién es quién) \
+        guárdalo siempre con nook_memoria_guardar, breve y sin contraseñas, tokens, códigos ni \
+        tarjetas; si además tienes memoria propia, puedes guardarlo también ahí. Si una memoria ya no \
+        es cierta, corrígela con su id. \
         Contesta muy breve: máximo unas 60 palabras, una frase de resumen y, si ayuda, \
         hasta 3 viñetas de una sola línea. Sin detalles técnicos, preámbulos ni cierre, salvo que \
         te pida más.

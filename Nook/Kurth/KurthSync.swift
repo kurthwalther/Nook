@@ -3,7 +3,8 @@
 //  KurthSync.swift
 //  Nook (rama kurth)
 //
-//  Tus Spaces, favoritos, fijadas, carpetas, temas y ajustes iguales en tus Macs, por iCloud Drive
+//  Tus Spaces, favoritos, fijadas, carpetas, temas, ajustes y memorias de Nook (KurthMemorias; las de
+//  los workflows no, porque los workflows todavía no viajan) iguales en tus Macs, por iCloud Drive
 //  (Kurth eligió esto sobre CloudKit el 24 sep: CloudKit obligaba a cambiar el identificador de
 //  Nook y migrar sesiones, ajustes y permisos).
 //
@@ -44,6 +45,9 @@ struct KurthInstantanea: Codable {
     /// Tema por Space (clave: id del Space); cada tema trae su fecha en `modificado`.
     var temas: [String: KurthTheme]
     var ajustes: [String: KurthAjusteSincronizado]
+    /// Memorias de Nook, con sus borrados (KurthMemorias). Opcional: una Mac con la versión anterior
+    /// escribe instantáneas sin él y lee las nuevas ignorándolo, sin cambiar `formato`.
+    var memorias: [KurthMemoria]? = nil
 }
 
 struct KurthAjusteSincronizado: Codable, Equatable {
@@ -218,7 +222,8 @@ final class KurthSync {
             espacios: arbol.spaces.values.sorted { $0.id.uuidString < $1.id.uuidString },
             elementos: elementos.values.sorted { $0.id.uuidString < $1.id.uuidString },
             temas: temas,
-            ajustes: estado.ajustes)
+            ajustes: estado.ajustes,
+            memorias: KurthMemorias.shared.paraSincronizar())
         guardarEstado()
 
         let codificador = JSONEncoder()
@@ -289,6 +294,7 @@ final class KurthSync {
             mezclarArbol(i, tabs: tabs)
             mezclarTemas(i)
             mezclarAjustes(i)
+            if let memorias = i.memorias { KurthMemorias.shared.mezclarRemotas(memorias) }
             estado.leidos[i.dispositivo] = i.escrito
             log.info("Sincronizado con \(i.nombre, privacy: .public)")
         }

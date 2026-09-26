@@ -477,6 +477,7 @@ final class KurthWorkflows {
         }
         wf.skillAlDia = true
         try tienda.guardar(wf)
+        KurthMemorias.shared.desdeWorkflow(wf) // kurth: sus sitios y cuentas pasan a las memorias de Nook
         recargar()
         return wf
     }
