@@ -3,6 +3,33 @@
 Una sola lista para las dos Macs. Quien avance, la actualiza en el mismo commit.
 Detalle de Zen en `kurth/plan-zen.md`.
 
+## Plan aprobado por Kurth · 26 sep (del barrido de Ernest, `projects/Nook/barrido-ernest-2026-09-26.md`)
+
+Orden acordado; Trazo (dirección del Creative) descartada por Kurth: "está feo".
+
+1. **Traer v1.1.1 de upstream** (S; conflictos esperados en Peek, sidebar y chat, que tocamos). Trae: Ask
+   Nook con Apple Intelligence sin API key, tab trails (links anidados bajo su pestaña, nuevas debajo de la
+   actual), back/forward/reload junto a los semáforos, Liquid Glass en lateral/historial/descargas/Peek, PDF
+   con zoom/imprimir/guardar y ⌘P, "Hide border"; arreglos: Save Image mandaba cookies al redirect, frames
+   negros en video, mailto:/tel: al sistema, historial >100 días en todos los Spaces, botón Settings del chat.
+2. **Suspensión de pestañas** (M): portar `TabSuspensionService` + `UnloadedTab` de duckduckgo/apple-browsers
+   (Apache-2.0). Política por inactividad y presión de memoria; fijadas y favoritos también; indicador de
+   suspendida (punto 10); restaurar scroll/forms con `interactionState`.
+3. **MCP con dientes** (S por tool, M el snapshot): `fill_form`, `find`, `batch`, refs estables + `--delta`,
+   iframes y shadow DOM (portar `ariaSnapshot.ts` de Playwright). Después: `network_requests` (M parcial),
+   Space "Agente" no persistente, tareas programadas por launchd.
+4. **Skills con `/`, "guardar como skill", `@pestaña` / `@Space`** (S / S–M). `/` ya lista comandos; falta
+   el guardado y el `@`.
+5. **Boosts por dominio + "describe una extensión"** (M): CSS/JS por sitio que el agente escribe y Nook
+   instala como WKUserScript/WKUserStyleSheet; `user_scripts` es la mitad.
+6. **Modo "con cabeza"** (M): velo + borde en la pestaña controlada + Detener + tarjeta de plan +
+   confirmación antes de publicar/enviar/comprar/borrar. Maqueta aprobada por artifact (26 sep).
+7. **Autoconsent** (S, **opcional, con interruptor**): duckduckgo/autoconsent como user script.
+8. **Split útil** (M): abrir link en el split / pestaña seguidora, arrastrar a la orilla para dividir,
+   ⌥-clic para unir/separar.
+9. **Traducción on-device** (M): framework Translation; lo difícil es reinyectar el texto traducido.
+10. **Detalles Apple** (S): pull-to-refresh, progreso de carga en la barra, indicador de pestaña suspendida.
+
 ## El cel (Remote Control) — 25 sep noche, instalado
 
 Botón a la derecha del de permisos (`KurthRemoto.swift`, `KurthRemotoPopover.swift`, MCP
