@@ -76,6 +76,7 @@ struct NookApp: App {
                         setupAIServices()
                         KurthGuardados.acomodar(tabs: browserManager.tabs) // kurth: carpetas solo en Guardados
                         KurthAccesos.registrar(tabs: browserManager.tabs) // kurth: favoritos y guardados como accesos
+                        KurthSplit.registrar(browserManager: browserManager) // kurth: split útil (KurthSplit.swift)
                         KurthSync.shared.arrancar(tabs: browserManager.tabs) // kurth: iCloud Drive (KurthSync.swift)
                     }
                 

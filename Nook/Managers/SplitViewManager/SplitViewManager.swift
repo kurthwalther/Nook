@@ -85,6 +85,7 @@ final class SplitViewManager: ObservableObject {
             case .right: split.rightItemID = itemID
             }
             guard split.leftItemID != split.rightItemID else { return }
+            if side == .right { KurthSplitGancho.shared.olvidar(ventana: window.id) } // kurth: otra pestaña a la derecha, ya nadie sigue
             window.split = split
             loadPanes(of: window)
             tabs.select(itemID, in: window)
@@ -115,6 +116,7 @@ final class SplitViewManager: ObservableObject {
         guard let window = window(windowId), let split = window.split else { return }
         let showsPane = self.side(for: window.selectedItemID, in: split) != nil
         window.split = nil
+        KurthSplitGancho.shared.olvidar(ventana: windowId) // kurth: sin split no hay seguidora
         let kept = side == .left ? split.leftItemID : split.rightItemID
         if showsPane, let tabs = browserManager?.tabs, tabs.item(kept) != nil {
             tabs.select(kept, in: window)

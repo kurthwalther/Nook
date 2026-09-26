@@ -215,6 +215,11 @@ public struct TabContextMenu: View {
             }
         }
 
+        // kurth: al panel derecho y "Seguir aquí los links" (KurthSplitMenu; lógica en KurthSplit.swift).
+        if actions?.supportsMultipleWindows == true {
+            KurthSplitMenu(itemID: itemID)
+        }
+
         if tabs.isSynced(itemID) {
             if tabs.hasLeftHome(itemID) {
                 Button {

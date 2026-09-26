@@ -71,6 +71,10 @@ enum KurthMCPTools {
                 info: "Tamaño de la barra y del encabezado del panel del agente: 1 normal; más de 1 = grande (1.2)"),
         Setting(key: "kurth.aiSidebarWidth", type: "number", defaultValue: 330.0,
                 info: "Ancho del panel del agente en pt (200–520). Es el último que dejó el usuario al soltar el borde; cambiarlo aquí aplica a las ventanas que se abran después"),
+        Setting(key: "kurth.splitEdgeWidth", type: "number", defaultValue: 40.0,
+                info: "Split: ancho en pt de la franja en la orilla derecha de la página donde soltar una pestaña arrastrada (lateral o tira) la abre en el panel derecho"),
+        Setting(key: "kurth.splitOptionClick", type: "bool", defaultValue: true,
+                info: "Split: ⌥-clic en una mitad del split la saca; ⌥-clic en una pestaña de la lateral o la tira con split abierto la mete al panel derecho"),
     ]
 
     static let tools: [AIToolDefinition] = [
@@ -121,6 +125,7 @@ enum KurthMCPTools {
     static func call(_ name: String, _ args: [String: Any], window: BrowserWindowState, tabs: TabsController) -> [String: Any]? {
         if let resultado = KurthSync.llamar(name) { return resultado }
         if let resultado = KurthPasswords.llamar(name, args) { return resultado }
+        if let resultado = KurthSplit.llamar(name, args, window: window, tabs: tabs) { return resultado }
         switch name {
         case "kurth_panel":
             let agente = (args["cual"] as? String) == "agente"

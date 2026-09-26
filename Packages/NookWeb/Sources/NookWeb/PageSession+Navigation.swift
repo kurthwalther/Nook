@@ -336,6 +336,19 @@ extension PageSession: WKNavigationDelegate {
             return
         }
 
+        // kurth: pestaña seguidora — un clic normal en un link del panel izquierdo se carga en el
+        // derecho (KurthSplitGancho). Sin ⌘ (esa es "nueva pestaña") y solo desde el marco principal
+        // o un target=_blank (targetFrame nil); un iframe no manda al otro panel.
+        if let url = navigationAction.request.url,
+           navigationAction.navigationType == .linkActivated,
+           navigationAction.targetFrame?.isMainFrame != false, !isDetached,
+           !navigationAction.isCommandClick,
+           KurthSplitGancho.shared.seguirLink?(self, url) == true
+        {
+            decisionHandler(.cancel)
+            return
+        }
+
         if navigationAction.shouldPerformDownload {
             decisionHandler(.download)
             return
@@ -727,6 +740,15 @@ private extension WKNavigationAction {
     var isOptionClick: Bool {
         #if os(macOS)
         modifierFlags.contains(.option)
+        #else
+        false
+        #endif
+    }
+
+    /// kurth: ⌘ + clic pide una pestaña nueva; la seguidora no lo toma.
+    var isCommandClick: Bool {
+        #if os(macOS)
+        modifierFlags.contains(.command)
         #else
         false
         #endif

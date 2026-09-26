@@ -28,11 +28,22 @@ public struct SplitHalfLabel: View {
     public var body: some View {
         let title = tabs.title(for: item)
         let session = tabs.session(for: item.id)
-        Button(action: { tabs.select(item.id, in: windowState) }) {
+        Button(action: {
+            // kurth: ⌥-clic saca esta mitad del split (KurthSplitGancho).
+            if KurthSplitGancho.shared.clicConOpcion?(item.id, windowState) == true { return }
+            tabs.select(item.id, in: windowState)
+        }) {
             HStack(spacing: NookDesign.Spacing.md) {
                 ItemFavicon(item: item, session: session)
                     .frame(width: NookDesign.Size.favicon, height: NookDesign.Size.favicon)
                     .clipShape(NookDesign.Radius.shape(NookDesign.Radius.xs))
+                if KurthSplitGancho.shared.sigue(item.id, en: windowState) {
+                    // kurth: esta mitad carga los links de la otra.
+                    Image(systemName: "arrow.turn.down.right")
+                        .font(NookDesign.Font.caption)
+                        .foregroundStyle(.secondary)
+                        .help("Sigue los links del panel izquierdo")
+                }
                 Text(title)
                     .font(NookDesign.Font.body)
                     .foregroundStyle(.primary)
