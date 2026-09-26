@@ -39,10 +39,13 @@ codesign --verify --deep --strict $APP
 echo "✅ compiló en $(( $(date +%s) - inicio )) s ($(git -C $REPO rev-parse --short HEAD))"
 
 # Salir por Apple Event pasa por applicationShouldTerminate: guarda pestañas y no muestra el aviso de ⌘Q.
-if pgrep -x Nook >/dev/null; then
-  osascript -e 'tell application "Nook" to quit'
-  for _ in {1..40}; do pgrep -x Nook >/dev/null || break; sleep 0.25; done
-  pgrep -x Nook >/dev/null && { echo "❌ Nook no cerró; no instalo"; exit 1; }
+# Se pregunta a LaunchServices, no a pgrep: desde el panel del agente (sandbox) pgrep no ve a Nook
+# y el script instalaba sin cerrarlo.
+corriendo() { [[ $(osascript -e 'application id "com.gstudios.nook" is running') == true ]]; }
+if corriendo; then
+  osascript -e 'tell application id "com.gstudios.nook" to quit'
+  for _ in {1..40}; do corriendo || break; sleep 0.25; done
+  corriendo && { echo "❌ Nook no cerró; no instalo"; exit 1; }
 fi
 
 rm -rf /Applications/Nook.app
