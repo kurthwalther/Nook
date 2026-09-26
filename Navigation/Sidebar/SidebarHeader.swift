@@ -11,13 +11,14 @@ import NookDesign
 import NookWeb
 import NookUI
 
-/// Header section of the sidebar (window controls, navigation buttons, URL bar)
+/// Header section of the sidebar (window controls and space name, URL bar). Back, forward and
+/// reload sit in the title row above it.
 struct SidebarHeader: View {
     @EnvironmentObject var browserManager: BrowserManager
     @Environment(BrowserWindowState.self) private var windowState
     @Environment(\.nookSettings) var nookSettings
     let isSidebarHovered: Bool
-    @State private var sidebarWidth: CGFloat = 0
+    let onNewSpace: () -> Void
 
     var body: some View {
         VStack(spacing: NookDesign.Spacing.sectionGap) {
@@ -29,30 +30,16 @@ struct SidebarHeader: View {
             }
 
             if !nookSettings.topBarAddressView {
-                navigationButtons
                 urlBar
             }
-        }
-        .onGeometryChange(for: CGFloat.self) { proxy in
-            proxy.size.width
-        } action: { newWidth in
-            sidebarWidth = newWidth
         }
     }
 
     private var windowControls: some View {
-        SidebarWindowControlsView()
+        SidebarWindowControlsView(onNewSpace: onNewSpace)
             .environmentObject(browserManager)
             .environment(windowState)
             .padding(.horizontal, NookDesign.Spacing.sidebarInset)
-    }
-
-    private var navigationButtons: some View {
-        HStack(spacing: NookDesign.Spacing.xxs) {
-            NavButtonsView(effectiveSidebarWidth: sidebarWidth)
-        }
-        .padding(.horizontal, NookDesign.Spacing.sidebarInset)
-        .frame(height: NookDesign.Size.navRow)
     }
 
     private var urlBar: some View {
@@ -61,32 +48,37 @@ struct SidebarHeader: View {
     }
 }
 
-// MARK: - Sidebar Window Controls (Top Bar Mode)
+// MARK: - Sidebar Window Controls
+/// The sidebar and AI toggles, with the space name at the trailing edge.
 struct SidebarWindowControlsView: View {
     @EnvironmentObject var browserManager: BrowserManager
     @Environment(BrowserWindowState.self) private var windowState
     @Environment(\.nookSettings) var nookSettings
+    let onNewSpace: () -> Void
 
     var body: some View {
-        HStack(spacing: NookDesign.Spacing.md) {
-            Button("Toggle Sidebar", systemImage: nookSettings.sidebarPosition == .left ? "sidebar.left" : "sidebar.right") {
-                browserManager.toggleSidebar(for: windowState)
-            }
-            .labelStyle(.iconOnly)
-            .buttonStyle(NookIconButtonStyle())
-            .foregroundStyle(Color.primary)
-
-            if nookSettings.showAIAssistant {
-                Button("Toggle AI Assistant", systemImage: "sparkle") {
-                    browserManager.toggleAISidebar(for: windowState)
+        HStack(spacing: 0) {
+            // One glass pill, the way the system groups neighbouring toolbar buttons.
+            HStack(spacing: 0) {
+                Button("Toggle Sidebar", systemImage: nookSettings.sidebarPosition == .left ? "sidebar.left" : "sidebar.right") {
+                    browserManager.toggleSidebar(for: windowState)
                 }
-                .labelStyle(.iconOnly)
-                .buttonStyle(NookIconButtonStyle())
-                .foregroundStyle(Color.primary)
-            }
 
-            Spacer()
+                if nookSettings.showAIAssistant {
+                    Button("Toggle AI Assistant", systemImage: "sparkle") {
+                        browserManager.toggleAISidebar(for: windowState)
+                    }
+                }
+            }
+            .nookGlassControls(in: Capsule())
+
+            Spacer(minLength: 0)
+
+            // Gives way before the pill: a long name fades out.
+            SpaceSwitcherTitle(onNewSpace: onNewSpace)
+                .layoutPriority(1)
         }
-        .frame(height: NookDesign.Size.navRow)
+        .frame(height: NookDesign.Size.glassControl)
+        .background(DoubleClickView { NSApp.keyWindow?.performZoom(nil) })
     }
 }

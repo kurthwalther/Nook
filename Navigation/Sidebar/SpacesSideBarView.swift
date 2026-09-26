@@ -66,15 +66,14 @@ struct SpacesSideBarView: View {
 
     private var mainSidebarContent: some View {
         return VStack(spacing: NookDesign.Spacing.sectionGap) {
-            // Space title: shares the traffic-light row on the left, its own row on the right.
-            if nookSettings.sidebarPosition != .left {
-                spaceSwitcherTitle
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            // History buttons: share the traffic-light row on the left, their own row on the right.
+            if nookSettings.sidebarPosition != .left && !nookSettings.topBarAddressView {
+                titleRow
                     .padding(.horizontal, NookDesign.Spacing.sidebarInset)
             }
 
             // Header (window controls, nav buttons, URL bar)
-            SidebarHeader(isSidebarHovered: isSidebarHovered)
+            SidebarHeader(isSidebarHovered: isSidebarHovered, onNewSpace: showSpaceCreationDialog)
                 .environmentObject(browserManager)
                 .environment(windowState)
 
@@ -92,7 +91,7 @@ struct SpacesSideBarView: View {
             }
 
             // Downloads menu hover overlay
-            if showDownloadsMenu {
+            if showDownloadsMenu, !browserManager.downloadManager.recentDownloads.isEmpty {
                 downloadsMenuOverlay
             }
 
@@ -134,9 +133,10 @@ struct SpacesSideBarView: View {
         .padding(.top, nookSettings.sidebarPosition == .left ? NookDesign.Spacing.sidebarTop : NookDesign.Spacing.sidebarInset)
         .overlay(alignment: .topLeading) {
             if nookSettings.sidebarPosition == .left {
-                spaceSwitcherTitle
+                titleRow
                     .frame(height: NookDesign.Spacing.sidebarTop)
                     .padding(.leading, NookDesign.Spacing.trafficLights)
+                    .padding(.trailing, NookDesign.Spacing.sidebarInset)
             }
         }
         .padding(.bottom, NookDesign.Spacing.sidebarInset)
@@ -369,10 +369,16 @@ struct SpacesSideBarView: View {
         }
     }
 
-    private var spaceSwitcherTitle: some View {
-        SpaceSwitcherTitle(onNewSpace: showSpaceCreationDialog)
-            .environmentObject(browserManager)
-            .environment(windowState)
+    /// Back, forward and reload at the trailing edge, unless the URL bar mode has them.
+    private var titleRow: some View {
+        HStack(spacing: 0) {
+            Spacer(minLength: 0)
+            if !nookSettings.topBarAddressView {
+                SidebarHistoryButtons()
+                    .environmentObject(browserManager)
+                    .environment(windowState)
+            }
+        }
     }
 
     // MARK: - Dialogs

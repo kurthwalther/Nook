@@ -216,6 +216,7 @@ struct NookApp: App {
             // Only cleanup if browserManager still exists (it's captured weakly)
             if let browserManager = browserManager {
                 browserManager.sidebarPiPWindowClosing(windowId)
+                if browserManager.peekManager.windowId == windowId { browserManager.peekManager.dismissPeek() }
                 webViewCoordinator.cleanupWindow(windowId, tabs: browserManager.tabs)
                 if let windowState = browserManager.windowRegistry?.windows[windowId] {
                     browserManager.tabs.detach(window: windowState)
@@ -290,6 +291,9 @@ struct BackgroundWindowModifier: NSViewRepresentable {
                 }
                 window.styleMask = mask
 
+                // The toolbar makes the title band 66pt tall, most of it over the page.
+                TitlebarDragRegion.letAppKitViewsBlockDrags(in: window)
+
                 window.minSize = NSSize(width: 470, height: 382)
                 window.contentMinSize = NSSize(width: 470, height: 382)
 
@@ -312,12 +316,10 @@ struct BackgroundWindowModifier: NSViewRepresentable {
 }
 
 /// Fullscreen keeps the empty toolbar as a white band, on screen or on hover at the top, so it is
-/// hidden for the stay. AppKit ignores a re-show until the exit has finished, and the window
-/// paints one frame with the lights at the bare inset before it. The lights are hidden across
-/// the exit and come back once the toolbar has moved them, so they appear rather than shift.
+/// hidden for the stay. AppKit ignores a re-show until the exit has finished. The traffic lights
+/// across that exit are `TrafficLightsView`'s job in WindowView.swift.
 private final class FullScreenToolbarView: NSView {
     private var observers: [any NSObjectProtocol] = []
-    private let buttons: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -325,7 +327,6 @@ private final class FullScreenToolbarView: NSView {
         observers.removeAll()
         guard let window else { return }
         let center = NotificationCenter.default
-        let buttons = buttons
         observers = [
             // Before entry, so the band AppKit builds for the hover reveal is the bare title bar.
             // Weak: NotificationCenter holds these blocks, and a strong window here would keep
@@ -333,12 +334,8 @@ private final class FullScreenToolbarView: NSView {
             center.addObserver(forName: NSWindow.willEnterFullScreenNotification, object: window, queue: .main) { [weak window] _ in
                 window?.toolbar?.isVisible = false
             },
-            center.addObserver(forName: NSWindow.willExitFullScreenNotification, object: window, queue: .main) { [weak window] _ in
-                buttons.forEach { window?.standardWindowButton($0)?.isHidden = true }
-            },
             center.addObserver(forName: NSWindow.didExitFullScreenNotification, object: window, queue: .main) { [weak window] _ in
                 window?.toolbar?.isVisible = true
-                buttons.forEach { window?.standardWindowButton($0)?.isHidden = false }
             },
         ]
     }

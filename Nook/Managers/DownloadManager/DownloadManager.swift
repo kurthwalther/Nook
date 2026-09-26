@@ -19,7 +19,8 @@ import WebKit
 @Observable
 public class Download: Identifiable {
     public let id: UUID
-    let download: WKDownload
+    /// Nil for a file Nook wrote itself, such as a PDF saved from the viewer.
+    let download: WKDownload?
     let originalURL: URL
     let suggestedFilename: String
     let destinationPreference: DestinationPreference
@@ -41,10 +42,14 @@ public class Download: Identifiable {
     var error: Error?
     var fileSize: Int64?
     var downloadedBytes: Int64
-    var icon: NSImage?
+    let icon: NSImage
     var startDate: Date
     var estimatedTimeRemaining: TimeInterval?
     var downloadThumbnail: NSImage?
+    /// Where it started, for the flight to the downloads button: the window, and the pointer in
+    /// window coordinates when it began, which is where the click was. Nothing renders from these.
+    @ObservationIgnored weak var sourceWindow: NSWindow?
+    @ObservationIgnored var launchPoint: NSPoint?
 
     enum DownloadState {
         case pending
@@ -90,7 +95,7 @@ public class Download: Identifiable {
     }
 
     init(
-        download: WKDownload,
+        download: WKDownload?,
         originalURL: URL,
         suggestedFilename: String,
         destinationPreference: DestinationPreference = .automaticDownloadsFolder,
@@ -110,7 +115,7 @@ public class Download: Identifiable {
         startDate = Date()
 
         // Set default icon based on file extension
-        icon = getIconForFile(suggestedFilename)
+        icon = Self.icon(forFilename: suggestedFilename)
     }
 
     @MainActor
@@ -192,7 +197,7 @@ public class Download: Identifiable {
         }
     }
 
-    private func getIconForFile(_ filename: String) -> NSImage {
+    private static func icon(forFilename filename: String) -> NSImage {
         let fileExtension = (filename as NSString).pathExtension.lowercased()
 
         let possibleTypes = UTType.types(tag: fileExtension,
@@ -219,22 +224,35 @@ public class Download: Identifiable {
         return String(format: "%.1f%%", progress * 100)
     }
 
-    var formattedSpeed: String {
-        let elapsed = Date().timeIntervalSince(startDate)
-        guard elapsed > 0 else { return "0 B/s" }
-
-        let speed = Double(downloadedBytes) / elapsed
-        return ByteCountFormatter.string(fromByteCount: Int64(speed), countStyle: .binary) + "/s"
+    /// The finished file, while it is still where the download put it.
+    var completedFile: URL? {
+        guard state == .completed, let destinationURL,
+              FileManager.default.fileExists(atPath: destinationURL.path) else { return nil }
+        return destinationURL
     }
 
-    var formattedTimeRemaining: String {
-        guard let estimatedTimeRemaining = estimatedTimeRemaining else { return "Unknown" }
+    /// Drags the file itself. The old provider also read the whole file into memory on the main
+    /// thread as the drag began, which hung the app on a large download.
+    func dragItemProvider() -> NSItemProvider {
+        completedFile.flatMap { NSItemProvider(contentsOf: $0) } ?? NSItemProvider()
+    }
 
+    private static let remainingFormatter: DateComponentsFormatter = {
         let formatter = DateComponentsFormatter()
         formatter.allowedUnits = [.hour, .minute, .second]
         formatter.unitsStyle = .abbreviated
-        return formatter.string(from: estimatedTimeRemaining) ?? "Unknown"
+        return formatter
+    }()
+
+    var formattedTimeRemaining: String {
+        guard let estimatedTimeRemaining = estimatedTimeRemaining else { return "Unknown" }
+        return Self.remainingFormatter.string(from: estimatedTimeRemaining) ?? "Unknown"
     }
+}
+
+extension Notification.Name {
+    /// Posted with the `Download` once it has a destination and bytes are on the way.
+    static let downloadDidStart = Notification.Name("NookDownloadDidStart")
 }
 
 // MARK: - Download Manager
@@ -247,28 +265,24 @@ public class DownloadManager: NSObject {
     private var downloads: [UUID: Download] = [:]
     private var downloadDelegates: [UUID: DownloadDelegate] = [:]
 
+    /// Bumped each time a download finishes, so the downloads button can bounce.
+    private(set) var completedCount = 0
+
     var activeDownloads: [Download] {
         return Array(downloads.values).filter { $0.state == .downloading || $0.state == .pending }
-    }
-
-    var completedDownloads: [Download] {
-        return Array(downloads.values).filter { $0.state == .completed }
-    }
-
-    var failedDownloads: [Download] {
-        return Array(downloads.values).filter { $0.state == .failed }
     }
 
     var allDownloads: [Download] {
         return Array(downloads.values).sorted { $0.startDate > $1.startDate }
     }
 
-    var totalDownloads: Int {
-        return downloads.count
-    }
-
-    var activeDownloadsCount: Int {
-        return activeDownloads.count
+    /// The hover card's peek: running first, then finished, then failed, newest first, four at most.
+    var recentDownloads: [Download] {
+        let newestFirst = allDownloads
+        let ranked = newestFirst.filter { $0.state == .downloading || $0.state == .pending }
+            + newestFirst.filter { $0.state == .completed }
+            + newestFirst.filter { $0.state == .failed }
+        return Array(ranked.prefix(4))
     }
 
     override private init() {
@@ -293,11 +307,20 @@ public class DownloadManager: NSObject {
             allowedContentTypes: allowedContentTypes,
             mediaOnly: mediaOnly
         )
-        let delegate = DownloadDelegate(downloadManager: self, download: downloadModel)
+        let delegate = DownloadDelegate(downloadManager: self, download: downloadModel, wkDownload: download)
 
         downloads[downloadModel.id] = downloadModel
         downloadDelegates[downloadModel.id] = delegate
         download.delegate = delegate
+
+        // The pointer is still where the user clicked the link or chose Save Image. Anything
+        // started some other way flies from the middle of the page instead.
+        if let webView = download.webView, let window = webView.window {
+            let page = webView.convert(webView.bounds, to: nil)
+            let pointer = window.mouseLocationOutsideOfEventStream
+            downloadModel.sourceWindow = window
+            downloadModel.launchPoint = page.contains(pointer) ? pointer : NSPoint(x: page.midX, y: page.midY)
+        }
 
         #if DEBUG
         print("Added download: \(suggestedFilename) with ID: \(downloadModel.id)")
@@ -318,51 +341,16 @@ public class DownloadManager: NSObject {
     func cancelDownload(_ id: UUID) {
         guard let download = downloads[id] else { return }
         updateDownloadState(id, state: .cancelled)
-        download.download.cancel()
+        download.download?.cancel()
         #if DEBUG
         print("Cancelled download: \(download.suggestedFilename)")
         #endif
     }
 
-    func retryDownload(_ id: UUID) {
-        guard let download = downloads[id], download.state == .failed else { return }
-        #if DEBUG
-        print("Retry not supported for WKDownload")
-        #endif
-    }
-
-    func clearCompletedDownloads() {
-        let completedIds = downloads.values.filter { $0.state == .completed }.map { $0.id }
-        for id in completedIds {
-            removeDownload(id)
-        }
-    }
-
-    func clearFailedDownloads() {
-        let failedIds = downloads.values.filter { $0.state == .failed }.map { $0.id }
-        for id in failedIds {
-            removeDownload(id)
-        }
-    }
-
-    func clearAllDownloads() {
-        for id in Array(downloads.keys) { removeDownload(id) }
-    }
-
     // MARK: - Download Updates
 
     func updateDownloadProgress(_ id: UUID, progress: Double, downloadedBytes: Int64, fileSize: Int64?) {
-        guard let download = downloads[id] else {
-            #if DEBUG
-            print("Download not found for ID: \(id)")
-            #endif
-            return
-        }
-
-        #if DEBUG
-        print("Updating download progress: \(progress * 100)% for \(download.suggestedFilename)")
-        #endif
-
+        guard let download = downloads[id] else { return }
         guard download.state == .pending || download.state == .downloading else { return }
 
         download.progress = progress
@@ -393,16 +381,24 @@ public class DownloadManager: NSObject {
         #endif
 
         guard download.state == .pending || download.state == .downloading else { return }
+        let started = download.state == .pending && state == .downloading
         download.state = state
         download.error = error
+        // After the destination is settled, so a download cancelled in the save panel never flies.
+        if started {
+            NotificationCenter.default.post(name: .downloadDidStart, object: download)
+        }
+        if state == .completed {
+            completedCount += 1
+        }
         if state == .completed || state == .failed || state == .cancelled {
             downloadDelegates[id]?.stopProgressObservation()
-            download.download.delegate = nil
+            download.download?.delegate = nil
             downloadDelegates.removeValue(forKey: id)
         }
         if state == .completed {
             download.progress = 1
-            download.downloadedBytes = max(download.downloadedBytes, download.download.progress.completedUnitCount)
+            download.downloadedBytes = max(download.downloadedBytes, download.download?.progress.completedUnitCount ?? 0)
             download.estimatedTimeRemaining = 0
         }
 
@@ -413,6 +409,73 @@ public class DownloadManager: NSObject {
             print("Download failed: \(download.suggestedFilename) - \(error?.localizedDescription ?? "Unknown error")")
         }
         #endif
+    }
+
+    /// Writes bytes Nook already holds into Downloads and lists them as a finished download, with
+    /// the same naming, quarantine, flight and bounce as a network download.
+    @discardableResult
+    func saveCompletedFile(
+        _ data: Data,
+        suggestedFilename: String,
+        originalURL: URL,
+        from window: NSWindow?
+    ) -> Download? {
+        let name = Self.sanitizedFilename(suggestedFilename)
+        guard let downloadsDirectory = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first else { return nil }
+        let destination = Self.uniqueDestination(for: name, in: downloadsDirectory)
+        do {
+            try data.write(to: destination, options: .withoutOverwriting)
+        } catch {
+            return nil
+        }
+        Self.setQuarantineAttribute(on: destination)
+
+        let saved = Download(download: nil, originalURL: originalURL, suggestedFilename: destination.lastPathComponent)
+        saved.destinationURL = destination
+        saved.fileSize = Int64(data.count)
+        saved.downloadedBytes = Int64(data.count)
+        saved.progress = 1
+        saved.sourceWindow = window
+        saved.launchPoint = window?.mouseLocationOutsideOfEventStream
+        downloads[saved.id] = saved
+        NotificationCenter.default.post(name: .downloadDidStart, object: saved)
+        saved.state = .completed
+        completedCount += 1
+        return saved
+    }
+
+    /// A name safe to create in a folder: one path component, no leading dots or NULs, at most 255
+    /// characters. Idempotent, so a caller can adjust the name and run it again.
+    static func sanitizedFilename(_ suggested: String) -> String {
+        var name = (suggested.isEmpty ? "download" : suggested)
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "\0", with: "")
+        while name.hasPrefix(".") {
+            name = String(name.dropFirst())
+        }
+        if name.isEmpty { name = "download" }
+        if name.count > 255 {
+            // Cap the extension: a server can name a file that is almost all extension, which
+            // made maxBase negative and trapped in String.prefix.
+            let ext = (name as NSString).pathExtension.prefix(32)
+            let base = (name as NSString).deletingPathExtension
+            let maxBase = 255 - (ext.isEmpty ? 0 : ext.count + 1)
+            name = String(base.prefix(maxBase)) + (ext.isEmpty ? "" : ".\(ext)")
+        }
+        return (name as NSString).lastPathComponent
+    }
+
+    /// `name` in `directory`, or "name (1)", "name (2)" and so on past files already there.
+    static func uniqueDestination(for name: String, in directory: URL) -> URL {
+        var destination = directory.appendingPathComponent(name)
+        let ext = destination.pathExtension
+        let base = destination.deletingPathExtension().lastPathComponent
+        var counter = 1
+        while FileManager.default.fileExists(atPath: destination.path) {
+            destination = directory.appendingPathComponent("\(base) (\(counter))" + (ext.isEmpty ? "" : ".\(ext)"))
+            counter += 1
+        }
+        return destination
     }
 
     func setDownloadDestination(_ id: UUID, destination: URL) {
@@ -449,11 +512,15 @@ public class DownloadManager: NSObject {
 private class DownloadDelegate: NSObject, WKDownloadDelegate {
     weak var downloadManager: DownloadManager?
     let download: Download
+    private let wkDownload: WKDownload
     private var progressObservations: [NSKeyValueObservation] = []
+    private var lastPublish: ContinuousClock.Instant?
+    private var trailingPublish: Task<Void, Never>?
 
-    init(downloadManager: DownloadManager, download: Download) {
+    init(downloadManager: DownloadManager, download: Download, wkDownload: WKDownload) {
         self.downloadManager = downloadManager
         self.download = download
+        self.wkDownload = wkDownload
         super.init()
     }
 
@@ -462,7 +529,6 @@ private class DownloadDelegate: NSObject, WKDownloadDelegate {
         case cancel
     }
 
-    // iOS-style API (older) – keep for compatibility where this signature exists
     public func download(_: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String, completionHandler: @escaping (URL?) -> Void) {
         decideDestination(response: response, suggestedFilename: suggestedFilename) { [weak self] decision in
             guard let self else { return }
@@ -470,37 +536,14 @@ private class DownloadDelegate: NSObject, WKDownloadDelegate {
             case .proceed(let url):
                 completionHandler(url)
             case .cancel:
-                self.download.download.cancel()
+                self.wkDownload.cancel()
                 completionHandler(nil)
             }
         }
     }
 
-    // macOS 12+/15+ API – WebKit on macOS expects the (URL, Bool) completion to grant a sandbox extension
-    public func download(_ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String, completionHandler: @escaping (URL, Bool) -> Void) {
-        decideDestination(response: response, suggestedFilename: suggestedFilename) { [weak self] decision in
-            guard let self else { return }
-            switch decision {
-            case .proceed(let url):
-                // Return true to grant sandbox extension - this allows WebKit to write to the destination
-                completionHandler(url, true)
-            case .cancel:
-                self.download.download.cancel()
-                completionHandler(URL(fileURLWithPath: "/tmp/cancelled"), false)
-            }
-        }
-    }
-
     private func decideDestination(response: URLResponse, suggestedFilename: String, completion: @escaping (DestinationDecision) -> Void) {
-        let defaultName = suggestedFilename.isEmpty ? "download" : suggestedFilename
-        var cleanName = defaultName
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "\0", with: "")       // Strip null bytes
-        // Strip leading dots to prevent creating hidden files
-        while cleanName.hasPrefix(".") {
-            cleanName = String(cleanName.dropFirst())
-        }
-        if cleanName.isEmpty { cleanName = "download" }
+        var cleanName = DownloadManager.sanitizedFilename(suggestedFilename)
         // A page picked this URL for a one-click save; anything but an image or video is dropped.
         if download.mediaOnly {
             let mimeType = response.mimeType?.lowercased() ?? ""
@@ -513,19 +556,10 @@ private class DownloadDelegate: NSObject, WKDownloadDelegate {
             let named = UTType(filenameExtension: (cleanName as NSString).pathExtension)
             if named?.conforms(to: .image) != true, named?.conforms(to: .audiovisualContent) != true {
                 cleanName += "." + (UTType(mimeType: mimeType)?.preferredFilenameExtension ?? "media")
+                // Again, since the added extension can take it past the length cap.
+                cleanName = DownloadManager.sanitizedFilename(cleanName)
             }
         }
-        // Limit filename length to 255 characters (filesystem maximum)
-        if cleanName.count > 255 {
-            // Cap the extension: a server can name a file that is almost all extension, which
-            // made maxBase negative and trapped in String.prefix.
-            let ext = (cleanName as NSString).pathExtension.prefix(32)
-            let base = (cleanName as NSString).deletingPathExtension
-            let maxBase = 255 - (ext.isEmpty ? 0 : ext.count + 1)
-            cleanName = String(base.prefix(maxBase)) + (ext.isEmpty ? "" : ".\(ext)")
-        }
-        // Safety: use lastPathComponent to ensure no directory traversal
-        cleanName = (cleanName as NSString).lastPathComponent
 
         switch download.destinationPreference {
         case .automaticDownloadsFolder:
@@ -541,15 +575,7 @@ private class DownloadDelegate: NSObject, WKDownloadDelegate {
             return
         }
 
-        var destination = downloadsDirectory.appendingPathComponent(cleanName)
-        let ext = destination.pathExtension
-        let base = destination.deletingPathExtension().lastPathComponent
-        var counter = 1
-        while FileManager.default.fileExists(atPath: destination.path) {
-            let newName = "\(base) (\(counter))" + (ext.isEmpty ? "" : ".\(ext)")
-            destination = downloadsDirectory.appendingPathComponent(newName)
-            counter += 1
-        }
+        let destination = DownloadManager.uniqueDestination(for: cleanName, in: downloadsDirectory)
 
         configureDownload(for: destination, response: response)
         completion(.proceed(destination))
@@ -597,16 +623,22 @@ private class DownloadDelegate: NSObject, WKDownloadDelegate {
         startProgressObservation()
     }
 
+    /// Same host, or one a subdomain of the other, as the cookie selection that made the request.
+    private static func sameSite(_ lhs: String?, _ rhs: String?) -> Bool {
+        guard let lhs = lhs?.lowercased(), let rhs = rhs?.lowercased() else { return false }
+        return lhs == rhs || lhs.hasSuffix("." + rhs) || rhs.hasSuffix("." + lhs)
+    }
+
     private func startProgressObservation() {
         stopProgressObservation()
-        let progress = download.download.progress
+        let progress = wkDownload.progress
         // Progress is KVO-compliant; WebKit supplies byte counts without disk polling.
         progressObservations = [
             progress.observe(\.completedUnitCount, options: [.initial, .new]) { [weak self] _, _ in
-                Task { @MainActor [weak self] in self?.publishProgress() }
+                Task { @MainActor [weak self] in self?.progressChanged() }
             },
             progress.observe(\.totalUnitCount, options: [.new]) { [weak self] _, _ in
-                Task { @MainActor [weak self] in self?.publishProgress() }
+                Task { @MainActor [weak self] in self?.progressChanged() }
             },
         ]
     }
@@ -614,11 +646,31 @@ private class DownloadDelegate: NSObject, WKDownloadDelegate {
     func stopProgressObservation() {
         progressObservations.forEach { $0.invalidate() }
         progressObservations.removeAll()
+        trailingPublish?.cancel()
+        trailingPublish = nil
+    }
+
+    /// KVO fires per received chunk, thousands of times on a large file, and each publish
+    /// invalidates every view showing downloads. Ten a second is plenty; the last change still lands.
+    private func progressChanged() {
+        let interval = Duration.milliseconds(100)
+        if let lastPublish, ContinuousClock.now - lastPublish < interval {
+            guard trailingPublish == nil else { return }
+            trailingPublish = Task { @MainActor [weak self] in
+                try? await Task.sleep(until: lastPublish + interval, clock: .continuous)
+                guard !Task.isCancelled else { return }
+                self?.trailingPublish = nil
+                self?.progressChanged()
+            }
+            return
+        }
+        lastPublish = ContinuousClock.now
+        publishProgress()
     }
 
     private func publishProgress() {
         guard download.state == .downloading else { return }
-        let progress = download.download.progress
+        let progress = wkDownload.progress
         let completed = max(0, progress.completedUnitCount)
         let total = progress.totalUnitCount > 0 ? progress.totalUnitCount : download.fileSize
         let fraction = total.flatMap { $0 > 0 ? min(1, Double(completed) / Double($0)) : nil } ?? 0
@@ -649,36 +701,17 @@ private class DownloadDelegate: NSObject, WKDownloadDelegate {
         downloadManager?.updateDownloadState(download.id, state: .failed, error: error)
     }
 
-    func downloadWillPerformHTTPRedirection(_: WKDownload, navigationResponse _: HTTPURLResponse, newRequest request: URLRequest, decisionHandler: @escaping (URLRequest?) -> Void) {
-        #if DEBUG
-        print("Download will perform HTTP redirection")
-        #endif
-        // Cookies were picked for the first URL only; a redirect must not carry them to another host.
-        var request = request
-        if download.mediaOnly {
-            request.setValue(nil, forHTTPHeaderField: "Cookie")
+    /// Save Image adds the site's cookies to its request by hand. This API can only allow or cancel
+    /// a redirect, not strip that header, so a cookie-carrying save that leaves the site is refused.
+    /// The old handler had a selector WebKit never calls, so those cookies followed any redirect.
+    func download(_ wkDownload: WKDownload, willPerformHTTPRedirection _: HTTPURLResponse, newRequest request: URLRequest, decisionHandler: @escaping (WKDownload.RedirectPolicy) -> Void) {
+        let original = wkDownload.originalRequest
+        let carriesCookies = original?.value(forHTTPHeaderField: "Cookie") != nil
+        if download.mediaOnly && carriesCookies && !Self.sameSite(original?.url?.host, request.url?.host) {
+            downloadManager?.updateDownloadState(download.id, state: .cancelled)
+            decisionHandler(.cancel)
+        } else {
+            decisionHandler(.allow)
         }
-        decisionHandler(request)
-    }
-
-    func download(_: WKDownload, didReceive _: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
-        #if DEBUG
-        print("Download received authentication challenge")
-        #endif
-        completionHandler(.performDefaultHandling, nil)
-    }
-
-    public func download(_: WKDownload, didFinishDownloadingTo location: URL) {
-        #if DEBUG
-        print("🔽 [DownloadManager] Download finished to: \(location.path)")
-        #endif
-        // The download is already handled by downloadDidFinish, but we can add additional logic here if needed
-    }
-
-    public func download(_: WKDownload, didFailWithError error: Error) {
-        #if DEBUG
-        print("🔽 [DownloadManager] Download failed: \(error.localizedDescription)")
-        #endif
-        // The download is already handled by the existing didFailWithError method, but we can add additional logic here if needed
     }
 }

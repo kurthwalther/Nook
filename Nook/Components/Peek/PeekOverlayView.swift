@@ -16,23 +16,15 @@ import NookUI
 struct PeekOverlayView: View {
     @EnvironmentObject var browserManager: BrowserManager
     @Environment(TabsController.self) private var tabs
-    @Environment(BrowserWindowState.self) private var windowState
+    @Environment(BrowserWindowState.self) var windowState
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.nookSettings) var nookSettings
-        @State private var webView: PeekWebView?
-    @State private var scale: CGFloat = 0.001
-    @State private var opacity: Double = 0.0
-    @State private var backgroundOpacity: Double = 0.0
-    @State private var activateObserver: NSObjectProtocol?
-    @State private var deactivateObserver: NSObjectProtocol?
-    @State private var webContentOpacity: Double = 0.0
 
-    private var isActive: Bool {
-        browserManager.peekManager.isActive
-    }
+    private var peek: PeekManager { browserManager.peekManager }
 
-    private var session: PeekSession? {
-        browserManager.peekManager.currentSession
+    /// Peek belongs to the window that opened it; the others show nothing.
+    private var page: PageSession? {
+        peek.windowId == windowState.id ? peek.page : nil
     }
 
     private var currentSpaceColor: Color {
@@ -41,136 +33,51 @@ struct PeekOverlayView: View {
 
     var body: some View {
         ZStack {
-            // Always present but visibility controlled by opacity
-            backgroundOverlay
-                .opacity(backgroundOpacity)
-
-            // Peek overlay container - always present but visibility controlled
-            if let session = session {
-                peekContent(session: session)
-                    .scaleEffect(scale, anchor: .center)
-                    .opacity(opacity)
-                    .zIndex(1000)
-            } else {
-                // Loading state while session is being set up
-                NookDesign.Radius.shape(NookDesign.Radius.xl)
-                    .fill(colorScheme == .dark ? Color.black : Color.white)
-                    .frame(width: 600, height: 400)
-                    .scaleEffect(scale, anchor: .center)
-                    .opacity(opacity)
+            if let page {
+                backgroundOverlay
+                    .transition(.opacity)
+                peekContent(page: page)
+                    .transition(.scale(scale: 0.001).combined(with: .opacity))
                     .zIndex(1000)
             }
         }
         .zIndex(9999) // Put it at the very top
-        .allowsHitTesting(isActive) // Only intercept events when Peek is active
-        .onAppear {
-            // Sync initial state when view appears
-            if browserManager.peekManager.isActive {
-                presentPeek()
-            }
-
-            // Fallback: observe explicit activation notifications to bypass blocked @Published delivery
-            activateObserver = NotificationCenter.default.addObserver(forName: .peekDidActivate, object: nil, queue: .main) { _ in
-                Task { @MainActor in
-                    presentPeek()
-                }
-            }
-            deactivateObserver = NotificationCenter.default.addObserver(forName: .peekDidDeactivate, object: nil, queue: .main) { _ in
-                Task { @MainActor in
-                    dismissPeek()
-                }
-            }
-        }
-        .onDisappear {
-            if let token = activateObserver {
-                NotificationCenter.default.removeObserver(token)
-                activateObserver = nil
-            }
-            if let token = deactivateObserver {
-                NotificationCenter.default.removeObserver(token)
-                deactivateObserver = nil
-            }
-        }
-        .onChange(of: browserManager.peekManager.isActive) { _, isActive in
-            if isActive {
-                presentPeek()
-            } else {
-                dismissPeek()
-            }
-        }
-        .onChange(of: browserManager.peekManager.currentSession?.id) { _, _ in
-            // Session changed - no action needed
-        }
+        .animation(NookDesign.Motion.spring, value: page?.itemID)
     }
 
-    // MARK: - State Management
-
-    @MainActor
-    private func presentPeek() {
-        withAnimation(NookDesign.Motion.spring) {
-            scale = 1.0
-            opacity = 1.0
-            backgroundOpacity = 1.0
-        }
-    }
-
-    @MainActor
-    private func dismissPeek() {
-        // Animate web content opacity out first (reverse of appearing)
-        withAnimation(NookDesign.Motion.quick) {
-            webContentOpacity = 0.0
-        }
-
-        // Then animate the main overlay elements with spring animation
-        withAnimation(NookDesign.Motion.spring) {
-            scale = 0.001
-            opacity = 0.0
-            backgroundOpacity = 0.0
-        }
-
-        // Schedule cleanup after the spring animation completes
-        // Using a slightly longer delay to ensure animation fully completes
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-            webView = nil
-        }
-    }
-
-    @ViewBuilder
     private var backgroundOverlay: some View {
         Color.black.opacity(0.38) // kurth: 0.38 a su pedido (antes 0.3 de upstream, 0.18 al encoger la página de atrás)
             .contentShape(Rectangle()) // Ensure proper hit testing
-            .allowsHitTesting(isActive) // Only allow hit testing when peek is active
-            .onTapGesture {
-                // Simple dismiss on background tap
-                browserManager.peekManager.dismissPeek()
-            }
+            .onTapGesture { peek.dismissPeek() }
     }
 
-    @ViewBuilder
-    private func peekContent(session: PeekSession) -> some View {
+    private func peekContent(page: PageSession) -> some View {
         GeometryReader { geometry in
             let (frame, cornerRadius) = calculateLayout(geometry: geometry)
 
             ZStack {
-                // Themed placeholder behind web content
+                // The card's surface and shadow sit behind the page, never on it: see DetachedPageHost.
                 NookDesign.Radius.shape(cornerRadius)
                     .fill(colorScheme == .dark ? Color.black : Color.white)
-
-                // Peek webview with shadow
-                webViewContainer(session: session)
-                    .opacity(webContentOpacity)
-                    .frame(width: frame.width, height: frame.height)
-                    .clipShape(NookDesign.Radius.shape(cornerRadius))
                     .nookElevation(.floating)
 
-                // kurth: columna a un costado, arriba, como en Glance de Zen
-                actionButtons(session: session)
-                    .position(
-                        x: frame.width + 32,
-                        y: 76
-                    )
+                DetachedPageHost(page: page, cornerRadius: cornerRadius)
+                    .id(page.itemID)
+
+                if let webView = page.webView {
+                    PageLoadBar(webView: webView, tint: currentSpaceColor)
+                        .padding(.horizontal, cornerRadius)
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .id(page.itemID)
+                }
             }
-            .frame(width: frame.width, height: frame.height) // Extend frame to include buttons
+            .frame(width: frame.width, height: frame.height)
+            // kurth: los botones en el margen derecho de la hoja, arriba, como en Glance de Zen.
+            .overlay(alignment: .topTrailing) {
+                actionButtons
+                    .alignmentGuide(.trailing) { $0[.leading] - NookDesign.Spacing.lg }
+                    .padding(.top, NookDesign.Spacing.lg)
+            }
             .position(
                 x: frame.minX + (frame.width / 2),
                 y: frame.midY
@@ -178,123 +85,36 @@ struct PeekOverlayView: View {
         }
     }
 
-    @ViewBuilder
-    private func webViewContainer(session: PeekSession) -> some View {
-        Group {
-            if webView != nil {
-                webView
-                    .allowsHitTesting(true) // Ensure webview is interactable
-                    .onAppear {
-                        withAnimation(NookDesign.Motion.quick) {
-                            webContentOpacity = 1.0
-                        }
-                    }
-                    .onPreferenceChange(PeekWebViewSizePreferenceKey.self) { size in
-                        // Handle webview size preferences if needed
-                    }
-            } else {
-                // Themed placeholder that matches system theme; this scales up during presentation
-                NookDesign.Radius.shape(NookDesign.Radius.lg)
-                    .fill(colorScheme == .dark ? Color.black : Color.white)
+    /// Close, split and new tab as one glass group, like the sidebar's history buttons.
+    private var actionButtons: some View {
+        VStack(spacing: 0) {
+            Button(action: { peek.dismissPeek() }) {
+                Image(systemName: "xmark")
+            }
+            divider
+            // Disabled while the window is already split.
+            Button(action: { peek.moveToSplitView() }) {
+                Image(systemName: "square.split.2x1")
+            }
+            .disabled(!peek.canEnterSplitView)
+            divider
+            Button(action: { peek.moveToNewTab() }) {
+                Image(systemName: "plus.square.on.square")
             }
         }
-        .allowsHitTesting(true) // Ensure container allows hit testing
-        .onAppear {
-            if webView == nil {
-                // Use the pre-created WebView from PeekManager
-                if let preCreatedWebView = browserManager.peekManager.webView {
-                    webView = preCreatedWebView
-                    webContentOpacity = 0.0
-                } else {
-                    // Fallback: create WebView if not available
-                    let peekWebView = browserManager.peekManager.createWebView()
-                    webView = peekWebView
-                    webContentOpacity = 0.0
-                    browserManager.peekManager.updateWebView(peekWebView)
-                }
-            }
-        }
+        // Dividers take any width offered; the group is the buttons' width.
+        .frame(width: NookDesign.Size.glassControl)
+        .nookGlassControls(in: Capsule())
     }
 
-    @ViewBuilder
-    private func actionButtons(session: PeekSession) -> some View {
-        GlassEffectContainer(spacing: 10) {
-        VStack(spacing: 10) {
-            // Close button
-            actionButton(
-                icon: "xmark",
-                action: { browserManager.peekManager.dismissPeek() },
-                color: currentSpaceColor
-            )
-
-            // Split view button (disabled if already in split view)
-            actionButton(
-                icon: "square.split.2x1",
-                action: { browserManager.peekManager.moveToSplitView() },
-                color: currentSpaceColor,
-                disabled: !browserManager.peekManager.canEnterSplitView
-            )
-
-            // New tab button
-            actionButton(
-                icon: "plus.square.on.square",
-                action: { browserManager.peekManager.moveToNewTab() },
-                color: currentSpaceColor
-            )
-        }
-        }
-    }
-
-    @ViewBuilder
-    private func actionButton(
-        icon: String,
-        action: @escaping () -> Void,
-        color: Color,
-        disabled: Bool = false
-    ) -> some View {
-        HoverButton(icon: icon, action: action, color: color, disabled: disabled)
-    }
-
-    // MARK: - Hover Button
-    private struct HoverButton: View {
-        @Environment(\.colorScheme) var colorScheme
-        let icon: String
-        let action: () -> Void
-        let color: Color
-        let disabled: Bool
-        @State private var isHovering = false
-
-        var body: some View {
-            // kurth: Liquid Glass, el ícono en el color del texto para que se lea sobre cualquier página
-            Button(action: action) {
-                Image(systemName: icon)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(disabled ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
-                    .frame(width: 38, height: 38)
-                    .contentShape(Circle())
-            }
-            .disabled(disabled)
-            .buttonStyle(PlainButtonStyle())
-            .glassEffect(.regular.interactive(!disabled), in: Circle())
-            .scaleEffect(isHovering && !disabled ? 1.06 : 1.0)
-            .onHoverTracking { hovering in
-                isHovering = hovering
-                if hovering {
-                    NSCursor.pointingHand.set()
-                } else {
-                    NSCursor.arrow.set()
-                }
-            }
-            .animation(NookDesign.Motion.quick, value: isHovering)
-            .animation(NookDesign.Motion.quick, value: disabled)
-        }
+    private var divider: some View {
+        Divider().padding(.horizontal, NookDesign.Spacing.sm)
     }
 
     // MARK: - Layout Calculation
 
     private func calculateLayout(geometry: GeometryProxy) -> (frame: CGRect, cornerRadius: CGFloat) {
         let windowSize = geometry.size
-        let isSplit = browserManager.splitManager.isSplit(for: windowState.id)
         let sidebarPosition = nookSettings.sidebarPosition
 
         // Compute the visible web content area by excluding the sidebar width
@@ -320,8 +140,6 @@ struct PeekOverlayView: View {
             peekX = peekXWithinWebArea
         }
 
-        // If split view, behavior remains the same as single; centering is relative to web area
-        _ = isSplit // currently unused but kept for future adjustments
 
         return (
             frame: CGRect(
@@ -333,10 +151,4 @@ struct PeekOverlayView: View {
             cornerRadius: cornerRadius
         )
     }
-}
-
-// Preference key for webview size tracking
-struct PeekWebViewSizePreferenceKey: PreferenceKey {
-    static var defaultValue: CGSize = .zero
-    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {}
 }

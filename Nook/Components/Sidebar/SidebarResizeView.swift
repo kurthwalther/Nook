@@ -27,7 +27,7 @@ struct SidebarResizeView: View {
     /// allí isSidebarVisible es falso, así que las guardas de abajo lo dejan pasar con esto.
     var kurthEnFlotante = false
 
-    private let minWidth: CGFloat = 180
+    private let minWidth = NookDesign.Size.sidebarMin
     private let maxWidth: CGFloat = 520
     private let defaultWidth: CGFloat = 250
 

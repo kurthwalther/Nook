@@ -179,7 +179,7 @@ struct WebsiteView: View {
     private let dragCoordinateSpace = "splitPreview"
 
     private var cornerRadius: CGFloat {
-        return NookDesign.Radius.md
+        nookSettings.hideWebContentBorder ? 0 : NookDesign.Radius.md
     }
 
     private var webViewClipShape: AnyShape {
@@ -218,18 +218,23 @@ struct WebsiteView: View {
                             rightId: splitManager.rightTabId(for: windowState.id),
                             windowState: windowState,
                             compositorVersion: windowState.compositorVersion,
-                            selectedItemID: windowState.selectedItemID
+                            selectedItemID: windowState.selectedItemID,
+                            cornerRadius: cornerRadius,
+                            squareTopCorners: nookSettings.topBarAddressView
                         )
                         .coordinateSpace(name: dragCoordinateSpace)
-                        .background(shouldShowSplit ? Color.clear : Color(nsColor: .windowBackgroundColor))
+                        // The shadow comes from this opaque shape behind the webview, and the
+                        // corners from the container layer's cornerRadius. A clipShape mask,
+                        // shadow or compositingGroup on this branch recomposites the
+                        // WKWebView's live video layer and flashes it black one frame at a
+                        // time during playback.
+                        .background(
+                            webViewClipShape
+                                .fill(shouldShowSplit ? Color.clear : Color(nsColor: .windowBackgroundColor))
+                                // kurth: con la barra flotante la sombra la pone KurthPageEdge detrás.
+                                .nookElevation(nookSettings.hideWebContentBorder || (KurthChrome.floatingTopBar && !shouldShowSplit) ? .flat : .raised)
+                        )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipShape(webViewClipShape)
-                        // compositingGroup creates a rendering barrier so the shadow is
-                        // computed from a flattened bitmap rather than recompositing the
-                        // WKWebView's live GPU video layer, which caused black flashes.
-                        .compositingGroup()
-                        // kurth: con la barra flotante la sombra la pone KurthPageEdge detrás.
-                        .nookElevation(KurthChrome.floatingTopBar && !shouldShowSplit ? .flat : .raised)
                         // Critical: Use allowsHitTesting to prevent SwiftUI from intercepting mouse events
                         // This allows right-clicks to pass through to the underlying NSView (WKWebView)
                         .allowsHitTesting(!browserManager.dialogManager.isVisible)
@@ -257,6 +262,18 @@ struct WebsiteView: View {
                 
             }
             
+            // WebKit's PDF bar is off (BrowserConfiguration.hidePDFHUD); these replace it.
+            if !shouldShowSplit,
+               let session = browserManager.tabs.controllableSession(in: windowState),
+               session.isDisplayingPDF,
+               let webView = browserManager.getWebView(for: session.itemID, in: windowState.id) {
+                VStack {
+                    Spacer()
+                    PDFControlsView(session: session, webView: webView)
+                        .padding(.bottom, NookDesign.Spacing.xxxl)
+                }
+            }
+
             // Split preview overlay - shows cards during drag operations
             if splitManager.getSplitState(for: windowState.id).isPreviewActive {
                 SplitPreviewOverlay()
@@ -444,6 +461,25 @@ struct TabCompositorWrapper: NSViewRepresentable {
     let windowState: BrowserWindowState
     var compositorVersion: Int
     var selectedItemID: UUID?
+    var cornerRadius: CGFloat
+    var squareTopCorners: Bool
+
+    /// Rounds the container's own layer instead of masking the SwiftUI branch:
+    /// CALayer.cornerRadius composites directly, while a shape mask over the
+    /// hosted WKWebView flashed its video layer black during playback.
+    private func applyCornerRadius(to containerView: NSView) {
+        guard let layer = containerView.layer else { return }
+        layer.cornerRadius = cornerRadius
+        layer.cornerCurve = .continuous
+        layer.masksToBounds = true
+        let bottom: CACornerMask = containerView.isFlipped
+            ? [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+            : [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        let top: CACornerMask = containerView.isFlipped
+            ? [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+            : [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+        layer.maskedCorners = squareTopCorners ? bottom : bottom.union(top)
+    }
 
     class Coordinator {
         weak var browserManager: BrowserManager?
@@ -475,6 +511,7 @@ struct TabCompositorWrapper: NSViewRepresentable {
         // Use windowBackgroundColor instead of clear to prevent black flashes during
         // video playback when the WKWebView's GPU compositing layer briefly shows through.
         containerView.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        applyCornerRadius(to: containerView)
         containerView.postsFrameChangedNotifications = true
 
         // Store reference to container view in WebViewCoordinator
@@ -516,6 +553,7 @@ struct TabCompositorWrapper: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
+        applyCornerRadius(to: nsView)
         // Only rebuild compositor when meaningful inputs change
         let size = nsView.bounds.size
         let currentId = windowState.selectedItemID

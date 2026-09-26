@@ -85,10 +85,14 @@ public enum NookDesign {
         public static let rowButton: CGFloat = 20      // hover-only close/unload button in a row
         public static let cornerButton: CGFloat = 14   // button tucked into a tile corner, kept off the tile's centre
         public static let hairlineWidth: CGFloat = 1   // 1pt rule
+        public static let loadBar: CGFloat = 2         // page load progress along the top of Peek and the mini window
         public static let waveAmplitude: CGFloat = 3   // peak of the separator's working wave
         public static let waveLength: CGFloat = 56     // one full cycle of that wave
         public static let dropTail: CGFloat = 100      // empty drop target height below the last row
         public static let dialogMaxWidth: CGFloat = 500
+        public static let glassControl: CGFloat = 36   // sidebar glass controls, the size of a macOS 26 toolbar button
+        // Narrowest sidebar: the lights (88), the history pill (110), the inset (8).
+        public static let sidebarMin: CGFloat = 206
 
         // Settings
         public static let settingsChip: CGFloat = 22           // tinted icon chip in the settings sidebar
@@ -130,6 +134,7 @@ public enum NookDesign {
         public static let standard = Animation.smooth(duration: 0.22)    // selection, reveal, fold
         public static let settle = Animation.smooth(duration: 0.6)       // the separator wave rising and flattening
         public static let wavePeriod: TimeInterval = 1.6                 // seconds for the wave to travel one cycle
+        public static let flight = Animation.easeIn(duration: 0.6)       // a download flying from the page to its button
         public static let spring = Animation.snappy(duration: 0.3)      // palette, dialog, toast, drag reorder, gesture-tracked motion
     }
 

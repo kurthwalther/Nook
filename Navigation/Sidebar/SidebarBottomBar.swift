@@ -48,9 +48,10 @@ struct SidebarBottomBar: View {
             Button("Menu", systemImage: "archivebox") {
                 onMenuTap()
             }
-            .labelStyle(.iconOnly)
-            .buttonStyle(NookIconButtonStyle())
-            .foregroundStyle(Color.primary)
+            // A finished download bounces the button its icon flew into.
+            .symbolEffect(.bounce, value: browserManager.downloadManager.completedCount)
+            .nookGlassControls(in: Circle())
+            .anchorPreference(key: DownloadsButtonAnchorKey.self, value: .bounds) { $0 }
             .onHoverTracking { isHovered in
                 isMenuButtonHovered = isHovered
                 onMenuHover(isHovered)
@@ -76,10 +77,8 @@ struct SidebarBottomBar: View {
             // (Packages/NookWeb/Profile.swift) a space *is* the profile, so the item is gone.
         } label:{
             Label("Actions", systemImage: "plus")
-                .labelStyle(.iconOnly)
         }
         .menuStyle(.button)
-        .buttonStyle(NookIconButtonStyle())
-        .foregroundStyle(Color.primary)
+        .nookGlassControls(in: Circle())
     }
 }

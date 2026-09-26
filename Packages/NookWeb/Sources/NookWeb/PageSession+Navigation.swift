@@ -48,6 +48,7 @@ extension PageSession: WKNavigationDelegate {
         didCommit navigation: WKNavigation!
     ) {
         loadingState = .didCommit
+        pdfLoadStateChanged(webView)
         // First commit of the process is the launch-to-first-paint mark; later ones no-op.
         LaunchMetrics.markFirstPaint()
         controller?.tabEvents?.tabPropertiesChanged(self, properties: [.loading])
@@ -59,8 +60,8 @@ extension PageSession: WKNavigationDelegate {
             self.url = newURL
             controller?.pageCommitted(itemID: itemID, url: newURL)
             controller?.sessionDelegate?.navigateAcrossWindows(itemID, to: newURL)
-            // Update website shortcut detector with new URL
-            controller?.sessionDelegate?.shortcutDetectorDidNavigate(to: newURL)
+            // Update website shortcut detector with new URL; it follows the window's tab, not Peek.
+            if !isDetached { controller?.sessionDelegate?.shortcutDetectorDidNavigate(to: newURL) }
             // Grant extension access to the committed URL. This is critical for
             // server-side redirects (e.g. appstoreconnect.apple.com → idmsa.apple.com)
             // where decidePolicyFor only granted access to the initial URL, not the
@@ -77,6 +78,7 @@ extension PageSession: WKNavigationDelegate {
         didFinish navigation: WKNavigation!
     ) {
         loadingState = .didFinish
+        pdfLoadStateChanged(webView)
         controller?.tabEvents?.tabPropertiesChanged(self, properties: [.loading])
 
         if let newURL = webView.url {
@@ -277,6 +279,18 @@ extension PageSession: WKNavigationDelegate {
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
+        // mailto:, tel: and app schemes go to the system. A subframe needs a click, so an ad
+        // iframe cannot launch an app on its own.
+        if let url = navigationAction.request.url, let scheme = url.scheme?.lowercased(),
+           !WKWebView.handlesURLScheme(scheme), scheme != "webkit-extension", scheme != "safari-web-extension"
+        {
+            decisionHandler(.cancel)
+            if navigationAction.targetFrame?.isMainFrame != false || navigationAction.navigationType == .linkActivated {
+                openWithSystem(url)
+            }
+            return
+        }
+
         if let url = navigationAction.request.url,
             navigationAction.targetFrame?.isMainFrame == true
         {
@@ -306,10 +320,11 @@ extension PageSession: WKNavigationDelegate {
             }
         }
 
-        // Check for Option+click to trigger Peek for any link
+        // Check for Option+click to trigger Peek for any link. Inside Peek or a mini window
+        // the link just loads there.
         if let url = navigationAction.request.url,
             navigationAction.navigationType == .linkActivated,
-            isOptionKeyDown || navigationAction.isOptionClick
+            (isOptionKeyDown || navigationAction.isOptionClick), !isDetached // kurth: ⌥ + clic leído del evento
         {
 
             // Trigger Peek instead of normal navigation

@@ -15,6 +15,7 @@ import SwiftData
 import SwiftUI
 import WebKit
 import NookBlocker
+import NookDesign
 import NookSettings
 import NookTweaks
 import NookWeb
@@ -375,6 +376,9 @@ class BrowserManager: ObservableObject {
 
     /// Reference to the app delegate for Sparkle integration
     weak var appDelegate: AppDelegate?
+    /// SwiftUI's action for the Settings scene, handed over by `WindowView`. The old
+    /// `showSettingsWindow:` selector no longer opens a SwiftUI Settings scene.
+    var openSettingsAction: OpenSettingsAction?
 
     var modelContext: ModelContext
     /// The tab model: tree, device state, window selection and live pages.
@@ -403,16 +407,11 @@ class BrowserManager: ObservableObject {
 
     var siteRoutingManager: SiteRoutingManager
     var externalMiniWindowManager = ExternalMiniWindowManager()
-    @Published var peekManager = PeekManager()
+    let peekManager = PeekManager()
 
     // TEMPORARY: Will be removed when cross-window coordination is eliminated
     weak var webViewCoordinator: WebViewCoordinator?
-    weak var windowRegistry: WindowRegistry? {
-        didSet {
-            // Update PeekManager's windowRegistry reference when this changes
-            peekManager.windowRegistry = windowRegistry
-        }
-    }
+    weak var windowRegistry: WindowRegistry?
 
     private var savedSidebarWidth: CGFloat = 250
     private let userDefaults = UserDefaults.standard
@@ -664,6 +663,7 @@ class BrowserManager: ObservableObject {
             windowState.isSidebarVisible.toggle()
             // Width stays the same whether visible or hidden
         }
+        if !windowState.isSidebarVisible { sidebarPiPSidebarHidden(in: windowState) }
         if windowRegistry?.activeWindow?.id == windowState.id {
             isSidebarVisible = windowState.isSidebarVisible
             sidebarWidth = windowState.sidebarWidth
@@ -782,8 +782,12 @@ class BrowserManager: ObservableObject {
             }
             return
         }
-        SettingsNavigation.shared.currentSettingsTab = .spaces
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        openSettings(tab: .spaces)
+    }
+
+    func openSettings(tab: SettingsTabs) {
+        SettingsNavigation.shared.currentSettingsTab = tab
+        openSettingsAction?.callAsFunction()
     }
 
     func closeDialog() {
@@ -805,10 +809,11 @@ class BrowserManager: ObservableObject {
         let isFirstLaunch = savedWidth == 0
 
         if savedWidth > 0 {
-            savedSidebarWidth = savedWidth
-            // Keep the width even when the sidebar starts hidden: toggleSidebar() only flips
-            // visibility, so a zero width here left the sidebar "visible" at 0 pt after relaunch.
-            sidebarWidth = savedWidth
+            // A width saved under an older, smaller minimum would hide the history buttons.
+            savedSidebarWidth = max(savedWidth, NookDesign.Size.sidebarMin)
+            // kurth: se conserva el ancho aunque la barra arranque oculta: toggleSidebar() solo cambia la
+            // visibilidad, y con 0 aquí la barra quedaba "visible" a 0 pt al reabrir.
+            sidebarWidth = savedSidebarWidth
         } else {
             // First launch: ensure sidebar is visible with default width
             savedSidebarWidth = 250
@@ -930,7 +935,7 @@ class BrowserManager: ObservableObject {
         windowState.savedSidebarWidth = savedSidebarWidth
         windowState.aiSidebarWidth = KurthPrefs.shared.aiSidebarWidth // kurth: el último ancho del panel del agente
         windowState.isCommandPaletteVisible = false
-        windowState.sidebarPiPController = SidebarPiPController()
+        windowState.sidebarPiPController = SidebarPiPController(windowState: windowState)
         // NSWindow reference is set by WindowFocusBridge.attach in ContentView
         windowState.urlBarFrame = urlBarFrame
 

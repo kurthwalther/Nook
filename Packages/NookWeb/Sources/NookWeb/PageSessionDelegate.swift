@@ -30,6 +30,8 @@ public protocol PageSessionDelegate: AnyObject {
     // MARK: Downloads and panels
 
     func addDownload(_ download: WKDownload, originalURL: URL, suggestedFilename: String)
+    /// Bytes WebKit already holds, such as the PDF the viewer shows, written to Downloads.
+    func saveFile(_ data: Data, suggestedFilename: String, originalURL: URL, from webView: WKWebView)
     /// Enters or leaves full screen for the window showing `webView`. Returns false when
     /// `webView` has no window, so the caller can fail its completion handler.
     func toggleFullScreen(for webView: WKWebView) -> Bool
@@ -37,9 +39,8 @@ public protocol PageSessionDelegate: AnyObject {
     // MARK: Peek and sign-in
 
     func presentPeek(url: URL, from session: PageSession)
-    /// A mini window for an OAuth or sign-in popup; the handler runs when it closes.
-    /// `size` is the one the page asked for in `window.open`, when it asked for one.
-    func presentSignInWindow(url: URL, size: CGSize?, completion: @escaping (Bool) -> Void)
+    /// Shows a sign-in popup, a detached page that keeps `window.opener`, in a mini window.
+    func presentPopupWindow(_ session: PageSession)
     func handleAuthenticationChallenge(
         _ challenge: URLAuthenticationChallenge,
         for session: PageSession,
@@ -52,7 +53,6 @@ public protocol PageSessionDelegate: AnyObject {
     func cleanupZoom(for itemID: UUID)
     func setMuteState(_ muted: Bool, for itemID: UUID)
     func requestPictureInPicture(for session: PageSession, webView: WKWebView?)
-    func isPictureInPictureActive(for session: PageSession) -> Bool
 
     // MARK: Website keyboard shortcuts
 
@@ -66,4 +66,11 @@ public protocol PageSessionDelegate: AnyObject {
     /// retain for the life of the page, or nil when the URL is not a store page.
     func installWebStoreScript(in webView: WKWebView) -> AnyObject?
     func removeWebStoreHandler(from controller: WKUserContentController)
+}
+
+/// What a window's picture-in-picture (`BrowserWindowState.sidebarPiPStorage`) shows, so the tab
+/// model counts that page as on screen.
+@MainActor
+public protocol PictureInPictureHolder: AnyObject {
+    var pictureInPictureItemID: UUID? { get }
 }

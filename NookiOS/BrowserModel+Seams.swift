@@ -91,11 +91,15 @@ extension BrowserModel: PageSessionDelegate {
         download.delegate = handler
     }
 
+    /// Only the macOS PDF controls call this; iOS keeps WebKit's own PDF viewer.
+    func saveFile(_ data: Data, suggestedFilename: String, originalURL: URL, from webView: WKWebView) {}
+
     func toggleFullScreen(for webView: WKWebView) -> Bool { false }
 
     func presentPeek(url: URL, from session: PageSession) { session.navigate(to: url.absoluteString) }
 
-    func presentSignInWindow(url: URL, size: CGSize?, completion: @escaping (Bool) -> Void) { completion(false) }
+    /// No mini windows on a phone: the popup becomes a tab, opener intact.
+    func presentPopupWindow(_ session: PageSession) { tabs.adopt(session, in: window) }
 
     func handleAuthenticationChallenge(
         _ challenge: URLAuthenticationChallenge, for session: PageSession,
@@ -106,7 +110,6 @@ extension BrowserModel: PageSessionDelegate {
     func cleanupZoom(for itemID: UUID) {}
     func setMuteState(_ muted: Bool, for itemID: UUID) {}
     func requestPictureInPicture(for session: PageSession, webView: WKWebView?) {}
-    func isPictureInPictureActive(for session: PageSession) -> Bool { false }
     func configureShortcutDetection(in webView: WKWebView) {}
     func shortcutDetectorDidNavigate(to url: URL) {}
     func updateDetectedShortcuts(for url: String, shortcuts: Set<String>) {}

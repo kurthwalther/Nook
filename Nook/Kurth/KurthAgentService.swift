@@ -556,7 +556,10 @@ final class KurthAgentService {
             self.arrancar()
         }
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.guardarConversacion() }
+            MainActor.assumeIsolated {
+                self?.guardarConversacion()
+                KurthRemoto.shared.apagar() // que el proceso del cel no sobreviva a Nook
+            }
         }
     }
 

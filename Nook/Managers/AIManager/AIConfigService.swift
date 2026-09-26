@@ -6,6 +6,7 @@
 //  Manages AI configuration persistence via JSON file
 //
 
+import CryptoKit
 import Foundation
 import NookSettings
 import OSLog
@@ -74,6 +75,8 @@ class AIConfigService {
 
         // Migrate from UserDefaults if this is a fresh config
         migrateFromUserDefaultsIfNeeded()
+        addOnDeviceProvider()
+        replaceUneditedSystemPrompt()
     }
 
     // MARK: - Persistence
@@ -346,6 +349,41 @@ class AIConfigService {
             mcpServers: [],
             browserToolsConfig: BrowserToolsConfig(executionMode: .askBeforeExecuting)
         )
+    }
+
+    // MARK: - On-Device Provider
+
+    /// Lists Apple Intelligence first and makes it the active provider when nothing usable is chosen:
+    /// no provider, no model, or a provider still missing its key. A working setup is left alone.
+    private func addOnDeviceProvider() {
+        let id = AppleIntelligenceProvider.providerId
+        var changed = false
+        if !config.providers.contains(where: { $0.id == id }) {
+            config.providers.insert(AIProviderConfig(id: id, displayName: AIProviderType.appleIntelligence.displayName, providerType: .appleIntelligence), at: 0)
+            changed = true
+        }
+        if !config.models.contains(where: { $0.id == AppleIntelligenceProvider.modelId }) {
+            config.models.append(AIModelConfig(id: AppleIntelligenceProvider.modelId, displayName: "On-Device", providerId: id, capabilities: AIModelCapabilities(toolCalling: true)))
+            changed = true
+        }
+        let usable = config.activeModelId != nil && activeProvider.map { !$0.providerType.requiresAPIKey || !$0.apiKey.isEmpty } == true
+        if !usable, AppleIntelligenceProvider.isAvailable {
+            config.activeProviderId = id
+            config.activeModelId = AppleIntelligenceProvider.modelId
+            changed = true
+        }
+        if changed { save() }
+    }
+
+    /// SHA-256 of the default system prompt before September 2026. A saved prompt that still matches
+    /// it was never edited, so it moves to the current default; an edited one is left alone.
+    private static let previousDefaultPromptHash = "711d0701b5580efd395aa9c85e233349b9d50e4ef3b60b937d6eef722ab978b9"
+
+    private func replaceUneditedSystemPrompt() {
+        let hash = SHA256.hash(data: Data(config.generationConfig.systemPrompt.utf8)).map { String(format: "%02x", $0) }.joined()
+        guard hash == Self.previousDefaultPromptHash else { return }
+        config.generationConfig.systemPrompt = AIGenerationConfig.defaultSystemPrompt
+        save()
     }
 
     // MARK: - Migration from UserDefaults

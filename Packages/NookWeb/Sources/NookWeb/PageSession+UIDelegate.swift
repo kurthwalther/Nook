@@ -32,23 +32,37 @@ extension PageSession {
 
     // MARK: - Peek Detection
 
+    /// Option always peeks. Otherwise only a favorite or pinned tab peeks, for a link to another
+    /// site, so the page it keeps in the sidebar stays put; a regular tab opens a new tab.
     func shouldRedirectToPeek(url: URL) -> Bool {
-        // Always redirect to Peek if Option key is down (for any URL)
-        if isOptionKeyDown {
-            return true
-        }
-
-        // Check if this is an external domain URL
-        guard let currentHost = self.url.host,
-            let newHost = url.host
+        if isOptionKeyDown { return true }
+        guard controller?.isSynced(itemID) == true, let from = self.url.host, let to = Self.destinationHost(of: url)
         else { return false }
+        return !Self.isSameSite(from, to)
+    }
 
-        // If hosts are different, it's an external URL
-        if currentHost != newHost {
-            return true
+    /// Where a link really goes. A site's own redirector (l.facebook.com/l.php?u=,
+    /// youtube.com/redirect?q=) carries the destination in its query; judge the link by that.
+    /// ponytail: the u, q and url parameters only; add a redirector's own name if one is missed.
+    static func destinationHost(of url: URL) -> String? {
+        let carried = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+            .first { ["u", "q", "url"].contains($0.name) }?.value
+            .flatMap(URL.init(string:))
+        guard let carried, carried.scheme == "http" || carried.scheme == "https" else { return url.host }
+        return carried.host
+    }
+
+    // No public suffix list: hosts match when one equals or contains the other, so a page on a
+    // bare shared suffix (github.io) would match its subdomains, and sibling subdomains
+    // (mail.google.com, docs.google.com) count as different sites. Use a PSL if that proves wrong.
+    public static func isSameSite(_ lhs: String?, _ rhs: String?) -> Bool {
+        func bare(_ host: String?) -> String {
+            let host = host?.lowercased() ?? ""
+            return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
         }
-
-        return false
+        let a = bare(lhs), b = bare(rhs)
+        guard !a.isEmpty, !b.isEmpty else { return false }
+        return a == b || a.hasSuffix(".\(b)") || b.hasSuffix(".\(a)")
     }
 
 }
@@ -62,65 +76,50 @@ extension PageSession: WKUIDelegate {
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
         guard let delegate = controller?.sessionDelegate else { return nil }
-
-        // OAuth and signin flows should open in a miniwindow for better UX
-        // The miniwindow handles OAuth completion detection and notifies the parent tab
-        // Skip this for extension-originated navigations — extensions manage their own auth flows
+        let url = navigationAction.request.url
+        // Extensions manage their own auth flows, and never get Peek.
         let sourceScheme = navigationAction.sourceFrame.request.url?.scheme?.lowercased() ?? ""
         let isFromExtension = sourceScheme == "webkit-extension" || sourceScheme == "safari-web-extension"
-        if !isFromExtension,
-            let url = navigationAction.request.url,
-            isLikelyOAuthOrExternalWindow(url: url, windowFeatures: windowFeatures)
-        {
-            
-            // Reselect and reload the opener once the sign-in window succeeds.
-            let parentItemID = itemID
-            let requestedSize = windowFeatures.width.flatMap { width in
-                windowFeatures.height.map { CGSize(width: width.doubleValue, height: $0.doubleValue) }
-            }
-            delegate.presentSignInWindow(url: url, size: requestedSize) { [weak self] success in
-                guard success else { return }
-                DispatchQueue.main.async {
-                    guard let self, let controller = self.controller,
-                          let parent = controller.session(for: parentItemID) else { return }
-                    if let window = controller.window(for: parent) {
-                        controller.select(parentItemID, in: window)
-                    }
-                    parent.activeWebView.reload()
-                }
-            }
-
-            return nil  // Don't create a WebView, miniwindow handles it
-        }
-
-        // For regular popups, check if this should be redirected to Peek
-        // Skip Peek for extension-originated navigations
-        if !isFromExtension,
-            let url = navigationAction.request.url,
-            shouldRedirectToPeek(url: url)
-        {
-
-            // Trigger Peek after returning control to WebKit to avoid runloop-mode issues
-            RunLoop.current.perform { [weak self] in
-                guard let self else { return }
-                self.controller?.sessionDelegate?.presentPeek(url: url, from: self)
-            }
-
-            return nil  // Don't create a WebView, we're using Peek
-        }
-
-        // Air Traffic Control — route popup URLs to designated spaces
-        if let url = navigationAction.request.url,
-           controller?.siteRouting.applyRoute(url: url, from: self) == true {
-            return nil
-        }
 
         // WebKit's configuration shares the opener's userContentController. Handlers are keyed
         // by name, so registering the popup's on it would reroute the opener's messages to the
         // popup, and closing the popup would strip them from the opener. Give the popup its own
         // controller; WebKit only requires the configuration's related web view to match.
-        configuration.userContentController = BrowserConfiguration.shared.freshUserContentController()
-        guard let newWebView = controller?.webViews?.makeWebView(configuration: configuration) else { return nil }
+        func popupConfiguration() -> WKWebViewConfiguration {
+            configuration.userContentController = BrowserConfiguration.shared.freshUserContentController()
+            return configuration
+        }
+
+        // A sign-in popup shows in a mini window as a real popup, so `window.opener` carries the
+        // result back to this page the way the site expects.
+        if !isFromExtension, let url, isLikelyOAuthOrExternalWindow(url: url, windowFeatures: windowFeatures) {
+            guard let popup = controller?.openDetachedPopup(configuration: popupConfiguration(), url: url, opener: self)
+            else { return nil }
+            delegate.presentPopupWindow(popup)
+            return popup.webView
+        }
+
+        // Air Traffic Control: route popup URLs to designated spaces.
+        if let url, controller?.siteRouting.applyRoute(url: url, from: self) == true {
+            return nil
+        }
+
+        // Peek and mini window pages follow the link in place rather than open a tab behind them.
+        if isDetached {
+            if url != nil { webView.load(navigationAction.request) }
+            return nil
+        }
+
+        if !isFromExtension, let url, shouldRedirectToPeek(url: url) {
+            // Trigger Peek after returning control to WebKit to avoid runloop-mode issues
+            RunLoop.current.perform { [weak self] in
+                guard let self else { return }
+                self.controller?.sessionDelegate?.presentPeek(url: url, from: self)
+            }
+            return nil
+        }
+
+        guard let newWebView = controller?.webViews?.makeWebView(configuration: popupConfiguration()) else { return nil }
 
         // A session owns the popup's view; a private page's popup stays in its private window.
         guard let controller,
@@ -216,6 +215,11 @@ extension PageSession: WKUIDelegate {
         alerts.presentPrompt(
             prompt: prompt, defaultText: defaultText, host: frame.securityOrigin.host, over: webView,
             onSuppress: nextDialogSuppressor(), completion: completionHandler)
+    }
+
+    /// A popup that finished (a sign-in window) closes itself; only detached pages act on it.
+    public func webViewDidClose(_ webView: WKWebView) {
+        onClose?()
     }
 
     // MARK: - File Upload Support

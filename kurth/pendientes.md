@@ -7,7 +7,12 @@ Detalle de Zen en `kurth/plan-zen.md`.
 
 Orden acordado; Trazo (dirección del Creative) descartada por Kurth: "está feo".
 
-1. **Traer v1.1.1 de upstream** (S; conflictos esperados en Peek, sidebar y chat, que tocamos). Trae: Ask
+1. ✅ **v1.1.1 de upstream traída** (merge `v1.1.1` → `kurth`, 26 sep). Doce archivos en conflicto; regla: lo
+   nuestro donde hay marca `kurth`, lo de upstream en su rediseño (sign-in/mini window sobre PageSession,
+   Peek con DetachedPageHost). Se conservó: barra flotante, Peek al 80 % con aire y botones a la derecha,
+   ancho de la lateral al reabrir, ⌥+clic, sombra por KurthPageEdge, notificaciones de Peek para el
+   fondo al 97 %. **Se perdió y hay que re-aplicar:** `16ba35af` (la ventana de inicio de sesión con el
+   tamaño que pide la página y centrada sobre la ventana padre); upstream ya no pasa ese tamaño. Trae: Ask
    Nook con Apple Intelligence sin API key, tab trails (links anidados bajo su pestaña, nuevas debajo de la
    actual), back/forward/reload junto a los semáforos, Liquid Glass en lateral/historial/descargas/Peek, PDF
    con zoom/imprimir/guardar y ⌘P, "Hide border"; arreglos: Save Image mandaba cookies al redirect, frames

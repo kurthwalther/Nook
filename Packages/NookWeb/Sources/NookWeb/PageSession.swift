@@ -32,8 +32,18 @@ public final class PageSession: NSObject, Identifiable {
 
     /// The profile whose data store this page uses.
     public var profile: Profile? {
-        controller?.profile(for: self)
+        detachedProfile ?? controller?.profile(for: self)
     }
+
+    // MARK: - Detached Pages
+
+    /// Set while the page is shown outside the tab tree, in Peek or a mini window: the data store
+    /// it uses and the window it belongs to. Cleared when the page becomes a tab.
+    @ObservationIgnored public internal(set) var detachedProfile: Profile?
+    @ObservationIgnored public internal(set) weak var detachedWindow: BrowserWindowState?
+    /// Runs when the page calls `window.close()`, so Peek or the mini window can close.
+    @ObservationIgnored public var onClose: (() -> Void)?
+    public var isDetached: Bool { detachedProfile != nil }
 
     // MARK: - Page State
 
@@ -96,6 +106,27 @@ public final class PageSession: NSObject, Identifiable {
     public var isLoading: Bool { loadingState.isLoading }
     public var canGoBack: Bool = false
     public var canGoForward: Bool = false
+    /// WebKit's own PDF viewer is showing the page, so Nook draws its controls over it.
+    public var isDisplayingPDF: Bool = false
+    /// Bumped whenever the PDF controls should show: a PDF loads, or the pointer moves over one.
+    public private(set) var pdfControlsReveal = 0
+    @ObservationIgnored private var lastPDFControlsReveal: ContinuousClock.Instant?
+
+    /// Called on every mouse move over the page. Cheap on an ordinary page, and on a PDF it
+    /// publishes at most four times a second, since each publish redraws the controls.
+    public func pointerMovedOverPage() {
+        guard isDisplayingPDF else { return }
+        let now = ContinuousClock.now
+        if let last = lastPDFControlsReveal, now - last < .milliseconds(250) { return }
+        lastPDFControlsReveal = now
+        pdfControlsReveal &+= 1
+    }
+
+    /// After a load: a reload keeps the controls' view, so without this they stayed hidden.
+    func pdfLoadStateChanged(_ webView: WKWebView) {
+        isDisplayingPDF = webView.nookIsDisplayingPDF
+        if isDisplayingPDF { pdfControlsReveal &+= 1 }
+    }
 
     // MARK: - Web Process Crash Tracking
 
@@ -173,8 +204,6 @@ public final class PageSession: NSObject, Identifiable {
     // MARK: - Web View Ownership
 
     var primaryWebView: WKWebView?
-    /// A view created elsewhere (Peek, mini window, popup) that this session adopts on setup.
-    @ObservationIgnored var adoptedWebView: WKWebView?
     /// The window that owns the primary web view; nil until a window displays the page.
     @ObservationIgnored var primaryWindowId: UUID?
 
@@ -203,15 +232,13 @@ public final class PageSession: NSObject, Identifiable {
         url: URL,
         title: String,
         isPrivate: Bool,
-        controller: TabsController?,
-        adoptedWebView: WKWebView? = nil
+        controller: TabsController?
     ) {
         self.itemID = itemID
         self.url = url
         self.title = title
         self.isPrivate = isPrivate
         self.controller = controller
-        self.adoptedWebView = adoptedWebView
         self.favicon = SwiftUI.Image(systemName: "globe")
         super.init()
         restoreFaviconFromCache()
@@ -279,14 +306,9 @@ public final class PageSession: NSObject, Identifiable {
             configuration.webExtensionController = extensionController
         }
 
-        let adopted = adoptedWebView
-        if let adopted {
-            primaryWebView = adopted
-        } else {
-            let created = controller?.webViews?.makeWebView(configuration: configuration)
-            (created as? SessionWebView)?.contextMenuBridge = WebContextMenuBridge(session: self, configuration: configuration)
-            primaryWebView = created
-        }
+        let created = controller?.webViews?.makeWebView(configuration: configuration)
+        (created as? SessionWebView)?.contextMenuBridge = WebContextMenuBridge(session: self, configuration: configuration)
+        primaryWebView = created
 
         guard let webView = primaryWebView else {
             Self.log.error("No web view created for item \(self.itemID.uuidString, privacy: .public)")
@@ -299,16 +321,7 @@ public final class PageSession: NSObject, Identifiable {
         webView.allowsMagnification = true
         setupThemeColorObserver(for: webView)
         setupNavigationStateObservers(for: webView)
-
-        // Adopted Peek and mini-window views have their own controllers without Nook's
-        // handlers, so they need the same setup as a fresh view.
         configure(webView)
-        // An adopted page already finished loading, so didFinish will not inject the page
-        // observers (SPA URL, media state, link hover) for this document.
-        if adopted != nil, !webView.isLoading, webView.url != nil {
-            injectPageObservers(into: webView)
-            if let current = webView.url { url = current }
-        }
 
         // Inform extensions before loading so content scripts and messaging can resolve this
         // page during early document phases.
@@ -321,14 +334,14 @@ public final class PageSession: NSObject, Identifiable {
         }
         // Consume popup suppression only after setup succeeds. WebKit drives the original
         // navigation; any replacement view must load the saved URL.
-        let shouldLoadInitialURL = !isPopupHost && adopted == nil
+        let shouldLoadInitialURL = !isPopupHost
         isPopupHost = false
         if shouldLoadInitialURL {
             load(url)
         }
     }
 
-    /// Handlers, user agent and preferences shared by primary, clone, adopted and popup views.
+    /// Handlers, user agent and preferences shared by primary, clone and popup views.
     /// The view's controller must belong to this view alone: handlers are keyed by name.
     public func configure(_ webView: WKWebView) {
         let controller = webView.configuration.userContentController
@@ -336,6 +349,8 @@ public final class PageSession: NSObject, Identifiable {
             controller.removeScriptMessageHandler(forName: name)
             controller.add(self, name: name)
         }
+        controller.removeScriptMessageHandler(forName: "pipStateChange", contentWorld: Self.pipStateWorld)
+        controller.add(self, contentWorld: Self.pipStateWorld, name: "pipStateChange")
         webView.customUserAgent = PlatformUserAgent.custom
         // Let the web content control its own background so extension styles (like Dark
         // Reader) can paint dark backgrounds. The themed background shows only while loading.
@@ -372,7 +387,7 @@ public final class PageSession: NSObject, Identifiable {
         }
     }
 
-    /// Releases every web view for this page (primary, window clones, adopted view) and resets
+    /// Releases every web view for this page (primary and window clones) and resets
     /// live state. The item and its URL stay; selecting it again loads a fresh view.
     public func unload() {
         let interval = BrowserPerformance.signposter.beginInterval("TabEviction")
@@ -385,7 +400,6 @@ public final class PageSession: NSObject, Identifiable {
         coordinator?.releaseWebViews(for: self)
         if let primary, !primaryIsPooled { cleanupClone(primary) }
         primaryWebView = nil
-        adoptedWebView = nil
         // WebKit only supplies the original popup navigation. A replacement view must load the
         // saved URL through the normal setup path.
         isPopupHost = false
@@ -428,6 +442,7 @@ public final class PageSession: NSObject, Identifiable {
         for handlerName in messageHandlerNames {
             controller.removeScriptMessageHandler(forName: handlerName)
         }
+        controller.removeScriptMessageHandler(forName: "pipStateChange", contentWorld: Self.pipStateWorld)
         self.controller?.sessionDelegate?.removeWebStoreHandler(from: controller)
         controller.removeScriptMessageHandler(
             forName: AdvancedRulesEngine.messageHandlerName, contentWorld: .page)
@@ -717,8 +732,9 @@ public final class PageSession: NSObject, Identifiable {
 
     // MARK: - Opening links
 
-    /// Opens `url` in a background tab in this page's window and space. Used by
-    /// "Open Link in New Tab" in the context menu and by a middle click on a link.
+    /// Opens `url` in a background tab in this page's window and space, as a child of this tab
+    /// (a trail). Used by "Open Link in New Tab" in the context menu, a middle click and a
+    /// Command-click on a link.
     /// A private window's own tree keeps the link inside that window.
     ///
     /// The URL comes from the page's own markup, so the scheme is checked here rather
@@ -728,8 +744,7 @@ public final class PageSession: NSObject, Identifiable {
     public func openInNewTab(_ url: URL) {
         guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return }
         guard let tabs = controller, let window = tabs.window(for: self) else { return }
-        let parent = tabs.spaceID(of: itemID).map { Parent.tabs(spaceID: $0) }
-        tabs.open(url: url, in: window, placement: .background, parent: parent)
+        tabs.open(url: url, in: window, placement: .background, from: itemID)
     }
 
     // MARK: - Equality
@@ -740,4 +755,16 @@ public final class PageSession: NSObject, Identifiable {
     }
 
     public override var hash: Int { itemID.hashValue }
+}
+
+private extension WKWebView {
+    /// `_isDisplayingPDF`, private since macOS 15 and iOS 18. Only a getter name exists, so KVC
+    /// on `_displayingPDF` throws. Shared by both platforms since navigation code is; only macOS
+    /// draws controls from it.
+    var nookIsDisplayingPDF: Bool {
+        let selector = NSSelectorFromString("_isDisplayingPDF")
+        guard responds(to: selector) else { return false }
+        typealias Getter = @convention(c) (AnyObject, Selector) -> Bool
+        return unsafeBitCast(method(for: selector), to: Getter.self)(self, selector)
+    }
 }

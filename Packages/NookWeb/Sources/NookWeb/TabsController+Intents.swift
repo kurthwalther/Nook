@@ -13,65 +13,139 @@ import WebKit
 extension TabsController {
     // MARK: - Open
 
-    /// Creates a tab for `url` at the top of `parent` (default: the window's tabs section).
-    /// `.newTab` selects it, `.background` leaves selection alone and loads nothing,
-    /// `.replaceCurrent` loads `url` in the selected page.
+    /// Creates a tab for `url`: at the top of `parent` when one is given; as the last child of
+    /// `opener`, the tab whose page opened the link (`childTabPosition`); else right below the
+    /// window's selected tab (`newTabPosition`). `.newTab` selects it, `.background` leaves
+    /// selection alone and loads nothing, `.replaceCurrent` loads `url` in the selected page.
     @discardableResult
-    public func open(url: URL, in window: BrowserWindowState, placement: Placement, parent: Parent? = nil) -> UUID? {
+    public func open(url: URL, in window: BrowserWindowState, placement: Placement, parent: Parent? = nil, from opener: UUID? = nil) -> UUID? {
         if placement == .replaceCurrent, let selected = window.selectedItemID, let session = ensureSession(for: selected) {
             session.load(url)
             select(selected, in: window)
             return selected
         }
-        guard let target = parent ?? window.spaceID.map({ Parent.tabs(spaceID: $0) }) else { return nil }
+        guard let position = parent.map({ ($0, UUID?.none) })
+                ?? opener.flatMap({ childTabPosition(in: window, opener: $0) })
+                ?? newTabPosition(in: window, after: window.selectedItemID)
+        else { return nil }
         let id = UUID()
         let created = perform(owner(of: window), "open") {
-            try $0.createTab(id: id, url: url, title: url.host ?? url.absoluteString, in: target, after: nil)
+            try $0.createTab(id: id, url: url, title: url.host ?? url.absoluteString, in: position.0, after: position.1)
         }
         guard created != nil else { return nil }
+        if opener != nil { revealTrail(position.0) }
         if placement != .background { select(id, in: window) }
         return id
     }
 
-    /// Wraps a web view created elsewhere (Peek, mini window) in a new item and session.
-    @discardableResult
-    public func adopt(webView: WKWebView, url: URL, title: String, in window: BrowserWindowState, placement: Placement) -> UUID? {
-        let owner = owner(of: window)
-        let replaced = placement == .replaceCurrent ? window.selectedItemID : nil
-        let source = tree(owner)
-        let target: Parent
-        var after: UUID? = nil
-        if let replaced, let item = source.item(replaced), source.scope(of: replaced) == .device {
-            target = item.parent
-            after = replaced
-        } else if let spaceID = window.spaceID {
-            target = .tabs(spaceID: spaceID)
-        } else {
-            return nil
+    /// Where a new tab goes: right below `anchor` when it is a tab in the window's tabs section,
+    /// else the top of that section. A pinned tab or favorite keeps its section to itself.
+    func newTabPosition(in window: BrowserWindowState, after anchor: UUID?) -> (Parent, UUID?)? {
+        guard let spaceID = window.spaceID else { return nil }
+        let source = tree(owner(of: window))
+        if let anchor, let item = source.item(anchor), !item.isFolder,
+           source.scope(of: anchor) == .device, source.spaceID(of: anchor) == spaceID {
+            return (item.parent, anchor)
         }
-        let id = UUID()
-        guard perform(owner, "adopt", { try $0.createTab(id: id, url: url, title: title, in: target, after: after) }) != nil else {
-            return nil
+        return (.tabs(spaceID: spaceID), nil)
+    }
+
+    /// Where a tab opened from `opener`'s page goes: its last child, so a run of links keeps its
+    /// order under it (a trail). A pinned tab, a favorite, or a tab at the depth limit takes no
+    /// children; the tab then goes right below it (`newTabPosition`).
+    func childTabPosition(in window: BrowserWindowState, opener: UUID) -> (Parent, UUID?)? {
+        let source = tree(owner(of: window))
+        guard source.spaceID(of: opener) == window.spaceID, source.canTakeChild(opener) else {
+            return newTabPosition(in: window, after: opener)
         }
+        let trail = Parent.folder(itemID: opener)
+        return (trail, source.children(of: trail).last?.id)
+    }
+
+    /// A new child shows at once, even when its tab was collapsed.
+    private func revealTrail(_ parent: Parent) {
+        guard case .folder(let hostID) = parent, item(hostID)?.isFolder == false else { return }
+        openFolder(hostID)
+    }
+
+    // MARK: - Detached Pages
+
+    /// A page outside the tree, for Peek or a mini window. It loads at once, runs the same
+    /// navigation, blocking and dialog code as a tab, and stays out of the sidebar until
+    /// `adopt(_:in:)` makes it a tab. `endDetached(_:)` closes it.
+    public func openDetached(url: URL, profile: Profile, in window: BrowserWindowState?) -> PageSession {
         let session = PageSession(
-            itemID: id, url: url, title: title, isPrivate: window.privateTree != nil,
-            controller: self, adoptedWebView: webView)
+            itemID: UUID(), url: url, title: url.host ?? url.absoluteString,
+            isPrivate: profile.isEphemeral, controller: self)
+        session.detachedProfile = profile
+        session.detachedWindow = window
+        session.loadWebViewIfNeeded()
+        return session
+    }
+
+    /// A WebKit-created popup from `opener` shown outside the tree (a sign-in window). It keeps
+    /// `window.opener`, and WebKit drives its first navigation.
+    func openDetachedPopup(configuration: WKWebViewConfiguration, url: URL?, opener: PageSession) -> PageSession? {
+        guard let profile = opener.profile,
+              let webView = webViews?.makeWebView(configuration: configuration) else { return nil }
+        let pageURL = url ?? URL(string: "about:blank")!
+        let session = PageSession(
+            itemID: UUID(), url: pageURL, title: pageURL.host ?? pageURL.absoluteString,
+            isPrivate: opener.isPrivate, controller: self)
+        session.detachedProfile = profile
+        session.detachedWindow = window(for: opener)
+        session.installPopupWebView(webView)
+        return session
+    }
+
+    /// Makes a detached page a selected tab of `window`, live view and all: a child of `opener`
+    /// when Peek opened it from that tab, else below the selected tab. A window whose space uses
+    /// another data store opens the URL fresh instead, and the detached page ends.
+    @discardableResult
+    public func adopt(_ session: PageSession, in window: BrowserWindowState, from opener: UUID? = nil) -> UUID? {
+        guard session.isDetached else { return nil }
+        let store = window.privateTree != nil ? window.ephemeralProfile : window.spaceID.flatMap { profile(forSpace: $0) }
+        guard store === session.detachedProfile,
+              let position = opener.flatMap({ childTabPosition(in: window, opener: $0) })
+                ?? newTabPosition(in: window, after: window.selectedItemID),
+              perform(owner(of: window), "adopt", {
+                  try $0.createTab(id: session.itemID, url: session.url, title: session.title, in: position.0, after: position.1)
+              }) != nil
+        else {
+            let id = open(url: session.url, in: window, placement: .newTab, from: opener)
+            endDetached(session)
+            return id
+        }
+        revealTrail(position.0)
+        session.detachedProfile = nil
+        session.detachedWindow = nil
+        session.onClose = nil
         register(session, in: window)
-        if placement != .background { select(id, in: window) }
-        if let replaced, after == replaced { close(replaced) }
-        return id
+        // Extensions could not see the page while it had no item.
+        if !session.isPrivate { tabEvents?.tabOpened(session) }
+        select(session.itemID, in: window)
+        return session.itemID
+    }
+
+    /// Closes a detached page that never became a tab.
+    public func endDetached(_ session: PageSession) {
+        guard session.isDetached else { return }
+        session.onClose = nil
+        session.tearDown()
     }
 
     /// A WebKit-created popup from `opener`: a new selected tab in the opener's window whose
     /// session owns `webView`. WebKit drives the popup's first navigation.
     @discardableResult
     func adoptPopup(webView: WKWebView, url: URL?, opener: PageSession) -> UUID? {
-        guard let window = window(for: opener), let spaceID = window.spaceID else { return nil }
+        guard let window = window(for: opener), let position = childTabPosition(in: window, opener: opener.itemID)
+        else { return nil }
         let id = UUID()
         let pageURL = url ?? URL(string: "about:blank")!
         guard perform(owner(of: window), "popup", {
-            try $0.createTab(id: id, url: pageURL, title: "New Tab", in: .tabs(spaceID: spaceID), after: nil)
+            try $0.createTab(id: id, url: pageURL, title: "New Tab", in: position.0, after: position.1)
         }) != nil else { return nil }
+        revealTrail(position.0)
         let session = PageSession(
             itemID: id, url: pageURL, title: "New Tab", isPrivate: window.privateTree != nil,
             controller: self)
@@ -97,6 +171,11 @@ extension TabsController {
     // MARK: - Selection
 
     public func select(_ itemID: UUID, in window: BrowserWindowState) {
+        select(itemID, in: window, leaving: selectedSession(in: window))
+    }
+
+    /// `previous` is what the window showed before; a space switch has already moved on from it.
+    private func select(_ itemID: UUID, in window: BrowserWindowState, leaving previous: PageSession?) {
         let owner = owner(of: window)
         let source = tree(owner)
         guard let item = source.item(itemID) else { return }
@@ -104,7 +183,6 @@ extension TabsController {
             toggleFolder(itemID)
             return
         }
-        let previous = selectedSession(in: window)
         let movedSpace = source.spaceID(of: itemID).map { $0 != window.spaceID } ?? false
         if let spaceID = source.spaceID(of: itemID) {
             window.spaceID = spaceID
@@ -164,14 +242,15 @@ extension TabsController {
     public func setSpace(_ spaceID: UUID, in window: BrowserWindowState) {
         let source = tree(owner(of: window))
         guard source.space(spaceID) != nil else { return }
+        let previous = selectedSession(in: window)
         let changed = window.spaceID != spaceID
         window.spaceID = spaceID
         if changed { sessionDelegate?.windowSpaceChanged(window) }
         let order = displayOrder(in: window)
         if let remembered = window.selectedItemBySpace[spaceID], order.contains(remembered) {
-            select(remembered, in: window)
+            select(remembered, in: window, leaving: previous)
         } else if !window.emptiedSpaces.contains(spaceID), let first = order.first {
-            select(first, in: window)
+            select(first, in: window, leaving: previous)
         } else {
             window.selectedItemBySpace[spaceID] = nil
             mirror(window)
@@ -222,18 +301,23 @@ extension TabsController {
             save()
             return
         }
-        remove(itemID)
+        // A tab with a trail closes alone; its children move up into its place.
+        remove(itemID, promotingChildren: !item.isFolder)
     }
 
     /// Deletes an item and its subtree from the sidebar, pinned tabs and favorites included.
     /// Pages end; reopening the closed entry puts it back in its place.
     public func remove(_ itemID: UUID) {
+        remove(itemID, promotingChildren: false)
+    }
+
+    private func remove(_ itemID: UUID, promotingChildren: Bool) {
         guard let owner = owner(ofItem: itemID) else { return }
-        let ids = tree(owner).subtree(of: itemID)
+        let ids = promotingChildren ? [itemID] : tree(owner).subtree(of: itemID)
         moveSelectionOff(Set(ids))
         var closedEntry: ClosedEntry?
         let change = perform(owner, "remove") { tree in
-            let result = try tree.close(itemID)
+            let result = try tree.close(itemID, promotingChildren: promotingChildren)
             closedEntry = result.closed
             return result.change
         }
@@ -285,7 +369,9 @@ extension TabsController {
         let restored = entry.items.map(\.id)
         // Older entries for the same items (a page close, then a delete) must not restore them twice.
         if !isPrivate { dropClosed(containing: Set(restored)) }
-        for folder in entry.items where folder.isFolder { openFolder(folder.id) }
+        for host in entry.items where host.isFolder || entry.items.contains(where: { $0.parent == .folder(itemID: host.id) }) {
+            openFolder(host.id)
+        }
         if let firstTab = restored.first(where: { tree(owner).item($0)?.isFolder == false }) {
             select(firstTab, in: window)
         }
@@ -484,7 +570,7 @@ extension TabsController {
         let source = tree(owner)
         let roots = source.children(of: .pinned(spaceID: spaceID)) + source.children(of: .tabs(spaceID: spaceID))
         for root in roots {
-            for id in source.subtree(of: root.id) where source.item(id)?.isFolder == true {
+            for id in source.subtree(of: root.id) where source.item(id)?.isFolder == true || source.hasChildren(id) {
                 setFolder(id, open: open)
             }
         }
@@ -572,7 +658,7 @@ extension TabsController {
 
     /// Unloads every page no window shows, except pages playing audio or in picture-in-picture.
     public func unloadAllHidden() {
-        for page in sessions where !page.isUnloaded && !isVisibleInAnyWindow(page.itemID)
+        for page in sessions where !page.isUnloaded && !isOnScreen(page.itemID)
             && !page.hasPlayingAudio && !page.hasPiPActive {
             page.unload()
         }
