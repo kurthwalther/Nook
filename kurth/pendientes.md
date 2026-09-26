@@ -3,6 +3,24 @@
 Una sola lista para las dos Macs. Quien avance, la actualiza en el mismo commit.
 Detalle de Zen en `kurth/plan-zen.md`.
 
+## El cel (Remote Control) — 25 sep noche, instalado
+
+Botón a la derecha del de permisos (`KurthRemoto.swift`, `KurthRemotoPopover.swift`, MCP
+`kurth_remote_control` on/off/status): abre la conversación del panel con `--resume` y
+`--remote-control` en un pseudo-terminal oculto, contesta los diálogos de arranque, pide la URL con
+`/remote-control` y enseña el QR. Verificado por MCP: conecta en ~6 s, "Remote Control is active", el
+agente contesta lo que se le manda por el pseudo-terminal. Kurth: el QR abre la app pero no brinca a
+la sesión; hay que ir a Code › Nook (falta que confirme que sí aparece).
+- **Hallazgo que cambia el diseño:** con Remote Control conectado, Claude Code guarda la conversación
+  en los servidores de Anthropic y NO en el .jsonl local (doc + medido con cierre por señal y con
+  /exit). Consecuencias: (1) no se puede pintar en el panel lo del cel leyendo el archivo; (2) al
+  apagar el cel, el panel retoma la conversación como estaba ANTES del cel (`claude --resume` tampoco
+  la trae). Hoy la caja queda pausada con el cel encendido.
+- **Propuesta para bidireccional:** con el cel encendido, el panel muestra la terminal de esa sesión
+  (SwiftTerm, MIT, headless o con vista) y la caja escribe en ella; se ven las dos direcciones sin
+  raspar la pantalla. `KurthRemoto.enviar`/`interrumpir` ya escriben al pseudo-terminal. Esperar OK.
+- Nook mantiene la Mac despierta mientras está encendido (beginActivity); con la tapa cerrada no.
+
 ## Al cerrar el 25 sep (José) — seguir en la Pro el fin
 
 **Esperan su OK:**

@@ -100,6 +100,13 @@ enum KurthMCPTools {
             ], "required": ["cual"]]
         ),
         AIToolDefinition(
+            name: "kurth_remote_control",
+            description: "El cel: Remote Control de Claude Code sobre la conversación del panel del agente (botón junto al de permisos). action: on enciende y devuelve el enlace en cuanto lo hay; off apaga; status dice estado, enlace y desde cuándo.",
+            parameters: ["type": "object", "properties": [
+                "action": ["type": "string", "enum": ["on", "off", "status"]],
+            ], "required": ["action"]]
+        ),
+        AIToolDefinition(
             name: "kurth_tab_grid",
             description: "Abre o cierra la cuadrícula de pestañas de la ventana activa (la misma del pellizco y ⇧⌘\\). abierta: true/false; sin ella, alterna.",
             parameters: ["type": "object", "properties": ["abierta": ["type": "boolean"]]]
@@ -119,6 +126,26 @@ enum KurthMCPTools {
                 if agente { window.isSidebarAIChatVisible = visible } else { window.isSidebarVisible = visible }
             }
             return text((agente ? "Agente " : "Barra lateral ") + (visible ? "abierta" : "cerrada"))
+        case "kurth_remote_control":
+            let remoto = KurthRemoto.shared
+            switch args["action"] as? String {
+            case "on":
+                guard let agente = KurthAgentService.actual else { return text("El panel del agente no ha abierto nunca en esta ejecución", error: true) }
+                if !remoto.encendido { agente.encenderRemoto() }
+            case "off":
+                remoto.apagar()
+            default: break
+            }
+            var estado: [String: Any] = ["sessionId": remoto.sessionId ?? NSNull(), "conMCP": remoto.conMCP]
+            switch remoto.estado {
+            case .apagado: estado["estado"] = "apagado"
+            case .arrancando(let paso): estado["estado"] = "arrancando"; estado["paso"] = paso
+            case .conectado(let url): estado["estado"] = "conectado"; estado["url"] = url.absoluteString
+            case .error(let motivo): estado["estado"] = "error"; estado["error"] = motivo
+            }
+            if let desde = remoto.desde { estado["desde"] = ISO8601DateFormatter().string(from: desde) }
+            estado["señales"] = remoto.señales
+            return text(json(estado))
         case "kurth_tab_grid":
             let gestos = KurthGestos.de(window)
             let abrir = (args["abierta"] as? Bool) ?? (gestos.progreso < 1)

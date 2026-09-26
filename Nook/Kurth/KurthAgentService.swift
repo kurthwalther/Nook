@@ -255,6 +255,8 @@ final class KurthAgentService {
     /// panel y no al mandar el primer mensaje.
     func arrancar() {
         guard estado == .apagado || esError else { return }
+        // Con el cel encendido la conversación es de ese proceso; el panel la retoma al apagarlo.
+        guard !KurthRemoto.shared.encendido else { return }
         arrancando?.cancel()
         estado = .arrancando
         conectarEventos()
@@ -316,6 +318,29 @@ final class KurthAgentService {
         descartarEnEspera()
     }
 
+    // MARK: - Cel (Remote Control)
+
+    /// Pasa la conversación del panel al cel: se apaga el agente de aquí (guardando el id) y
+    /// KurthRemoto abre esa misma conversación con Remote Control. Ver KurthRemoto.swift.
+    func encenderRemoto() {
+        let remoto = KurthRemoto.shared
+        guard !remoto.encendido else { return }
+        // A media respuesta o con un permiso esperando no se cambia de manos: el botón va apagado.
+        guard estado != .trabajando, permiso == nil else { return }
+        let id = cliente.sessionId ?? sesionParaRetomar?.id
+        if let id { sesionParaRetomar = (id, carpetaDeTrabajo.path) }
+        guardarConversacion()
+        apagar()
+        let opciones = UserDefaults.standard.dictionary(forKey: Self.claveOpciones) as? [String: String] ?? [:]
+        remoto.encender(sessionId: id, carpeta: carpetaDeTrabajo, opciones: opciones,
+                        instrucciones: KurthRemoto.instrucciones)
+    }
+
+    /// Apaga el cel; si el panel está abierto, retoma la conversación por id (alApagar).
+    func apagarRemoto() {
+        KurthRemoto.shared.apagar()
+    }
+
     // MARK: - Escribir mientras abre la sesión
 
     /// Lo que se mandó mientras la sesión abría (Kurth, 25 sep: "que se pueda escribir mientras
@@ -324,7 +349,9 @@ final class KurthAgentService {
 
     /// Si se puede mandar un mensaje ahora: con la sesión lista, o abriéndose y sin otro esperando.
     var aceptaMensajes: Bool {
-        estado == .listo || (estado == .arrancando && enEspera == nil)
+        // Con el cel encendido la conversación es de ese proceso y se sigue allá.
+        if KurthRemoto.shared.encendido { return false }
+        return estado == .listo || (estado == .arrancando && enEspera == nil)
     }
 
     /// La sesión quedó abierta: lo que esperaba sale ya.
@@ -403,8 +430,16 @@ final class KurthAgentService {
         return base.appendingPathComponent("com.gstudios.nook/Kurth/agente.json")
     }()
 
+    /// La instancia viva, para el MCP (kurth_remote_control). El servicio es uno por app.
+    private(set) static weak var actual: KurthAgentService?
+
     init() {
         cargarConversacion()
+        Self.actual = self
+        KurthRemoto.shared.alApagar = { [weak self] in
+            guard let self, self.panelesAbiertos > 0 else { return }
+            self.arrancar()
+        }
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.guardarConversacion() }
         }
@@ -677,7 +712,7 @@ final class KurthAgentService {
     /// solo /usr/bin:/bin:/usr/sbin:/sbin: ahí `npx` no encuentra `node` ("env: node: No such file
     /// or directory", medido en la Air el 24 sep) y los MCP del usuario no encuentran uvx ni
     /// python. (En la Pro no se vio; no sé por qué: no lo verifiqué.)
-    nonisolated private static func pathDeInicioDeSesion() -> String? {
+    nonisolated static func pathDeInicioDeSesion() -> String? {
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
         let proceso = Process()
         proceso.executableURL = URL(fileURLWithPath: shell)

@@ -41,6 +41,8 @@ struct KurthAgentInput: View {
 
     /// Hay algo arrastrándose encima de la caja.
     @State private var soltando = false
+    /// El popover del cel (QR, estado, apagar).
+    @State private var popoverCel = false
     @Environment(\.accessibilityReduceMotion) private var sinMovimiento
 
     /// Los controles redondos miden 28 y la caja los rodea con 6. El concéntrico sería 20 (14 + 6);
@@ -60,11 +62,23 @@ struct KurthAgentInput: View {
 
     private var filaDeArriba: some View {
         let abriendo = agente.estado == .arrancando
+        let remoto = KurthRemoto.shared
         return HStack(spacing: 4) {
             menuDeAgregar
             botonSeñalar
             Spacer(minLength: 8)
-            if abriendo {
+            if remoto.encendido {
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(remoto.url == nil ? Color.orange : Color.green)
+                        .frame(width: 6, height: 6)
+                    Text(remoto.url == nil ? "Conectando el cel…" : "En el cel")
+                }
+                .font(.system(size: KurthAgentChat.tamañoDeTexto))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .transition(.opacity)
+            } else if abriendo {
                 TimelineView(.animation(minimumInterval: sinMovimiento ? 1 : 1.0 / 30)) { reloj in
                     Text("Abriendo sesión…")
                         .modifier(KurthBrillo(fase: sinMovimiento ? nil : KurthBrillo.fase(reloj.date)))
@@ -76,6 +90,7 @@ struct KurthAgentInput: View {
         }
         .padding(.horizontal, 8)
         .animation(NookDesign.Motion.quick, value: abriendo)
+        .animation(NookDesign.Motion.quick, value: remoto.encendido)
     }
 
     // MARK: - La caja
@@ -126,7 +141,7 @@ struct KurthAgentInput: View {
 
     /// Siempre el mismo: que la sesión está abriendo se dice arriba del bloque, y un error, en el
     /// encabezado del panel (antes salía también aquí, dos veces; Kurth, 25 sep).
-    private var marcador: String { "Pídele algo…" }
+    private var marcador: String { KurthRemoto.shared.encendido ? "Sigue en el cel; apágalo para escribir aquí" : "Pídele algo…" }
 
     private var menuDeAgregar: some View {
         Menu {
@@ -299,6 +314,7 @@ struct KurthAgentInput: View {
         HStack(spacing: 12) {
             menuDeCarpeta
             menuDePermisos
+            botonDeCel
             Spacer(minLength: 8)
             menuDeModelo
         }
@@ -369,6 +385,39 @@ struct KurthAgentInput: View {
         .menuIndicator(.hidden)
         .disabled(modo == nil)
         .help("Permisos: qué puede hacer el agente sin preguntarte")
+    }
+
+    /// Cel: Remote Control sobre esta conversación (KurthRemoto). Apagado, tocarlo enciende y abre el
+    /// popover con el QR; encendido, abre el popover (estado, enlace, apagar). El puntito verde dice
+    /// que ya hay enlace; naranja, que sigue conectando.
+    private var botonDeCel: some View {
+        let remoto = KurthRemoto.shared
+        let ocupado = agente.estado == .trabajando || agente.permiso != nil
+        return Button {
+            if !remoto.encendido { agente.encenderRemoto() }
+            popoverCel = true
+        } label: {
+            etiquetaDeMenu {
+                Image(systemName: "iphone.radiowaves.left.and.right")
+                    .foregroundStyle(remoto.encendido ? Color.accentColor : Color.primary.opacity(0.5))
+                    .overlay(alignment: .topTrailing) {
+                        if remoto.encendido {
+                            Circle()
+                                .fill(remoto.url == nil ? Color.orange : Color.green)
+                                .frame(width: 5, height: 5)
+                                .offset(x: 3, y: -2)
+                        }
+                    }
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(ocupado && !remoto.encendido)
+        .help(remoto.encendido ? "Sigue en el cel. Toca para ver el QR o apagarlo."
+              : "Cel: sigue esta conversación desde la app de Claude en tu iPhone")
+        .popover(isPresented: $popoverCel, arrowEdge: .top) {
+            KurthRemotoPopover()
+                .environment(agente)
+        }
     }
 
     private func nombreDelModo(_ modo: KurthACPConfigOption?) -> String? {
