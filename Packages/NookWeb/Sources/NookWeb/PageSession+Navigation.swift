@@ -309,7 +309,7 @@ extension PageSession: WKNavigationDelegate {
         // Check for Option+click to trigger Peek for any link
         if let url = navigationAction.request.url,
             navigationAction.navigationType == .linkActivated,
-            isOptionKeyDown
+            isOptionKeyDown || navigationAction.isOptionClick
         {
 
             // Trigger Peek instead of normal navigation
@@ -703,5 +703,17 @@ extension PageSession {
             """
 
         webView.evaluateJavaScript(script) { _, _ in }
+    }
+}
+
+private extension WKNavigationAction {
+    /// kurth: the click resolves after mouseUp, which already cleared `isOptionKeyDown`; the
+    /// action carries the modifiers of the click that caused it.
+    var isOptionClick: Bool {
+        #if os(macOS)
+        modifierFlags.contains(.option)
+        #else
+        false
+        #endif
     }
 }
