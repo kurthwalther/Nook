@@ -462,6 +462,7 @@ class BrowserManager: ObservableObject {
 
         // Phase 2: wire dependencies and perform side effects (safe to use self)
         self.compositorManager.browserManager = self
+        KurthSuspension.registrar(browserManager: self) // kurth: suspensión de pestañas (ganchos de PageSession)
         self.splitManager.browserManager = self
         self.windowRegistry = windowRegistry
         // Note: settingsManager will be injected later, so we skip initialization here

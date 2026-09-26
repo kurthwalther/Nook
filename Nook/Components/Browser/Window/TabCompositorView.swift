@@ -20,6 +20,7 @@ class TabCompositorManager: ObservableObject {
     /// without it there is no way to tell "the budget never fired" from "it fired and did nothing".
     enum EvictionReason: String {
         case timeout, budget, memoryPressure, background
+        case kurthManual // kurth: pedida por la herramienta MCP kurth_tabs_memory
     }
 
     /// Pages currently holding a web view.
@@ -42,6 +43,16 @@ class TabCompositorManager: ObservableObject {
     private(set) var mode: TabManagementMode = .standard
 
     private var tabs: TabsController? { browserManager?.tabs }
+
+    // kurth: la política de Kurth (KurthSuspension) manda en el tiempo de inactividad; el modo de
+    // Settings sigue mandando en presupuesto, segundo plano y fracción bajo presión de memoria.
+    /// nil = nunca por inactividad.
+    private var kurthTimeout: TimeInterval? { KurthSuspension.timeout }
+    /// Cambió kurth.tabSuspendMinutes en vivo.
+    func kurthTimeoutChanged() { restartAllTimers() }
+    func kurthLastAccess(_ itemID: UUID) -> Date? { lastAccessTimes[itemID] }
+    /// Suspensión pedida desde kurth_tabs_memory; quien llama ya revisó las exenciones.
+    func kurthSuspend(_ session: PageSession) { evict(session, reason: .kurthManual) }
 
     init() {
         setupMemoryPressureMonitoring()
@@ -76,8 +87,10 @@ class TabCompositorManager: ObservableObject {
         // The compositor marks the selected page on every SwiftUI update (hover, resize).
         // A timer rescheduled within the last minute is close enough; handleTimeout re-arms
         // for any remaining time.
+        // kurth: sin tiempo configurado (0 minutos) no hay temporizador que rearmar.
+        guard let timeout = kurthTimeout else { return }
         if let timer = unloadTimers[itemID], timer.isValid,
-           timer.fireDate.timeIntervalSinceNow > mode.unloadTimeout - 60 {
+           timer.fireDate.timeIntervalSinceNow > timeout - 60 {
             return
         }
         restartTimer(for: itemID)
@@ -121,7 +134,12 @@ class TabCompositorManager: ObservableObject {
 
     private func restartTimer(for itemID: UUID, after interval: TimeInterval? = nil) {
         unloadTimers[itemID]?.invalidate()
-        let timer = Timer.scheduledTimer(withTimeInterval: interval ?? mode.unloadTimeout, repeats: false) { [weak self] _ in
+        // kurth: con 0 minutos no se arma nada; la página solo cae por presión de memoria o a mano.
+        guard let wait = interval ?? kurthTimeout else {
+            unloadTimers.removeValue(forKey: itemID)
+            return
+        }
+        let timer = Timer.scheduledTimer(withTimeInterval: wait, repeats: false) { [weak self] _ in
             Task { @MainActor in
                 self?.handleTimeout(itemID)
             }
@@ -144,12 +162,11 @@ class TabCompositorManager: ObservableObject {
             lastAccessTimes.removeValue(forKey: itemID)
             return
         }
-        // Pinned tabs and favorites are never unloaded automatically, so re-arming would only
-        // wake the app.
-        if isPinned(itemID) { return }
+        // kurth: fijadas y favoritos también se suspenden (upstream salía aquí si isPinned).
+        guard let timeout = kurthTimeout else { return }
 
         if let lastAccess = lastAccessTimes[itemID] {
-            let remaining = mode.unloadTimeout - Date().timeIntervalSince(lastAccess)
+            let remaining = timeout - Date().timeIntervalSince(lastAccess)
             if remaining > 1 {
                 restartTimer(for: itemID, after: remaining)
                 return
@@ -185,7 +202,8 @@ class TabCompositorManager: ObservableObject {
         if views.contains(where: { $0.cameraCaptureState != .none || $0.microphoneCaptureState != .none }) {
             return false
         }
-        return !isPinned(session.itemID)
+        // kurth: fijadas y favoritos también; diálogo pendiente y Peek quedan fuera (KurthSuspension).
+        return KurthSuspension.motivoExenta(session, tabs: tabs) == nil
     }
 
     /// Higher keeps the page longer.

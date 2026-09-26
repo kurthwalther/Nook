@@ -360,7 +360,6 @@ struct KurthTabStrip: View {
             .matchedGeometryEffect(id: id, in: strip, isSource: true)
         }
         .buttonStyle(.plain)
-        .opacity(!isActive && (session?.isUnloaded ?? true) ? NookDesign.Surface.unloadedOpacity : 1)
         .onHoverTracking { inside in
             if inside { hovered = id } else if hovered == id { hovered = nil }
         }
@@ -412,7 +411,10 @@ struct KurthTabStrip: View {
                     .foregroundStyle(.secondary)
                     .transition(.opacity)
             } else {
+                // Suspendida (sin vista): solo el favicon al 50 %; el título se queda entero. Antes
+                // el segmento completo bajaba a 0.55 (26 sep).
                 ItemFavicon(item: entry.item, session: session)
+                    .opacity(!isActive && (session?.isUnloaded ?? true) ? NookDesign.Surface.suspendedFaviconOpacity : 1)
                     .transition(.opacity)
             }
         }

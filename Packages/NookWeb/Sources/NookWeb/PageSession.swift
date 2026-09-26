@@ -337,7 +337,13 @@ public final class PageSession: NSObject, Identifiable {
         let shouldLoadInitialURL = !isPopupHost
         isPopupHost = false
         if shouldLoadInitialURL {
-            load(url)
+            // kurth: una página suspendida vuelve con el interactionState que guardó al soltarse
+            // (historial, scroll, formularios) en vez de pedir la URL desde cero (KurthSuspension).
+            if let estado = KurthSuspensionGancho.estadoGuardado?(self) {
+                restore(interactionState: estado)
+            } else {
+                load(url)
+            }
         }
     }
 
@@ -392,6 +398,8 @@ public final class PageSession: NSObject, Identifiable {
     public func unload() {
         let interval = BrowserPerformance.signposter.beginInterval("TabEviction")
         defer { BrowserPerformance.signposter.endInterval("TabEviction", interval) }
+        // kurth: antes de soltar la vista se guarda su interactionState (KurthSuspension).
+        KurthSuspensionGancho.guardar?(self)
         let primary = primaryWebView
         let coordinator = controller?.webViews
         let primaryIsPooled = primary.map { view in
@@ -422,6 +430,8 @@ public final class PageSession: NSObject, Identifiable {
     func tearDown() {
         hasPiPActive = false
         unload()
+        // kurth: la página terminó; el estado guardado al soltarla ya no sirve.
+        KurthSuspensionGancho.olvidar?(itemID)
         isAudioMuted = false
         controller?.sessionDelegate?.cleanupZoom(for: itemID)
         if webStoreHandler != nil {
@@ -497,6 +507,23 @@ public final class PageSession: NSObject, Identifiable {
 
         Task { @MainActor in
             await fetchAndSetFavicon(for: newURL)
+        }
+    }
+
+    // kurth: vuelta de la suspensión. Mismo registro que load(_:) (acceso para extensiones,
+    // estado de carga, favicon) pero en vez de pedir la URL se asigna el interactionState guardado:
+    // WebKit reconstruye el historial atrás/adelante y navega a la entrada actual con su scroll y
+    // sus formularios (KurthSuspension). Nadie más muestra la página: estaba sin vista.
+    public func restore(interactionState: Any) {
+        loadingState = .didStartProvisionalNavigation
+        controller?.tabEvents?.grantAccess(to: url)
+        hasAudioContent = false
+        hasPlayingAudio = false
+        hasFavicon = false
+        faviconFetchAttempts = 0
+        activeWebView.interactionState = interactionState
+        Task { @MainActor in
+            await fetchAndSetFavicon(for: url)
         }
     }
 

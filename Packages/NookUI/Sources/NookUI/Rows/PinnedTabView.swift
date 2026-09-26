@@ -51,7 +51,7 @@ public struct PinnedTabView<Icon: View>: View {
 
                 tabIcon
                     .frame(height: NookDesign.Size.essentialsFavicon)
-                    .opacity(isUnloaded ? NookDesign.Surface.unloadedOpacity : 1)
+                    .opacity(isUnloaded ? NookDesign.Surface.suspendedFaviconOpacity : 1) // kurth: 50 %, como en la lateral y la tira
             }
             .overlay(alignment: .topTrailing) {
                 if hasLeftPinnedURL && isHovered {

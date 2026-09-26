@@ -71,6 +71,8 @@ enum KurthMCPTools {
                 info: "Tamaño de la barra y del encabezado del panel del agente: 1 normal; más de 1 = grande (1.2)"),
         Setting(key: "kurth.aiSidebarWidth", type: "number", defaultValue: 330.0,
                 info: "Ancho del panel del agente en pt (200–520). Es el último que dejó el usuario al soltar el borde; cambiarlo aquí aplica a las ventanas que se abran después"),
+        Setting(key: KurthSuspension.clave, type: "number", defaultValue: KurthSuspension.minutosDefault,
+                info: "Minutos sin ser la pestaña activa tras los que se suelta su vista web (se conservan título, favicon, URL, scroll y formularios; al elegirla se recarga sola). 0 = nunca por inactividad; la presión de memoria del sistema sigue suspendiendo. Fijadas y favoritos también; nunca la visible, la que reproduce audio o video, la de Peek ni la que tiene un diálogo pendiente"),
     ]
 
     static let tools: [AIToolDefinition] = [
@@ -115,12 +117,14 @@ enum KurthMCPTools {
             description: "Abre o cierra la cuadrícula de pestañas de la ventana activa (la misma del pellizco y ⇧⌘\\). abierta: true/false; sin ella, alterna.",
             parameters: ["type": "object", "properties": ["abierta": ["type": "boolean"]]]
         ),
+        KurthSuspension.herramienta,
     ]
 
     /// nil si la herramienta no es de la capa Kurth.
     static func call(_ name: String, _ args: [String: Any], window: BrowserWindowState, tabs: TabsController) -> [String: Any]? {
         if let resultado = KurthSync.llamar(name) { return resultado }
         if let resultado = KurthPasswords.llamar(name, args) { return resultado }
+        if let resultado = KurthSuspension.llamar(name, args, tabs: tabs) { return resultado }
         switch name {
         case "kurth_panel":
             let agente = (args["cual"] as? String) == "agente"
@@ -211,6 +215,7 @@ enum KurthMCPTools {
             if key == "kurth.pageRadius" { KurthPrefs.shared.pageRadius = setting.defaultValue as? Double ?? 8 }
             if key == "kurth.aiSidebarWidth" { KurthPrefs.shared.aiSidebarWidth = setting.defaultValue as? Double ?? 330 }
             defaults.removeObject(forKey: key)
+            if key == KurthSuspension.clave { KurthSuspension.ajusteCambio() }
             return nil
         }
         switch setting.type {
@@ -229,6 +234,8 @@ enum KurthMCPTools {
             if key == "kurth.windowMaterial", KurthVibrancy.materials[s] == nil { return "\(key): material desconocido" }
             defaults.set(s, forKey: key)
         }
+        // Los temporizadores de suspensión se rearman con el valor nuevo.
+        if key == KurthSuspension.clave { KurthSuspension.ajusteCambio() }
         return nil
     }
 
@@ -247,11 +254,12 @@ enum KurthMCPTools {
         return result
     }
 
-    private static func text(_ s: String, error: Bool = false) -> [String: Any] {
+    /// Respuesta MCP de texto; también la usan las herramientas de KurthSuspension.
+    static func text(_ s: String, error: Bool = false) -> [String: Any] {
         ["content": [["type": "text", "text": s]], "isError": error]
     }
 
-    private static func json(_ value: Any) -> String {
+    static func json(_ value: Any) -> String {
         guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .sortedKeys]) else { return String(describing: value) }
         return String(decoding: data, as: UTF8.self)
     }
