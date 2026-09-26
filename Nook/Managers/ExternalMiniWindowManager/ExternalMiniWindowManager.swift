@@ -89,7 +89,7 @@ final class ExternalMiniWindowManager {
         self.browserManager = browserManager
     }
 
-    func present(url: URL, authCompletionHandler: ((Bool, URL?) -> Void)? = nil) {
+    func present(url: URL, requestedSize: NSSize? = nil, authCompletionHandler: ((Bool, URL?) -> Void)? = nil) {
         guard let browserManager else { return }
         let window = browserManager.windowRegistry?.activeWindow
         let profile = window.flatMap { window in
@@ -116,6 +116,8 @@ final class ExternalMiniWindowManager {
 
         let controller = MiniBrowserWindowController(
             session: session,
+            requestedSize: requestedSize,
+            parentWindow: window?.window,
             adoptAction: { [weak session] in session?.adopt() },
             onClose: { [weak self] session in
                 session.cancelAuthDueToClose()
@@ -179,18 +181,21 @@ final class MiniBrowserWindowController: NSWindowController, NSWindowDelegate {
     private var titleObservers: Set<AnyCancellable> = []
 
     private static let maximumSize = NSSize(width: 1280, height: 900)
-    private static let minimumSize = NSSize(width: 640, height: 480)
+    private static let minimumSize = NSSize(width: 420, height: 420)
 
-    /// Three quarters of the screen, capped so it still reads as a small window on large displays.
-    private static var defaultSize: NSSize {
-        let visible = NSScreen.main?.visibleFrame.size ?? maximumSize
-        return NSSize(
-            width: max(minimumSize.width, min(maximumSize.width, visible.width * 0.75)),
-            height: max(minimumSize.height, min(maximumSize.height, visible.height * 0.85))
-        )
+    /// kurth: the size the page asked for in `window.open`, as Firefox, Zen and Arc do; without
+    /// one, well under the browser window so it reads as a popup over it, never as a second browser.
+    private static func initialSize(requested: NSSize?, parent: NSWindow?) -> NSSize {
+        let bounds = parent?.frame.size ?? NSScreen.main?.visibleFrame.size ?? maximumSize
+        let limit = NSSize(width: min(maximumSize.width, bounds.width * 0.9),
+                           height: min(maximumSize.height, bounds.height * 0.9))
+        let wanted = requested.flatMap { $0.width > 0 && $0.height > 0 ? $0 : nil }
+            ?? NSSize(width: min(900, bounds.width * 0.6), height: min(720, bounds.height * 0.7))
+        return NSSize(width: max(minimumSize.width, min(limit.width, wanted.width)),
+                      height: max(minimumSize.height, min(limit.height, wanted.height)))
     }
 
-    init(session: MiniWindowSession, adoptAction: @escaping () -> Void, onClose: @escaping (MiniWindowSession) -> Void, gradientColorManager: GradientColorManager) {
+    init(session: MiniWindowSession, requestedSize: NSSize?, parentWindow: NSWindow?, adoptAction: @escaping () -> Void, onClose: @escaping (MiniWindowSession) -> Void, gradientColorManager: GradientColorManager) {
         self.session = session
         self.adoptAction = adoptAction
         self.onClose = onClose
@@ -200,8 +205,9 @@ final class MiniBrowserWindowController: NSWindowController, NSWindowDelegate {
             .environmentObject(gradientColorManager)
 
         let hostingController = NSHostingController(rootView: contentView)
+        let size = Self.initialSize(requested: requestedSize, parent: parentWindow)
         let window = MiniBrowserWindow(
-            contentRect: NSRect(origin: .zero, size: Self.defaultSize),
+            contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -212,8 +218,15 @@ final class MiniBrowserWindowController: NSWindowController, NSWindowDelegate {
         // Without this the hosting controller shrinks the window to the view's minimum size.
         hostingController.sizingOptions = []
         window.contentViewController = hostingController
-        window.setContentSize(Self.defaultSize)
-        window.center()
+        window.setContentSize(size)
+        // kurth: centered on the browser window that opened it, not on the screen.
+        if let parentFrame = parentWindow?.frame {
+            let frame = window.frame
+            window.setFrameOrigin(NSPoint(x: parentFrame.midX - frame.width / 2,
+                                          y: parentFrame.midY - frame.height / 2))
+        } else {
+            window.center()
+        }
 
         super.init(window: window)
 

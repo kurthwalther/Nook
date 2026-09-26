@@ -95,7 +95,7 @@ extension BrowserModel: PageSessionDelegate {
 
     func presentPeek(url: URL, from session: PageSession) { session.navigate(to: url.absoluteString) }
 
-    func presentSignInWindow(url: URL, completion: @escaping (Bool) -> Void) { completion(false) }
+    func presentSignInWindow(url: URL, size: CGSize?, completion: @escaping (Bool) -> Void) { completion(false) }
 
     func handleAuthenticationChallenge(
         _ challenge: URLAuthenticationChallenge, for session: PageSession,

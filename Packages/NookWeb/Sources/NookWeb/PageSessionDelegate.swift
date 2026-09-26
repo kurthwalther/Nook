@@ -38,7 +38,8 @@ public protocol PageSessionDelegate: AnyObject {
 
     func presentPeek(url: URL, from session: PageSession)
     /// A mini window for an OAuth or sign-in popup; the handler runs when it closes.
-    func presentSignInWindow(url: URL, completion: @escaping (Bool) -> Void)
+    /// `size` is the one the page asked for in `window.open`, when it asked for one.
+    func presentSignInWindow(url: URL, size: CGSize?, completion: @escaping (Bool) -> Void)
     func handleAuthenticationChallenge(
         _ challenge: URLAuthenticationChallenge,
         for session: PageSession,

@@ -75,7 +75,10 @@ extension PageSession: WKUIDelegate {
             
             // Reselect and reload the opener once the sign-in window succeeds.
             let parentItemID = itemID
-            delegate.presentSignInWindow(url: url) { [weak self] success in
+            let requestedSize = windowFeatures.width.flatMap { width in
+                windowFeatures.height.map { CGSize(width: width.doubleValue, height: $0.doubleValue) }
+            }
+            delegate.presentSignInWindow(url: url, size: requestedSize) { [weak self] success in
                 guard success else { return }
                 DispatchQueue.main.async {
                     guard let self, let controller = self.controller,
