@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Prueba de workflows</title>
+<style>
+  body { font: 14px -apple-system; margin: 0; }
+  .alto { height: 5000px; }
+  .mano { cursor: pointer; }
+</style></head>
+<body>
+  <h1>Ventas de Krei</h1>
+  <button id="buscar"><svg aria-hidden="true" width="10" height="10"></svg><span>Buscar</span></button>
+  <label for="q">Buscar en Krei</label><input id="q" type="search">
+  <input type="password" name="pass" id="pass" aria-label="Contraseña">
+  <input type="text" name="notas" id="notas" placeholder="Notas">
+  <input type="password" id="clave2" aria-label="Clave">
+  <label>Periodo <select id="periodo"><option>Hoy</option><option>Semana pasada</option></select></label>
+  <label id="lab-envio"><input type="checkbox" id="envio"> Incluir envío</label>
+  <form id="f1"><input id="correo" name="correo" placeholder="Correo"><button type="submit">Mandar</button></form>
+  <form id="f2" aria-label="Suscripción"><input id="nombre" name="nombre"></form>
+  <a href="/ventas" data-testid="ventas-link">Ventas</a>
+  <div class="mano" id="tarjeta-krei">Abrir tarjeta</div>
+  <p id="parrafo">Solo texto</p>
+  <button id="react-123456">Guardar</button>
+  <div class="alto"><h2 id="abajo" style="margin-top: 2400px">Precios</h2></div>
+</body></html>
