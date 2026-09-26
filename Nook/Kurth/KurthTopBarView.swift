@@ -285,6 +285,7 @@ struct KurthTopBarView: View {
                     .modifier(KurthGlass(tint: glassTint))
                     .onHoverTracking { isHoveringCapsule = $0 }
                     .modifier(KurthZonaDeDeslizarAqui())
+                    .modifier(KurthBoostAncla(session: tab)) // kurth: clic derecho → Boost para este sitio
             } else {
                 // Copiar junto al dominio; recargar vive con las flechas en esta variante.
                 HStack(spacing: NookDesign.Spacing.md + 2) {
@@ -294,6 +295,7 @@ struct KurthTopBarView: View {
                 .padding(.horizontal, NookDesign.Spacing.md)
                 .onHoverTracking { isHoveringCapsule = $0 }
                 .modifier(KurthZonaDeDeslizarAqui())
+                .modifier(KurthBoostAncla(session: tab)) // kurth: clic derecho → Boost para este sitio
             }
         } else {
             // Sin pestaña, el espacio de la URL es un campo listo para escribir (KurthEmptyPage.swift).
@@ -319,6 +321,10 @@ struct KurthTopBarView: View {
             .foregroundStyle(isHoveringAddress ? .primary : .secondary)
             .truncationMode(.head)
             .lineLimit(1)
+            // Punto de Boost encendido, pegado al final del host sin moverlo (KurthBoostPopover.swift).
+            .overlay(alignment: .trailing) {
+                KurthBoostPunto(url: tab.url).offset(x: KurthEscala.pt(8))
+            }
             .contentShape(Rectangle())
             .onTapGesture { commandPalette.openWithCurrentURL(tab.url) }
             .onHoverTracking { isHoveringAddress = $0 }

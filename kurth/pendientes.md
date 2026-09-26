@@ -37,6 +37,17 @@ Orden acordado; Trazo (dirección del Creative) descartada por Kurth: "está feo
    el guardado y el `@`.
 5. **Boosts por dominio + "describe una extensión"** (M): CSS/JS por sitio que el agente escribe y Nook
    instala como WKUserScript/WKUserStyleSheet; `user_scripts` es la mitad.
+   ✅ **Hecho 26 sep (rama `kurth-boosts`, sin instalar):** `KurthBoostsModelo.swift` (modelo y scripts),
+   `KurthBoosts.swift` (tienda en `Kurth/boosts.json`, instalación, MCP `kurth_boost`
+   list/get/set/delete), `KurthBoostPopover.swift` (clic derecho en la cápsula del dominio → "Boost para
+   este sitio…": interruptor, "Describe lo que quieres" → agente del panel, "Código" con CSS en vivo y
+   JS con botón de aplicar; punto junto al host). Host exacto y solo https. CSS en una `<style>` al
+   final de `<html>` (gana empates); JS como cuerpo de función async en el mundo aislado `KurthBoosts`,
+   validado con JavaScriptCore antes de guardar (no puede salirse del filtro de host). Ajuste
+   `kurth.boosts`. Prueba sin Nook: `kurth/checks/boosts.sh` (28 comprobaciones). **Falta en vivo:** la
+   tool por `kurth/mcp.sh`, el popover con mouse, el describe de punta a punta con el agente, y que
+   `user_scripts` muestre los `// Nook kurth: boost` tras navegar a YouTube/Facebook (tweaks).
+   Sin sincronizar por iCloud todavía. Sin decidir: si el JS debe poder correr en el mundo de la página.
 6. **Modo "con cabeza"** (M): velo + borde en la pestaña controlada + Detener + tarjeta de plan +
    confirmación antes de publicar/enviar/comprar/borrar. Maqueta aprobada por artifact (26 sep).
 7. **Autoconsent** (S, **opcional, con interruptor**): duckduckgo/autoconsent como user script.
