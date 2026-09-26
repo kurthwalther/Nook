@@ -92,12 +92,11 @@ struct KurthAgentChat: View {
                     if let permiso = agente.permiso {
                         tarjetaDePermiso(permiso)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
-                    } else if !sugerencias.isEmpty {
-                        listaDeComandos
                     }
-                    // La caja con el acomodo de Aside vive en KurthAgentInput.swift.
+                    // La caja con el acomodo de Aside vive en KurthAgentInput.swift; la lista de «/» y
+                    // «@» flota sobre ella (KurthAgentSugerencias.swift).
                     KurthAgentInput(texto: $texto, escribiendo: $escribiendo, puedeEnviar: puedeEnviar,
-                                    sugerencias: sugerencias, enviar: enviar)
+                                    enviar: enviar)
                 }
                 .padding(.top, 10)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { altoAbajo = $0 }
@@ -210,6 +209,9 @@ struct KurthAgentChat: View {
                 .kurthBarIcon(size: medidaDeIcono)
                 .help(tarjetaFijada ? "Fijada: se queda abierta. Clic para que vuelva a esconderse" : "Fijar: que se quede abierta aunque quites el mouse")
             }
+
+            // kurth: «…» con "Guardar como skill…" (KurthGuardarSkill.swift).
+            KurthMenuDelPanel(medida: medidaDeIcono)
 
             Button("Borrar la conversación", systemImage: "trash") {
                 confirmaBorrar = true
@@ -336,9 +338,10 @@ struct KurthAgentChat: View {
                 Spacer(minLength: 32)
                 VStack(alignment: .trailing, spacing: 4) {
                 ForEach(mensaje.señalados ?? [], id: \.self) { s in
-                    // Lo adjuntado llega con «📎» (KurthAgentService.enviar): se pinta con clip.
-                    Label(s.hasPrefix("📎 ") ? String(s.dropFirst(2)) : s,
-                          systemImage: s.hasPrefix("📎 ") ? "paperclip" : "viewfinder")
+                    // Lo adjuntado llega con «📎» y lo mencionado con «@ » (KurthAgentService.enviar):
+                    // se pintan con clip y con arroba.
+                    let marca = s.hasPrefix("📎 ") ? "paperclip" : s.hasPrefix("@ ") ? "at" : nil
+                    Label(marca == nil ? s : String(s.dropFirst(2)), systemImage: marca ?? "viewfinder")
                         .font(NookDesign.Font.caption)
                         .foregroundStyle(Color(red: 0.04, green: 0.52, blue: 1))
                         .lineLimit(1)
@@ -462,48 +465,6 @@ struct KurthAgentChat: View {
         Color(nsColor: .textBackgroundColor)
     }
 
-    /// Lo que se ofrece al escribir «/»: los comandos del agente y las skills del usuario.
-    /// Solo mientras la «/» abre el mensaje y no hay espacios: «/model» sí, «dime /algo» no.
-    private var sugerencias: [KurthACPCommand] {
-        guard texto.hasPrefix("/"), !texto.contains(" ") else { return [] }
-        let escrito = String(texto.dropFirst())
-        let encontrados = agente.comandos(queEmpiecenCon: escrito)
-        // Con el nombre completo escrito ya no hay nada que sugerir.
-        if encontrados.count == 1 && encontrados[0].name == escrito { return [] }
-        return Array(encontrados.prefix(6))
-    }
-
-    private var listaDeComandos: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(sugerencias) { comando in
-                Button {
-                    texto = "/" + comando.name + " "
-                } label: {
-                    HStack(spacing: 8) {
-                        Text("/" + comando.name)
-                            .font(NookDesign.Font.caption)
-                            .foregroundStyle(Color.primary.opacity(0.9))
-                        if !comando.description.isEmpty {
-                            Text(comando.description)
-                                .font(NookDesign.Font.caption)
-                                .foregroundStyle(Color.primary.opacity(0.4))
-                                .lineLimit(1)
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.vertical, 4)
-        .background(NookDesign.Surface.fill)
-        .clipShape(NookDesign.Radius.shape(NookDesign.Radius.md))
-        .padding(.horizontal, 8)
-    }
-
     /// La pestaña de esta ventana, como enlace para el agente (KurthACPResourceLink).
     private var paginaActiva: KurthACPResourceLink? {
         guard let pagina = browserManager.tabs.selectedSession(in: windowState) else { return nil }
@@ -514,7 +475,7 @@ struct KurthAgentChat: View {
     private var puedeEnviar: Bool {
         agente.aceptaMensajes
             && (!texto.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !KurthSenalar.shared.referencias.isEmpty
-                || !agente.adjuntos.isEmpty)
+                || !agente.adjuntos.isEmpty || !KurthMenciones.shared.elegidas.isEmpty)
     }
 
     private func borrarMarcas(_ autor: String?) {
@@ -531,17 +492,27 @@ struct KurthAgentChat: View {
         let mensaje = escrito.isEmpty ? (señalados.isEmpty ? "Mira lo que te adjunté." : "Mira lo que señalé.") : escrito
         texto = ""
         let pagina = paginaActiva
+        let menciones = KurthMenciones.shared.tomar()
         // La primera pregunta sobre una página lleva su contenido: el agente contesta sin
         // herramientas (KurthCopilot.contenidoParaAgente). Leerla toma menos de un segundo.
-        guard let pagina, !agente.paginasConContenido.contains(pagina.uri),
-              let sesion = browserManager.tabs.selectedSession(in: windowState),
-              let webView = browserManager.getWebView(for: sesion.itemID, in: windowState.id) ?? sesion.webView else {
+        let sesion = browserManager.tabs.selectedSession(in: windowState)
+        let webView = sesion.flatMap { browserManager.getWebView(for: $0.itemID, in: windowState.id) ?? $0.webView }
+        let leerActiva = pagina.map { !agente.paginasConContenido.contains($0.uri) } ?? false
+        guard (leerActiva && webView != nil) || !menciones.isEmpty else {
             agente.enviar(mensaje, pagina: pagina, señalados: señalados)
             return
         }
         Task {
-            let contenido = await KurthCopilot.contenidoParaAgente(webView, url: sesion.url)
-            agente.enviar(mensaje, pagina: pagina, contenido: contenido, señalados: señalados)
+            var contenido: String?
+            if leerActiva, let webView, let sesion {
+                contenido = await KurthCopilot.contenidoParaAgente(webView, url: sesion.url)
+            }
+            // kurth: lo mencionado con «@» (KurthAgentMenciones.swift); la activa ya leída no se repite.
+            var yaLeidas = agente.paginasConContenido
+            if contenido != nil, let uri = pagina?.uri { yaLeidas.insert(uri) }
+            let resueltas = await KurthMenciones.resolver(menciones, bm: browserManager, ventana: windowState,
+                                                          activa: pagina?.uri, yaConContenido: yaLeidas)
+            agente.enviar(mensaje, pagina: pagina, contenido: contenido, señalados: señalados, menciones: resueltas)
         }
     }
 }
