@@ -153,6 +153,9 @@ enum KurthWebKitAgente {
         return resumen.map { "Hecho. \($0)" } ?? "Hecho."
     }
 
+    /// Para KurthCopilot (modo con cabeza): cómo se llama el elemento de ese uid, sin actuar.
+    static func renglonDe(_ uid: String, en webView: WKWebView) -> String? { renglon(de: uid, en: webView) }
+
     /// El renglón de la última lectura que menciona ese uid (para saber cómo se llama el elemento).
     private static func renglon(de uid: String, en webView: WKWebView) -> String? {
         guard let texto = textos.object(forKey: webView) as String? else { return nil }

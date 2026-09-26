@@ -77,6 +77,8 @@ enum KurthMCPTools {
                 info: "Split: ancho en pt de la franja en la orilla derecha de la página donde soltar una pestaña arrastrada (lateral o tira) la abre en el panel derecho"),
         Setting(key: "kurth.splitOptionClick", type: "bool", defaultValue: true,
                 info: "Split: ⌥-clic en una mitad del split la saca; ⌥-clic en una pestaña de la lateral o la tira con split abierto la mete al panel derecho"),
+        Setting(key: KurthCabeza.clave, type: "bool", defaultValue: true,
+                info: "Agente con cabeza: mientras el agente del panel actúa en una pestaña, anillo fino en esa pestaña (tira y lateral) y cápsula «Trabajando en esta pestaña · Detener» sobre la página; ante un botón de comprar, pagar, borrar o publicar, anillo naranja en el botón y tarjeta en el panel que dice qué va a hacer. false = sin nada de eso (la guardia confirmado: true del MCP sigue)"),
     ]
 
     static let tools: [AIToolDefinition] = [

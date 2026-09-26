@@ -39,6 +39,17 @@ Orden acordado; Trazo (dirección del Creative) descartada por Kurth: "está feo
    instala como WKUserScript/WKUserStyleSheet; `user_scripts` es la mitad.
 6. **Modo "con cabeza"** (M): velo + borde en la pestaña controlada + Detener + tarjeta de plan +
    confirmación antes de publicar/enviar/comprar/borrar. Maqueta aprobada por artifact (26 sep).
+   ✅ **Hecho 26 sep (rama `kurth-cabeza`, sin instalar ni probar en vivo)**, versión sutil que pidió
+   Kurth ("sí, pero más sutil y bonito"): sin velo. Anillo de acento de 1.25 pt en la pestaña que
+   maneja el agente (tira y lateral); cápsula de vidrio abajo al centro de la página, "Trabajando en
+   esta pestaña · Detener" (no bloquea la página; Detener corta el turno y el MCP rechaza acciones
+   30 s o hasta el siguiente mensaje); plan como una línea "Paso 2 de 4 · …" sobre la caja que se
+   abre a la lista; botón delicado frenado = anillo naranja en la página + tarjeta "Va a publicar en
+   …" (en la de permiso de ACP o sola, con Sí/No), y aprobarla autoriza ese botón una vez por un
+   minuto. Ajuste `kurth.agentConCabeza`. Código: KurthCabeza*.swift, KurthAgentPlan.swift,
+   KurthCabezaGancho (NookUI). **Falta:** que Kurth lo vea en vivo; confirmar que claude-agent-acp
+   manda `rawInput` y titula `mcp__nook__click` en el permiso (si no, la tarjeta de permiso sale
+   genérica y todo lo demás funciona igual).
 7. **Autoconsent** (S, **opcional, con interruptor**): duckduckgo/autoconsent como user script.
 8. ✅ **Split útil** (26 sep, `KurthSplit.swift`, rama `kurth-split`, sin instalar): clic derecho en un
    link → "Abrir en el split" (reemplaza el derecho si ya hay); "Seguir aquí los links" en el menú de

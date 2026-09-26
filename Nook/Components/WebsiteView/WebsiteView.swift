@@ -277,6 +277,9 @@ struct WebsiteView: View {
                 }
             }
 
+            // kurth: "Trabajando en esta pestaña" + Detener sobre la página que maneja el agente (KurthCabezaAviso.swift).
+            KurthCabezaAviso()
+
             // Split preview overlay - shows cards during drag operations
             if splitManager.getSplitState(for: windowState.id).isPreviewActive {
                 SplitPreviewOverlay()

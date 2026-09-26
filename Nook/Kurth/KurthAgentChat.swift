@@ -92,8 +92,17 @@ struct KurthAgentChat: View {
                     if let permiso = agente.permiso {
                         tarjetaDePermiso(permiso)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
+                    } else if let pendiente = confirmacionPendiente {
+                        // El agente frenó ante un botón delicado y preguntó por chat: la respuesta
+                        // también se puede dar aquí, con el botón a la vista (KurthCabeza).
+                        tarjetaDeConfirmacion(pendiente)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
                     } else if !sugerencias.isEmpty {
                         listaDeComandos
+                    }
+                    if muestraPlan {
+                        KurthAgentPlan(pasos: agente.plan, trabajando: agente.estado == .trabajando)
+                            .transition(.opacity)
                     }
                     // La caja con el acomodo de Aside vive en KurthAgentInput.swift.
                     KurthAgentInput(texto: $texto, escribiendo: $escribiendo, puedeEnviar: puedeEnviar,
@@ -112,12 +121,15 @@ struct KurthAgentChat: View {
                 Text("Se borra lo que ves aquí y el agente empieza de cero: ya no recuerda esta plática.")
             }
             .animation(NookDesign.Motion.standard, value: agente.permiso?.id)
+            .animation(NookDesign.Motion.standard, value: confirmacionPendiente?.id)
+            .animation(NookDesign.Motion.standard, value: muestraPlan)
             // Abrir y cerrar el panel enciende y apaga el agente (KurthAgentService.panelAbierto).
             // La marca evita contar dos veces si SwiftUI repite onAppear sin onDisappear.
             .onChange(of: browserManager.tabs.selectedSession(in: windowState)?.url, initial: true) { _, url in
                 agente.pestañaActiva(url)
             }
             .onAppear {
+                KurthCabeza.shared.browserManager = browserManager
                 if !panelRegistrado { panelRegistrado = true; agente.panelAbierto() }
                 if !flotante { escribiendo = true }
             }
@@ -273,7 +285,6 @@ struct KurthAgentChat: View {
                     ForEach(agente.mensajes) { mensaje in
                         burbuja(mensaje).id(mensaje.id)
                     }
-                    if !agente.plan.isEmpty { vistaDelPlan }
                     Color.clear.frame(height: 1).id("final")
                 }
                 .padding(.horizontal, 12)
@@ -378,45 +389,35 @@ struct KurthAgentChat: View {
         }
     }
 
-    private var vistaDelPlan: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Plan")
-                .font(NookDesign.Font.caption)
-                .foregroundStyle(Color.primary.opacity(0.45))
-            ForEach(Array(agente.plan.enumerated()), id: \.offset) { _, paso in
-                HStack(alignment: .top, spacing: 6) {
-                    Text("·").foregroundStyle(Color.primary.opacity(0.4))
-                    Text(paso)
-                        .font(NookDesign.Font.caption)
-                        .foregroundStyle(Color.primary.opacity(0.65))
-                }
-            }
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(NookDesign.Surface.fill.opacity(0.5))
-        .clipShape(NookDesign.Radius.shape(NookDesign.Radius.md))
+    /// El plan va sobre la caja (KurthAgentPlan) mientras el agente trabaja o le falten pasos.
+    private var muestraPlan: Bool {
+        !agente.plan.isEmpty && (agente.estado == .trabajando || agente.plan.contains { !$0.hecho })
     }
 
     // MARK: - Permiso
 
     private func tarjetaDePermiso(_ permiso: KurthAgentService.Permiso) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "hand.raised")
-                    .font(.system(size: 11, weight: .semibold))
-                Text("Pide permiso")
-                    .font(NookDesign.Font.caption)
-                Spacer()
-            }
-            .foregroundStyle(Color.primary.opacity(0.6))
+            if let delicada = permiso.delicada, KurthCabeza.activo {
+                // Modo con cabeza: en vez de "mcp__nook__click", qué va a hacer y con qué botón.
+                encabezadoDelicado(delicada)
+            } else {
+                HStack(spacing: 6) {
+                    Image(systemName: "hand.raised")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text("Pide permiso")
+                        .font(NookDesign.Font.caption)
+                    Spacer()
+                }
+                .foregroundStyle(Color.primary.opacity(0.6))
 
-            Text(permiso.titulo)
-                .font(NookDesign.Font.body)
-                .foregroundStyle(Color.primary.opacity(0.95))
-                .textSelection(.enabled)
-                .lineLimit(4)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Text(permiso.titulo)
+                    .font(NookDesign.Font.body)
+                    .foregroundStyle(Color.primary.opacity(0.95))
+                    .textSelection(.enabled)
+                    .lineLimit(4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
 
             VStack(spacing: 6) {
                 ForEach(permiso.opciones) { opcion in
@@ -446,6 +447,76 @@ struct KurthAgentChat: View {
                 .stroke(Color.primary.opacity(0.12), lineWidth: 1)
         }
         .padding(.horizontal, 8)
+    }
+
+    // MARK: - Lo irreversible (modo con cabeza)
+
+    /// La confirmación que se muestra cuando el agente frenó en un botón delicado y terminó el turno
+    /// para preguntar. Mientras trabaja no: todavía no ha preguntado.
+    private var confirmacionPendiente: KurthCabeza.Pendiente? {
+        guard KurthCabeza.activo, agente.estado != .trabajando, agente.aceptaMensajes else { return nil }
+        return KurthCabeza.shared.pendiente
+    }
+
+    /// "Va a publicar en business.facebook.com" y, debajo, el botón y la dirección. La mano en
+    /// naranja es el mismo color del anillo que marca ese botón en la página: lo que ves aquí es lo
+    /// que está marcado allá.
+    private func encabezadoDelicado(_ p: KurthCabeza.Pendiente) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Image(systemName: "hand.raised.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color.orange)
+                Text(p.frase)
+                    .font(NookDesign.Font.body)
+                    .foregroundStyle(Color.primary.opacity(0.95))
+                    .lineLimit(2)
+            }
+            Text("Botón «\(p.boton)» · \(p.direccion)")
+                .font(NookDesign.Font.caption)
+                .foregroundStyle(Color.primary.opacity(0.5))
+                .lineLimit(2)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+                .padding(.leading, 17)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// La misma superficie que la de permiso, con dos respuestas: sí (lo manda como mensaje y deja
+    /// ese botón autorizado una vez) o no (quita el anillo y se lo dice).
+    private func tarjetaDeConfirmacion(_ p: KurthCabeza.Pendiente) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            encabezadoDelicado(p)
+            HStack(spacing: 6) {
+                opcionDeConfirmacion("Sí, \(p.verbo)", fuerte: true) { KurthCabeza.shared.responder(true) }
+                opcionDeConfirmacion("No", fuerte: false) { KurthCabeza.shared.responder(false) }
+            }
+        }
+        .padding(12)
+        .background(superficieOpaca)
+        .clipShape(NookDesign.Radius.shape(NookDesign.Radius.lg))
+        .shadow(color: .black.opacity(0.08), radius: 6, y: 1)
+        .overlay {
+            NookDesign.Radius.shape(NookDesign.Radius.lg)
+                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+        }
+        .padding(.horizontal, 8)
+    }
+
+    private func opcionDeConfirmacion(_ titulo: String, fuerte: Bool, accion: @escaping () -> Void) -> some View {
+        Button(action: accion) {
+            Text(titulo)
+                .font(NookDesign.Font.caption)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 7)
+                .background(Color.primary.opacity(fuerte ? 0.10 : 0.04))
+                .clipShape(NookDesign.Radius.shape(NookDesign.Radius.sm))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.primary.opacity(0.9))
     }
 
     /// Rechazar no se pinta en rojo: el rojo empuja a leerlo como el botón peligroso, y aquí el

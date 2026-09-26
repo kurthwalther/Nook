@@ -175,6 +175,8 @@ public struct SpaceTab: View {
                 }
             }
             .clipShape(NookDesign.Radius.shape(NookDesign.Radius.md))
+            // kurth: anillo fino mientras el agente del panel actúa en esta pestaña (KurthCabezaGancho).
+            .kurthAnilloDeAgente(KurthCabezaGancho.shared.controlada == item.id, en: NookDesign.Radius.shape(NookDesign.Radius.md))
             .nookRowSelection(isResaltada) // kurth: también el acceso cuya pestaña está elegida
         }
         .buttonStyle(PlainButtonStyle())

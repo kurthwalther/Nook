@@ -374,6 +374,9 @@ struct KurthTabStrip: View {
                     Capsule().fill(.primary.opacity(0.05))
                 }
             }
+            // El agente del panel está actuando en esta pestaña (KurthCabeza): anillo fino con la
+            // forma del segmento, el mismo que en la lateral. Va encima del resalte de la activa.
+            .kurthAnilloDeAgente(KurthCabezaGancho.shared.controlada == id, en: Capsule())
             // En solo íconos el área que sostiene el hover y el clic se extiende al hueco vecino, donde
             // vive la X: si no, al ir por la X el mouse salía del segmento y la X desaparecía.
             .contentShape(iconsOnly && !isActive ? AnyShape(Capsule().inset(by: -12)) : AnyShape(Capsule()))
