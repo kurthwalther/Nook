@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Ventas del mes</title>
+<!-- kurth/checks/replay.sh: la misma página después de un "rediseño ligero". Contra original.html:
+     la lista va arriba de los filtros; la barra está al revés (Descargar, Limpiar, Filtrar); ninguna
+     clase ni id se conserva; "Descargar informe" dice "Descargar reporte"; el placeholder del buscador
+     cambió; "Periodo" lleva acento y "envío" lo perdió; "Ver detalle" ya no es enlace sino botón. -->
+<style>
+  body { font: 15px Georgia, serif; margin: 32px; display: flex; flex-direction: column; }
+  .accion, .b1, .b2, .b3 { border-radius: 12px; padding: 8px 14px; }
+</style>
+<script>
+  const anotar = (x) => window.webkit.messageHandlers.anotar.postMessage(x);
+  const estado = () => [document.getElementById('busqueda').value, document.getElementById('per').value,
+                        document.getElementById('env').checked].join('|');
+</script>
+</head><body>
+<h1>Ventas del mes</h1>
+<ul class="filas">
+  <li id="fila-krei" class="fila">Krei <button class="accion" onclick="anotar('editar:krei')">Editar</button></li>
+  <li id="fila-uf" class="fila">Ultrafemme <button class="accion" onclick="anotar('editar:uf')">Editar</button></li>
+</ul>
+<form class="panel" onsubmit="return false">
+  <div class="herramientas">
+    <button type="button" class="b3" onclick="anotar('descargar')">Descargar reporte</button>
+    <button type="button" class="b2" onclick="anotar('limpiar')">Limpiar</button>
+    <button type="button" class="b1" onclick="anotar('filtrar:' + estado())">Filtrar</button>
+  </div>
+  <input id="busqueda" type="search" placeholder="Busca un producto">
+  <label for="per">Período</label>
+  <select id="per" onchange="anotar('periodo:' + this.value)">
+    <option value="semana">Esta semana</option>
+    <option value="mes">Este mes</option>
+  </select>
+  <label><input type="checkbox" id="env" onchange="anotar('envio:' + this.checked)"> Incluir envio</label>
+</form>
+<button type="button" class="ver" onclick="location.href = 'detalle.html'">Ver detalle</button>
+</body></html>

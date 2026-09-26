@@ -54,6 +54,11 @@ struct KurthWorkflowPaso: Codable, Identifiable, Equatable {
     var titulo: String?
     /// Id de la pestaña en Nook; en el texto se vuelve "pestaña 1, 2…" por orden de aparición.
     var tab: String?
+    /// Centro del elemento como fracción del documento [x, y], y cuál era entre los que se llaman
+    /// igual (0, 1…). Solo para el replay exacto (KurthReplay.js), que desempata con ellos; no van
+    /// en el texto para el agente. nil en grabaciones de antes del 26 sep.
+    var pos: [Double]?
+    var orden: Int?
 
     init(t: Double, tipo: Tipo) {
         self.t = t
@@ -152,6 +157,13 @@ struct KurthWorkflowCorrida: Codable, Identifiable, Equatable {
     var estado: Estado
     var programada: Bool
     var resumen: String?
+    /// "replay" (Nook repite los pasos; KurthWorkflowsReplay) o "agente" (el agente sigue el skill).
+    /// nil en corridas de antes del 26 sep, que siempre fueron del agente.
+    var modo: String?
+    /// El registro del replay: con qué nivel se encontró cada paso, cuánto tardó y cómo acabó.
+    var pasos: [KurthWorkflowPasoCorrida]?
+    /// Kurth ya tocó "Actualizar el workflow con esto" para esta corrida.
+    var aplicada: Bool?
 
     init(inicio: Date, estado: Estado, programada: Bool, fin: Date? = nil, resumen: String? = nil) {
         self.inicio = inicio
@@ -510,7 +522,8 @@ enum KurthWorkflowsModelo {
         let n = wf.nombre
         var s = """
         Kurth grabó un workflow en Nook («\(wf.titulo)») y quiere que lo vuelvas un skill de Claude Code llamado \
-        «\(n)», para que Nook te lo pida cuando él toque Ejecutar o a la hora que lo programe.
+        «\(n)». Nook repite los pasos solo (replay exacto) y te pide resolver un paso cuando no \
+        aparece en la página; te pide el workflow completo si la grabación no tiene pasos que repetir.
 
         Escribe ~/.claude/skills/\(n)/SKILL.md (crea la carpeta). \
         \(reemplaza ? "Si ya existe, reemplázalo: es una versión nueva de este mismo workflow; conserva de lo que había solo lo que siga valiendo." : "Si ya existe una carpeta con ese nombre que no es de este workflow, no la toques: dímelo.")
@@ -569,13 +582,15 @@ enum KurthWorkflowsModelo {
         }
         if !wf.instrucciones.isEmpty { s += "\n\nKurth pide en todas las corridas: \(wf.instrucciones)" }
         s += programada
-            ? "\n\nEs una corrida programada y Kurth no está enfrente: abre tu propia pestaña con open_tab (en segundo plano) y usa su tabId en todo; no toques sus pestañas. Ciérrala con close_tab al terminar, salvo que te quedes esperando su confirmación."
+            ? "\n\nEs una corrida programada y Kurth no está enfrente: abre tu propia pestaña con open_tab (en segundo plano) y usa su tabId en todo; no toques sus pestañas. Ciérrala con close_tab al terminar."
             : "\n\nAbre tu propia pestaña con open_tab (al_frente: true, para que Kurth la vea) y usa su tabId en todo."
+        // Kurth, 26 sep: "los programados siempre van en sin permisos porque replican lo que el usuario hizo".
+        s += programada
+            ? "\n\nKurth ya hizo estos pasos al grabar y decidió que la corrida programada vaya sola: lo que él hizo (incluido publicar, enviar o comprar) repítelo sin pedir confirmación. Lo que no esté en la grabación, no lo hagas."
+            : "\n\nAntes de publicar, pagar, comprar, borrar o enviar algo, detente, pídele confirmación a Kurth y termina el turno esperando su respuesta."
         s += """
 
-
-        Antes de publicar, pagar, comprar, borrar o enviar algo, detente, pídele confirmación a Kurth y \
-        termina el turno esperando su respuesta. Si falta el SKILL.md, sigue la grabación en \(rutaJSON).
+        Si falta el SKILL.md, sigue la grabación en \(rutaJSON).
         La última línea de tu respuesta es exactamente una de estas: «Resultado: terminó — <resumen de una \
         línea>», «Resultado: esperando — <qué necesitas>» o «Resultado: falló — <por qué>».
         """

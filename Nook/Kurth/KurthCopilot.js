@@ -1114,6 +1114,11 @@
 
     describir(ref) { return describe(element(ref)); },
 
+    // kurth: para el replay de workflows (KurthReplay.js, mismo mundo): lo que encuentra su
+    // localizador recibe una referencia de aquí, y click/type_text/fill_form la entienden.
+    refDe(el) { return refFor(el); },
+    elemento(ref) { return element(ref); },
+
     // Para wait_for: ¿se ven el texto y/o la referencia? El texto se busca en lo que la página
     // pinta (innerText respeta display:none y visibility), sin mayúsculas ni espacios de más.
     seVe(texto, ref) {

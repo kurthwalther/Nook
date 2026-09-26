@@ -176,11 +176,38 @@
     return partes.join(' > ');
   };
 
+  /** Dónde estaba (centro, como fracción del documento) y cuál era entre los que se llaman igual
+   *  (mismo rol y nombre, en orden del documento). El replay exacto (KurthReplay.js) lo usa para
+   *  desempatar dos «Editar» en la misma página; no sale en el texto para el agente. */
+  const ubicacion = (el, rol, nombre, nombrar) => {
+    const u = {};
+    try {
+      const r = el.getBoundingClientRect();
+      const doc = document.documentElement;
+      if (r.width > 0 && r.height > 0) {
+        u.pos = [+((r.left + r.width / 2 + scrollX) / Math.max(doc.scrollWidth, 1)).toFixed(4),
+          +((r.top + r.height / 2 + scrollY) / Math.max(doc.scrollHeight, 1)).toFixed(4)];
+      }
+      if (nombre) {
+        const iguales = Array.from(document.querySelectorAll(INTERACTIVO)).filter((x) => {
+          if (x !== el && (rolDe(x) !== rol || nombrar(x) !== nombre)) return false;
+          const rx = x.getBoundingClientRect();
+          return x === el || (rx.width > 0 && rx.height > 0);
+        });
+        const i = iguales.indexOf(el);
+        if (i >= 0 && iguales.length > 1) u.orden = i;
+      }
+    } catch (_) { /* sin posición: el replay desempata con el selector */ }
+    return u;
+  };
+
   const describir = (el) => {
     const d = { rol: rolDe(el), nombre: nombreDe(el), selector: selectorDe(el) };
     if (el.tagName === 'A' && el.href) d.href = String(el.href).slice(0, 300);
-    return d;
+    return Object.assign(d, ubicacion(el, d.rol, d.nombre, nombreDe));
   };
+
+  const etiquetaOValor = (x) => etiquetaDe(x) || limpio(x.value);
 
   // ── Secretos ────────────────────────────────────────────────────────────────────────────
 
@@ -221,10 +248,11 @@
     pendiente = null;
     const valor = valorDe(el);
     const secreto = esSecreto(el, valor);
-    mandar({
-      tipo: 'escribir', rol: 'textbox', nombre: etiquetaDe(el), selector: selectorDe(el),
+    const nombre = etiquetaDe(el);
+    mandar(Object.assign({
+      tipo: 'escribir', rol: 'textbox', nombre, selector: selectorDe(el),
       valor: secreto ? '«secreto»' : valor, secreto: secreto || undefined, ts: desde,
-    });
+    }, ubicacion(el, rolDe(el), nombre, etiquetaDe)));
   };
 
   // ── Escuchas ─────────────────────────────────────────────────────────────────────────────
@@ -292,16 +320,19 @@
     if (el.tagName === 'SELECT') {
       vaciar();
       const valor = Array.from(el.selectedOptions || []).map((o) => limpio(o.textContent || o.value)).join(', ');
-      mandar({ tipo: 'elegir', rol: 'combobox', nombre: etiquetaDe(el), selector: selectorDe(el), valor });
+      const nombre = etiquetaDe(el);
+      mandar(Object.assign({ tipo: 'elegir', rol: 'combobox', nombre, selector: selectorDe(el), valor },
+        ubicacion(el, 'combobox', nombre, etiquetaDe)));
       return;
     }
     if (esCasilla(el)) {
       vaciar();
       const radio = el.type === 'radio';
-      mandar({
-        tipo: 'marcar', rol: radio ? 'radio' : 'checkbox', nombre: etiquetaDe(el) || limpio(el.value),
+      const nombre = etiquetaOValor(el);
+      mandar(Object.assign({
+        tipo: 'marcar', rol: radio ? 'radio' : 'checkbox', nombre,
         selector: selectorDe(el), valor: radio ? 'elegido' : (el.checked ? 'sí' : 'no'),
-      });
+      }, ubicacion(el, radio ? 'radio' : 'checkbox', nombre, etiquetaOValor)));
       return;
     }
     if (el.tagName === 'INPUT' && el.type === 'file') {
