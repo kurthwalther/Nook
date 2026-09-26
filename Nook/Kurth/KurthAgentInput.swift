@@ -327,24 +327,32 @@ struct KurthAgentInput: View {
     /// el nombre sale al pasar el mouse y en el menú, con palomita.
     private var menuDeCarpeta: some View {
         Menu {
-            ForEach(agente.carpetasRecientes, id: \.path) { carpeta in
-                Button {
-                    agente.cambiarCarpeta(carpeta)
-                } label: {
-                    if carpeta.path == agente.carpetaDeTrabajo.path {
-                        Label(nombreCorto(carpeta), systemImage: "checkmark")
-                    } else {
-                        Text(nombreCorto(carpeta))
-                    }
+            // Picker: la actual lleva palomita del sistema (un Label con checkmark no la pintaba).
+            Picker("Carpeta", selection: Binding(
+                get: { agente.carpetaDeTrabajo.path },
+                set: { ruta in agente.cambiarCarpeta(URL(fileURLWithPath: ruta)) }
+            )) {
+                ForEach(agente.carpetasRecientes, id: \.path) { carpeta in
+                    Text(nombreCorto(carpeta)).tag(carpeta.path)
                 }
             }
+            .pickerStyle(.inline)
+            .labelsHidden()
             Divider()
             Button("Elegir carpeta…") { elegirCarpeta() }
         } label: {
-            // En azul cuando trabaja en un proyecto y no en la carpeta personal (Kurth, 26 sep).
+            // Icono y nombre de la carpeta actual; en azul cuando es un proyecto y no la personal
+            // (Kurth, 26 sep: "no se sabe en qué carpeta estás"). Si no cabe, queda el icono.
             etiquetaDeMenu {
-                Image(systemName: enProyecto ? "folder.fill" : "folder")
-                    .foregroundStyle(enProyecto ? Color.accentColor : Color.primary.opacity(0.5))
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 4) {
+                        Image(systemName: enProyecto ? "folder.fill" : "folder")
+                        Text(nombreCorto(agente.carpetaDeTrabajo))
+                    }
+                    Image(systemName: enProyecto ? "folder.fill" : "folder")
+                }
+                .lineLimit(1)
+                .foregroundStyle(enProyecto ? Color.accentColor : Color.primary.opacity(0.5))
             }
         }
         .menuStyle(.button)
@@ -359,12 +367,13 @@ struct KurthAgentInput: View {
     }
 
     @AppStorage("kurth.autoPorSitio") private var autoPorSitio = true
+    @State private var popoverReglas = false
 
     private var menuDePermisos: some View {
         let modo = opcion("mode")
         return Menu {
-            Toggle("Auto en sitios oficiales", isOn: $autoPorSitio)
-                .help("Meta, Google y los de kurth.autoSitios: ahí el agente va en auto y al salir vuelve al modo elegido")
+            Toggle("Reglas por sitio", isOn: $autoPorSitio)
+            Button("Reglas…") { popoverReglas = true }
             Divider()
             if let modo {
                 Picker("Permisos", selection: Binding(
@@ -383,10 +392,10 @@ struct KurthAgentInput: View {
                 // Fuera de Manual se dice cuál, porque cambia qué hace sin preguntar; si el panel es
                 // angosto, queda el icono (cada uno tiene el suyo).
                 ViewThatFits(in: .horizontal) {
-                    if agente.enSitioOficial && modo?.currentValue == "auto" {
+                    if let regla = agente.reglaActiva, modo?.currentValue == regla.modo {
                         HStack(spacing: 4) {
                             Image(systemName: "checkmark.shield.fill")
-                            Text("Auto · sitio")
+                            Text((nombreDelModo(modo) ?? "Manual") + " · sitio")
                         }
                         .foregroundStyle(Color.accentColor)
                     } else if let nombre = nombreDelModo(modo) {
@@ -396,7 +405,7 @@ struct KurthAgentInput: View {
                         }
                     }
                     Image(systemName: iconoDePermisos(modo?.currentValue))
-                        .foregroundStyle(agente.enSitioOficial && modo?.currentValue == "auto" ? Color.accentColor : Color.primary.opacity(0.5))
+                        .foregroundStyle(agente.reglaActiva != nil && modo?.currentValue == agente.reglaActiva?.modo ? Color.accentColor : Color.primary.opacity(0.5))
                 }
             }
         }
@@ -405,6 +414,10 @@ struct KurthAgentInput: View {
         .menuIndicator(.hidden)
         .disabled(modo == nil)
         .help("Permisos: qué puede hacer el agente sin preguntarte")
+        .popover(isPresented: $popoverReglas, arrowEdge: .top) {
+            KurthReglasPopover(modos: modo?.choices.map { ($0.value, nombreDeEleccion("mode", $0)) } ?? [],
+                               sugerido: agente.ultimaURL?.host()?.lowercased())
+        }
     }
 
     /// Cel: Remote Control sobre esta conversación (KurthRemoto). Apagado, tocarlo enciende y abre el

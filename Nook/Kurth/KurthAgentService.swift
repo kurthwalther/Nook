@@ -138,7 +138,7 @@ final class KurthAgentService {
         var elegidas = UserDefaults.standard.dictionary(forKey: Self.claveOpciones) as? [String: String] ?? [:]
         for opcion in opciones where Self.opcionesQueSeRecuerdan.contains(opcion.id) {
             // El auto que puso el sitio no es elección del usuario: se guarda el modo de antes.
-            if opcion.id == "mode", let anterior = modoAntesDelSitio, opcion.currentValue == "auto" { elegidas["mode"] = anterior; continue }
+            if opcion.id == "mode", let anterior = modoAntesDelSitio { elegidas["mode"] = anterior; continue }
             elegidas[opcion.id] = opcion.currentValue
         }
         UserDefaults.standard.set(elegidas, forKey: Self.claveOpciones)
@@ -384,25 +384,48 @@ final class KurthAgentService {
         }
     }
 
-    // MARK: - Auto por sitio
+    // MARK: - Reglas por sitio
 
-    /// Sitios donde el agente va en modo auto sin que el usuario lo cambie a mano (Kurth, 26 sep:
-    /// "si estoy en Meta o Google y la URL es la oficial, que ahí vaya en auto, siempre y cuando no
-    /// salga de esas URL"). Se compara el host de la pestaña activa; al salir vuelve el modo anterior.
-    static let sitiosOficialesPorDefecto = "facebook.com, instagram.com, meta.com, google.com, youtube.com"
-
-    /// La pestaña activa está en un sitio de la lista (para pintar "Auto · sitio").
-    private(set) var enSitioOficial = false
-    private var modoAntesDelSitio: String?
-    private var ultimaURL: URL?
-
-    static func esSitioOficial(_ url: URL?) -> Bool {
-        guard UserDefaults.standard.object(forKey: "kurth.autoPorSitio") as? Bool ?? true,
-              let host = url?.host()?.lowercased(), url?.scheme == "https" else { return false }
-        let lista = (UserDefaults.standard.string(forKey: "kurth.autoSitios") ?? sitiosOficialesPorDefecto)
-            .split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }.filter { !$0.isEmpty }
-        return lista.contains { host == $0 || host.hasSuffix("." + $0) }
+    /// Permisos ya decididos por sitio (Kurth, 26 sep): "si le pongo netflix.com que sea ese, y si se
+    /// va a netflix.tv, que no". El host se compara exacto y solo en https; al salir del host vuelve el
+    /// modo que tenía. Se guardan en kurth.reglasDeSitio (JSON) y se editan desde el menú de permisos.
+    struct ReglaDeSitio: Codable, Identifiable, Equatable {
+        var host: String
+        /// Un valor del ajuste "mode" del agente: auto, acceptEdits, bypassPermissions, plan, default.
+        var modo: String
+        var id: String { host }
     }
+
+    static let claveReglas = "kurth.reglasDeSitio"
+
+    static let reglasPorDefecto: [ReglaDeSitio] = [
+        "business.facebook.com", "adsmanager.facebook.com", "www.facebook.com", "www.instagram.com",
+        "ads.google.com", "analytics.google.com", "business.google.com", "merchants.google.com",
+        "search.google.com", "tagmanager.google.com",
+    ].map { ReglaDeSitio(host: $0, modo: "auto") }
+
+    static var reglas: [ReglaDeSitio] {
+        get {
+            guard let datos = UserDefaults.standard.data(forKey: claveReglas),
+                  let lista = try? JSONDecoder().decode([ReglaDeSitio].self, from: datos) else { return reglasPorDefecto }
+            return lista
+        }
+        set {
+            if let datos = try? JSONEncoder().encode(newValue) { UserDefaults.standard.set(datos, forKey: claveReglas) }
+            actual?.revisarSitio()
+        }
+    }
+
+    static func regla(para url: URL?) -> ReglaDeSitio? {
+        guard UserDefaults.standard.object(forKey: "kurth.autoPorSitio") as? Bool ?? true,
+              let host = url?.host()?.lowercased(), url?.scheme == "https" else { return nil }
+        return reglas.first { $0.host.lowercased() == host }
+    }
+
+    /// La regla que aplica a la pestaña activa (para pintar "Auto · sitio").
+    private(set) var reglaActiva: ReglaDeSitio?
+    private var modoAntesDelSitio: String?
+    private(set) var ultimaURL: URL?
 
     /// La vista avisa cada vez que cambia la pestaña activa (o su dirección).
     func pestañaActiva(_ url: URL?) {
@@ -410,17 +433,17 @@ final class KurthAgentService {
         revisarSitio()
     }
 
-    private func revisarSitio() {
-        let oficial = Self.esSitioOficial(ultimaURL)
-        enSitioOficial = oficial
+    func revisarSitio() {
+        let regla = Self.regla(para: ultimaURL)
+        reglaActiva = regla
         guard cliente.isRunning, let modo = opciones.first(where: { $0.id == "mode" }) else { return }
-        if oficial {
-            guard modo.currentValue != "auto", modo.choices.contains(where: { $0.value == "auto" }) else { return }
+        if let regla {
+            guard modo.currentValue != regla.modo, modo.choices.contains(where: { $0.value == regla.modo }) else { return }
             if modoAntesDelSitio == nil { modoAntesDelSitio = modo.currentValue }
-            aplicarModo("auto")
+            aplicarModo(regla.modo)
         } else if let anterior = modoAntesDelSitio {
             modoAntesDelSitio = nil
-            if modo.currentValue == "auto" { aplicarModo(anterior) }
+            aplicarModo(anterior)
         }
     }
 
