@@ -1,0 +1,80 @@
+<!doctype html>
+<!-- Página de prueba de KurthCopilot.js (kurth/checks/copiloto.swift): formulario con todos los
+     tipos de campo, un iframe del mismo origen, un shadow DOM abierto con slot y un campo
+     "controlado" que cuenta los eventos input/change, como haría React. -->
+<html lang="es">
+<head><meta charset="utf-8"><title>Prueba del copiloto</title>
+<style>
+  body { margin: 0; font: 14px -apple-system, system-ui; }
+  .relleno { height: 120px; }
+  iframe { display: block; margin: 20px 0 0 40px; width: 400px; height: 160px; border: 3px solid #999; }
+</style>
+</head>
+<body>
+  <h1>Formulario de prueba</h1>
+  <form id="f" onsubmit="return false">
+    <label>Nombre <input id="nombre" name="nombre" type="text" value="viejo"></label>
+    <label>Correo <input id="correo" name="correo" type="email"></label>
+    <label>Contraseña <input id="clave" name="clave" type="password"></label>
+    <label>Fecha <input id="fecha" name="fecha" type="date"></label>
+    <label>Hora <input id="hora" name="hora" type="time"></label>
+    <label>Cantidad <input id="cantidad" name="cantidad" type="number"></label>
+    <label><input id="acepto" name="acepto" type="checkbox"> Acepto los términos</label>
+    <label><input id="promo" name="promo" type="checkbox" checked> Quiero promociones</label>
+    <fieldset>
+      <label><input type="radio" name="envio" value="normal" checked> Envío normal</label>
+      <label><input type="radio" name="envio" value="express"> Envío express</label>
+    </fieldset>
+    <label>País
+      <select id="pais" name="pais">
+        <option value="mx">México</option>
+        <option value="us">Estados Unidos</option>
+        <option value="es">España</option>
+      </select>
+    </label>
+    <label>Colores
+      <select id="colores" name="colores" multiple>
+        <option value="r">Rojo</option>
+        <option value="v">Verde</option>
+        <option value="a">Azul</option>
+      </select>
+    </label>
+    <label>Notas <textarea id="notas" name="notas">algo</textarea></label>
+    <div id="editor" contenteditable="true" style="border:1px solid #ccc; min-height: 20px">texto viejo</div>
+    <label>Archivo <input id="archivo" type="file"></label>
+    <button id="guardar" type="button">Guardar</button>
+    <button id="pagar" type="button">Pagar ahora</button>
+    <a id="ayuda" href="#ayuda">Ayuda</a>
+  </form>
+
+  <!-- Campo "controlado": cuenta input y change, como un input controlado de React. -->
+  <input id="controlado" type="text">
+  <script>
+    window.eventos = { input: 0, change: 0 };
+    document.getElementById('controlado').addEventListener('input', () => window.eventos.input++);
+    document.getElementById('controlado').addEventListener('change', () => window.eventos.change++);
+    document.getElementById('acepto').addEventListener('change', () => { window.aceptoCambios = (window.aceptoCambios || 0) + 1; });
+  </script>
+
+  <!-- Shadow DOM abierto con un slot que toma un enlace de luz. -->
+  <mi-tarjeta id="tarjeta"><a href="/ranura" slot="accion">Ranura</a><a href="/sin-slot">Sin ranura</a></mi-tarjeta>
+  <script>
+    const host = document.getElementById('tarjeta');
+    const raiz = host.attachShadow({ mode: 'open' });
+    raiz.innerHTML = '<button id="sombra">Sombra</button><slot name="accion"></slot>';
+  </script>
+
+  <div class="relleno"></div>
+
+  <!-- iframe del mismo origen (srcdoc hereda el origen del padre). -->
+  <iframe id="marco" title="Marco interno" srcdoc="
+    <!doctype html><body style='margin:0'>
+      <p>Texto dentro del marco</p>
+      <label>Dentro del marco <input id='campoMarco' type='text'></label>
+      <button id='botonMarco' onclick='window.clicMarco = (window.clicMarco||0)+1'>Botón del marco</button>
+    </body>"></iframe>
+
+  <div class="relleno"></div>
+  <div id="dinamico"></div>
+</body>
+</html>

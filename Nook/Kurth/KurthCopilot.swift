@@ -17,6 +17,12 @@
 //  El click nativo se comprueba: el JS arma una sonda que anota el siguiente click y si fue humano;
 //  si no llegó, se repite por JavaScript.
 //
+//  26 sep (plan del barrido de Ernest, punto 3): find (buscar en la foto por texto, rol o regex),
+//  fill_form (N campos de una vez, por JavaScript con input/change), batch (varias herramientas
+//  en orden, se detiene en el primer error), snapshot con delta: true (solo lo que cambió) y la
+//  foto entra a shadow DOM abiertos e iframes del mismo origen. La prueba sin Nook está en
+//  kurth/checks/copiloto.sh.
+//
 
 import AppKit
 import WebKit
@@ -38,12 +44,51 @@ enum KurthCopilot {
     static let tools: [AIToolDefinition] = [
         AIToolDefinition(
             name: "snapshot",
-            description: "Foto de texto de la página: cada elemento con el que se puede interactuar, con su referencia (@e1, @e2…), nombre y estado, más los encabezados. Tómala antes de actuar y otra vez si la página cambió. Las referencias duran mientras el elemento siga en la página.",
-            parameters: ["type": "object", "properties": ["tabId": tabId, "max": ["type": "integer", "description": "Máximo de elementos (por defecto 400)."]]]
+            description: "Foto de texto de la página: cada elemento con el que se puede interactuar, con su referencia (@e1, @e2…), nombre y estado, más los encabezados; entra a los shadow DOM abiertos y a los iframes del mismo origen (con sangría bajo su línea). Tómala antes de actuar. Las referencias son estables: el mismo elemento conserva su @eN mientras siga en la página, aunque cambie lo de alrededor. Después de actuar, pide delta: true para recibir solo lo nuevo, lo cambiado y lo quitado desde la foto anterior (mucho más corto). Para localizar algo concreto sin leer toda la foto usa find.",
+            parameters: ["type": "object", "properties": [
+                "tabId": tabId,
+                "max": ["type": "integer", "description": "Máximo de elementos (por defecto 400)."],
+                "delta": ["type": "boolean", "description": "true: solo los cambios desde la foto anterior de esta misma página. Si no hay foto anterior, va completa."],
+            ]]
+        ),
+        AIToolDefinition(
+            name: "find",
+            description: "Busca elementos en la página sin leer toda la foto: por texto (en el nombre o en la línea), por rol (button, link, textbox, checkbox, radio, combobox, heading, tab, iframe… o en español: botón, enlace, campo, casilla, lista, encabezado) y/o por expresión regular sobre la línea. Devuelve hasta 20 líneas con su referencia @eN lista para click, type_text o fill_form. Combina criterios para afinar.",
+            parameters: ["type": "object", "properties": [
+                "tabId": tabId,
+                "texto": ["type": "string", "description": "Texto a buscar (sin distinguir mayúsculas ni acentos)."],
+                "rol": ["type": "string", "description": "Rol del elemento (button, link, textbox, checkbox, heading…)."],
+                "regex": ["type": "string", "description": "Expresión regular (JavaScript, sin distinguir mayúsculas) sobre la línea completa de la foto."],
+                "max": ["type": "integer", "description": "Máximo de resultados (por defecto 20, tope 50)."],
+            ]]
+        ),
+        AIToolDefinition(
+            name: "fill_form",
+            description: "Llena varios campos en una sola llamada: campos es una lista de {ref o selector, valor}. Texto y textarea (reemplaza lo que había), editable, email, password, número, fecha (valor AAAA-MM-DD), hora (HH:MM), color; casilla (valor true/false); radio (true, o el texto de la opción del grupo); select (texto o valor de la opción; lista de valores si admite varias). Dispara input/change, así que funciona con React. No da clics en botones: para enviar usa click. Se detiene en el primer campo que falle y dice cuáles quedaron hechos. Por JavaScript, aunque la pestaña esté a la vista; si un campo se resiste, type_text lo escribe tecla por tecla.",
+            parameters: ["type": "object", "properties": [
+                "tabId": tabId,
+                "campos": ["type": "array", "items": ["type": "object", "properties": [
+                    "ref": ref,
+                    "selector": ["type": "string", "description": "Selector CSS, si no tienes referencia (también busca en shadow DOM abiertos e iframes del mismo origen)."],
+                    "valor": ["description": "Texto, número, true/false para casillas, o lista para un select múltiple."],
+                ]]],
+                "confirmado": ["type": "boolean", "description": "Obligatorio true si alguna casilla o radio a marcar es de comprar, pagar, borrar o publicar; solo con el sí de Kurth."],
+            ], "required": ["campos"]]
+        ),
+        AIToolDefinition(
+            name: "batch",
+            description: "Varias acciones del copiloto en una sola llamada, en orden: acciones es una lista de {tool, args} con cualquiera de estas herramientas (click, type_text, fill_form, press_key, select_option, scroll, hover, wait_for, snapshot, find, read_page, navigate_tab…; no batch ni screenshot_tab). Se detiene en el primer error y reporta qué pasó en cada paso. Úsala para secuencias que ya conoces (llenar, click, wait_for, snapshot delta); si cada paso depende de mirar el resultado del anterior, ve de una en una. Un click delicado dentro del lote sigue exigiendo confirmado: true en sus args.",
+            parameters: ["type": "object", "properties": [
+                "tabId": ["type": "string", "description": "Pestaña por defecto para los pasos que no traigan la suya."],
+                "acciones": ["type": "array", "items": ["type": "object", "properties": [
+                    "tool": ["type": "string"],
+                    "args": ["type": "object"],
+                ], "required": ["tool"]]],
+            ], "required": ["acciones"]]
         ),
         AIToolDefinition(
             name: "click",
-            description: "Click en un elemento por su referencia. Nativo (la página lo ve como humano) si la pestaña está a la vista; si no, por JavaScript. doble: true para doble click.",
+            description: "Click en un elemento por su referencia (de snapshot o find). Nativo (la página lo ve como humano) si la pestaña está a la vista; si no, por JavaScript. doble: true para doble click.",
             parameters: ["type": "object", "properties": ["tabId": tabId, "ref": ref, "confirmado": ["type": "boolean", "description": "Obligatorio true en botones de comprar, pagar, borrar o publicar; solo lo pones cuando Kurth ya te dijo que sí."], "doble": ["type": "boolean"]], "required": ["ref"]]
         ),
         AIToolDefinition(
@@ -167,6 +212,7 @@ enum KurthCopilot {
             switch name {
             case "list_tabs": return texto(listarPestañas(bm))
             case "open_tab": return texto(try await abrirPestaña(args, bm))
+            case "batch": return await lote(args, bm)
             default: break
             }
             let destino = try resolver(args, bm)
@@ -186,8 +232,11 @@ enum KurthCopilot {
             switch name {
             case "snapshot":
                 let max = (args["max"] as? NSNumber)?.intValue ?? 400
-                let foto = try await js(destino.webView, "return window.__kurth.snapshot(max)", ["max": max]) as? String ?? ""
+                let delta = args["delta"] as? Bool ?? false
+                let foto = try await js(destino.webView, "return window.__kurth.snapshot(max, delta)", ["max": max, "delta": delta]) as? String ?? ""
                 return texto(avisoDeDialogo(destino) + Self.abreDatos + foto + Self.cierraDatos + modo(destino))
+            case "find": return texto(try await buscar(args, destino))
+            case "fill_form": return try await llenarFormulario(args, destino)
             case "click": return texto(try await click(args, destino))
             case "wait_for": return texto(try await esperar(args, destino))
             case "upload_file": return texto(try await subir(args, destino))
@@ -464,6 +513,119 @@ enum KurthCopilot {
         }
         let objetivo = try await js(d.webView, "return window.__kurth.hoverJS(ref)", ["ref": ref])
         return "Mouse encima de \(objetivo ?? ref) (JavaScript)." + trasAccion(d)
+    }
+
+    // MARK: - find, fill_form, batch (26 sep)
+
+    private static func buscar(_ args: [String: Any], _ d: Destino) async throws -> String {
+        let criterios: [String: Any] = [
+            "texto": (args["texto"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? NSNull(),
+            "rol": (args["rol"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? NSNull(),
+            "regex": (args["regex"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? NSNull(),
+            "max": (args["max"] as? NSNumber)?.intValue ?? 20,
+        ]
+        let r = try await js(d.webView, "return window.__kurth.find(o)", ["o": criterios]) as? [String: Any] ?? [:]
+        let lineas = r["lineas"] as? [String] ?? []
+        let total = (r["total"] as? NSNumber)?.intValue ?? lineas.count
+        let revisados = (r["revisados"] as? NSNumber)?.intValue ?? 0
+        let que = [(args["rol"] as? String).map { "rol \($0)" }, (args["texto"] as? String).map { "texto «\($0)»" }, (args["regex"] as? String).map { "regex /\($0)/" }]
+            .compactMap { $0 }.joined(separator: ", ")
+        if lineas.isEmpty {
+            throw KurthCopilotError("Nada coincide con \(que) entre \(revisados) elementos. Prueba con menos criterios, otro texto, o toma un snapshot.")
+        }
+        let cabeza = total > lineas.count
+            ? "\(total) coincidencias con \(que); van las primeras \(lineas.count) (afina con más criterios o sube max):"
+            : "\(total) coincidencia(s) con \(que):"
+        return avisoDeDialogo(d) + Self.abreDatos + cabeza + "\n" + lineas.joined(separator: "\n") + Self.cierraDatos + modo(d)
+    }
+
+    private static func llenarFormulario(_ args: [String: Any], _ d: Destino) async throws -> [String: Any] {
+        guard let campos = args["campos"] as? [[String: Any]], !campos.isEmpty else {
+            throw KurthCopilotError("Falta campos: una lista de {ref o selector, valor}.")
+        }
+        guard campos.count <= 60 else { throw KurthCopilotError("Son \(campos.count) campos; parte el formulario en llamadas de 60 o menos.") }
+        // Los valores llegan como JSON; NSNull (un null explícito) se deja pasar para que el JS avise.
+        let limpios = campos.map { c -> [String: Any] in
+            var x: [String: Any] = [:]
+            if let ref = c["ref"] as? String, !ref.isEmpty { x["ref"] = ref }
+            if let sel = c["selector"] as? String, !sel.isEmpty { x["selector"] = sel }
+            if let v = c["valor"] { x["valor"] = v }
+            return x
+        }
+        // Primero el plan: qué es cada campo. Una casilla o un radio se marcan con click, y si el
+        // click es de comprar, pagar, borrar o publicar, aplica la misma guardia que click.
+        let plan = try await js(d.webView, "return window.__kurth.formPlan(campos)", ["campos": limpios]) as? [[String: Any]] ?? []
+        for (i, p) in plan.enumerated() where p["clic"] as? Bool == true {
+            let desc = p["desc"] as? String ?? "campo \(i + 1)"
+            if let accion = accionDelicada(desc), args["confirmado"] as? Bool != true {
+                throw KurthCopilotError("El campo \(i + 1) (\(desc)) parece «\(accion)»: cuesta dinero, borra o publica algo. Pregúntale a Kurth y, con su sí, repite fill_form con confirmado: true.")
+            }
+        }
+        let r = try await carrera(d) { try await js(d.webView, "return window.__kurth.formFill(campos)", ["campos": limpios]) }
+        if let aviso = r as? DialogoAbierto { return texto(aviso.texto) }
+        let resultado = r as? [String: Any] ?? [:]
+        let hechos = resultado["hechos"] as? [String] ?? []
+        let lineas = hechos.map { "✅ " + $0 }
+        if let error = resultado["error"] as? String {
+            let faltan = campos.count - hechos.count - 1
+            let cola = faltan > 0 ? "\n(\(faltan) campo(s) después de ese no se tocaron.)" : ""
+            return texto("Llenados \(hechos.count) de \(campos.count) campos.\n" + (lineas + ["❌ " + error]).joined(separator: "\n") + cola + trasAccion(d), error: true)
+        }
+        return texto("Llenados \(hechos.count) campo(s) (javascript):\n" + lineas.joined(separator: "\n") + trasAccion(d))
+    }
+
+    /// Varias herramientas del copiloto en orden. Cada paso pasa por `call`, así que sus guardias
+    /// (confirmado, diálogo abierto) aplican igual; el primer error detiene el lote y el informe
+    /// dice qué se hizo y qué quedó sin hacer.
+    private static func lote(_ args: [String: Any], _ bm: BrowserManager) async -> [String: Any] {
+        guard let pasos = args["acciones"] as? [[String: Any]], !pasos.isEmpty else {
+            return texto("Falta acciones: una lista de {tool, args}.", error: true)
+        }
+        guard pasos.count <= 30 else { return texto("Son \(pasos.count) pasos; parte el lote en 30 o menos.", error: true) }
+        var informe: [String] = []
+        for (i, paso) in pasos.enumerated() {
+            let n = i + 1
+            guard let tool = paso["tool"] as? String, !tool.isEmpty else {
+                return texto(cierre(informe, error: "❌ Paso \(n): falta tool.", pendientes: pasos.count - n), error: true)
+            }
+            var a = paso["args"] as? [String: Any] ?? [:]
+            if a["tabId"] == nil, let t = args["tabId"] as? String, !t.isEmpty { a["tabId"] = t }
+            let etiqueta = "\(tool)" + resumen(a)
+            if tool == "batch" || tool == "screenshot_tab" {
+                return texto(cierre(informe, error: "❌ Paso \(n) (\(tool)): no va dentro de un lote; llámala aparte.", pendientes: pasos.count - n), error: true)
+            }
+            guard let r = await call(tool, a, browserManager: bm) else {
+                return texto(cierre(informe, error: "❌ Paso \(n) (\(etiqueta)): no es una herramienta del copiloto.", pendientes: pasos.count - n), error: true)
+            }
+            let salida = (r["content"] as? [[String: Any]] ?? []).compactMap { $0["text"] as? String }.joined(separator: "\n")
+            if r["isError"] as? Bool == true {
+                return texto(cierre(informe, error: "❌ Paso \(n) (\(etiqueta)): " + salida, pendientes: pasos.count - n), error: true)
+            }
+            informe.append("✅ Paso \(n) (\(etiqueta)):\n" + salida)
+        }
+        return texto("Lote completo: \(pasos.count) paso(s).\n\n" + informe.joined(separator: "\n\n"))
+    }
+
+    private static func cierre(_ informe: [String], error: String, pendientes: Int) -> String {
+        let hechos = informe.isEmpty ? "" : informe.joined(separator: "\n\n") + "\n\n"
+        let cola = pendientes > 0 ? "\n(\(pendientes) paso(s) después de ese no se ejecutaron.)" : ""
+        return "Lote detenido en el paso \(informe.count + 1).\n\n" + hechos + error + cola
+    }
+
+    /// Los argumentos de un paso, cortos, para que el informe del lote se lea: click(ref: e3).
+    private static func resumen(_ a: [String: Any]) -> String {
+        let partes = a.keys.sorted().filter { $0 != "tabId" }.map { k -> String in
+            let v = a[k]
+            let s: String
+            if let t = v as? String { s = t.count > 40 ? String(t.prefix(39)) + "…" : t }
+            // Un true de JSON llega como NSNumber; sin esta distinción saldría "1".
+            else if let n = v as? NSNumber { s = CFGetTypeID(n) == CFBooleanGetTypeID() ? (n.boolValue ? "true" : "false") : n.stringValue }
+            else if let l = v as? [Any] { s = "[\(l.count)]" }
+            else if v is [String: Any] { s = "{…}" }
+            else { s = String(describing: v ?? "") }
+            return "\(k): \(s)"
+        }
+        return partes.isEmpty ? "" : "(" + partes.joined(separator: ", ") + ")"
     }
 
     private static func trasAccion(_ d: Destino) -> String {

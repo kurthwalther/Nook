@@ -8,8 +8,16 @@
 // para cuando no hay eventos nativos (pestaña sin ventana). La foto es texto, no imagen: cabe en
 // el contexto del agente y cada línea dice qué es, cómo se llama y su estado.
 //
-// Las referencias se guardan en un Map ref → WeakRef y en un WeakMap elemento → ref, así el
-// mismo elemento conserva su @eN entre fotos mientras la página no cambie.
+// Las referencias se guardan en un Map ref → WeakRef y en un WeakMap elemento → ref: el mismo
+// elemento conserva su @eN entre fotos mientras siga en el DOM, aunque la página cambie alrededor
+// (React que vuelve a pintar sin recrear nodos, listas que crecen). Una referencia solo muere
+// cuando su nodo sale del documento; snapshot poda las muertas y con delta: true dice qué entró,
+// qué cambió y qué se fue desde la foto anterior (26 sep).
+//
+// La foto entra a los shadow roots abiertos (con sus <slot>) y a los iframes del mismo origen
+// (su contentDocument se puede leer desde aquí); un iframe de otro origen se lista pero no se
+// recorre. Los puntos para el click nativo van en coordenadas de la ventana de arriba, sumando
+// la posición de cada iframe en el camino. Referencia: ariaSnapshot.ts de Playwright (Apache-2.0).
 
 (() => {
   if (window.__kurth) return;
@@ -18,6 +26,7 @@
   const ids = new WeakMap();   // elemento → 'e12'
   let next = 1;
   let lastClick = null;
+  let ultimaFoto = null;       // { url, lineas: Map(ref → línea) } para snapshot con delta
 
   const ROLES = new Set(['button', 'link', 'checkbox', 'radio', 'tab', 'menuitem', 'menuitemcheckbox',
     'menuitemradio', 'option', 'switch', 'combobox', 'textbox', 'searchbox', 'slider', 'spinbutton',
@@ -27,17 +36,57 @@
   const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
   const cut = (s, n = 80) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
   const q = (s) => JSON.stringify(s);
+  // Sin acentos ni mayúsculas, para comparar lo que escribe el agente con lo que dice la página.
+  const fold = (s) => clean(String(s == null ? '' : s)).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+  // Un elemento puede vivir en el documento de un iframe: su ventana y sus estilos son los de ese
+  // documento, no los de arriba. getComputedStyle de la ventana equivocada devuelve vacío.
+  const ventanaDe = (el) => (el.ownerDocument && el.ownerDocument.defaultView) || window;
+  const estilo = (el) => ventanaDe(el).getComputedStyle(el);
+
+  // Cuánto hay que sumar a un rect de ese documento para tenerlo en la ventana de arriba: la
+  // posición de cada iframe en el camino (más su borde, que el rect del iframe incluye y el
+  // contenido no).
+  function offsetDeMarco(doc) {
+    let x = 0, y = 0;
+    for (let w = doc && doc.defaultView; w && w !== window; w = w.parent) {
+      let f = null;
+      try { f = w.frameElement; } catch (e) { break; }
+      if (!f) break;
+      const r = f.getBoundingClientRect();
+      x += r.left + f.clientLeft; y += r.top + f.clientTop;
+    }
+    return { x, y };
+  }
+
+  // El rect de un elemento en coordenadas de la ventana de arriba (px CSS).
+  function rectTop(el) {
+    const r = el.getBoundingClientRect();
+    const o = offsetDeMarco(el.ownerDocument);
+    return { left: r.left + o.x, top: r.top + o.y, width: r.width, height: r.height,
+             right: r.right + o.x, bottom: r.bottom + o.y };
+  }
 
   function visible(el) {
     const r = el.getBoundingClientRect();
     if (r.width < 1 || r.height < 1) return false;
-    const cs = getComputedStyle(el);
+    const cs = estilo(el);
     return cs.visibility !== 'hidden' && cs.display !== 'none' && Number(cs.opacity) > 0.01;
   }
 
+  // A la vista en su propio marco y, si está en un iframe, también en la ventana de arriba.
   function inViewport(el) {
+    const w = ventanaDe(el);
     const r = el.getBoundingClientRect();
-    return r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth;
+    if (!(r.bottom > 0 && r.right > 0 && r.top < w.innerHeight && r.left < w.innerWidth)) return false;
+    if (w === window) return true;
+    const t = rectTop(el);
+    return t.bottom > 0 && t.right > 0 && t.top < innerHeight && t.left < innerWidth;
+  }
+
+  // Documento de un iframe si es del mismo origen y ya tiene cuerpo; null si no se puede leer.
+  function documentoDe(iframe) {
+    try { const d = iframe.contentDocument; return d && d.body ? d : null; } catch (e) { return null; }
   }
 
   function roleOf(el) {
@@ -76,7 +125,7 @@
     if (clean(aria)) return clean(aria);
     const by = el.getAttribute('aria-labelledby');
     if (by) {
-      const s = by.split(/\s+/).map((id) => document.getElementById(id)).filter(Boolean)
+      const s = by.split(/\s+/).map((id) => el.ownerDocument.getElementById(id)).filter(Boolean)
         .map((n) => n.innerText || n.textContent).join(' ');
       if (clean(s)) return clean(s);
     }
@@ -101,6 +150,15 @@
     if (!id) { id = 'e' + next++; ids.set(el, id); }
     refs.set(id, new WeakRef(el));
     return id;
+  }
+
+  // Quita del mapa las referencias cuyo nodo ya se fue (recolectado o fuera del DOM). El WeakMap
+  // se limpia solo; este Map no, y en una página de una sola vista (SPA) crecería sin tope.
+  function podar() {
+    for (const [id, w] of refs) {
+      const e = w.deref();
+      if (!e || !e.isConnected) refs.delete(id);
+    }
   }
 
   function line(el, role, ref) {
@@ -134,19 +192,66 @@
     return s;
   }
 
+  // Una línea de la foto con su clave (la referencia) y lo que find necesita para filtrar.
+  function emitir(out, el, ref, texto, role) {
+    out.lines.push(out.indent + texto);
+    out.claves.push(ref);
+    out.meta.push({ rol: role, nombre: nameOf(el) });
+  }
+
+  // Un iframe: si es del mismo origen se entra y lo de adentro va con sangría bajo su línea; si
+  // no, solo se dice que está. Un iframe sin tamaño (pixel de rastreo, widget escondido) se salta.
+  function marco(el, out) {
+    if (!visible(el)) return;
+    const doc = documentoDe(el);
+    const nombre = cut(clean(el.getAttribute('title') || el.getAttribute('aria-label') || el.getAttribute('name') || el.getAttribute('src') || ''), 60);
+    const ref = refFor(el);
+    if (!doc) {
+      out.ajenos++;
+      emitir(out, el, ref, '- iframe ' + q(nombre) + ' [@' + ref + '] (otro origen: no se puede leer ni tocar desde aquí)', 'iframe');
+      return;
+    }
+    if (!doc.body.children.length) return;
+    emitir(out, el, ref, '- iframe ' + q(nombre) + ' [@' + ref + '] — dentro:', 'iframe');
+    const sangria = out.indent;
+    out.indent += '  ';
+    visit(doc.body, out);
+    out.indent = sangria;
+  }
+
   function visit(el, out) {
-    if (out.lines.length >= out.max || SKIP.has(el.tagName)) return;
+    if (out.lines.length >= out.max || SKIP.has(el.tagName) || el.tagName === 'KURTH-CAPA') return;
+    if (el.tagName === 'IFRAME' || el.tagName === 'FRAME') { marco(el, out); return; }
     const interactive = isInteractive(el);
     const role = roleOf(el);
     // Un campo de archivo oculto tras un botón "Subir" también se lista: upload_file lo usa directo.
     const archivoOculto = el.tagName === 'INPUT' && el.type === 'file';
     if ((interactive || role === 'heading') && (visible(el) || archivoOculto)) {
-      out.lines.push(line(el, role || 'elemento', interactive ? refFor(el) : null) + (archivoOculto && !visible(el) ? ' (oculto)' : ''));
+      // Los encabezados también llevan referencia: sirven para highlight, point_to y scroll.
+      emitir(out, el, refFor(el), line(el, role || 'elemento', refFor(el)) + (archivoOculto && !visible(el) ? ' (oculto)' : ''), role || 'elemento');
       // Adentro de un enlace o un botón no hay nada más que tocar por separado.
       if (interactive && (el.tagName === 'A' || el.tagName === 'BUTTON')) return;
     }
-    if (el.shadowRoot) for (const c of el.shadowRoot.children) visit(c, out);
+    // Un <slot> pinta lo que le asignaron desde afuera del shadow root (o su contenido por
+    // defecto si nada le llegó); esos nodos se recorren aquí y no como hijos del host.
+    if (el.tagName === 'SLOT' && typeof el.assignedElements === 'function') {
+      const asignados = el.assignedElements();
+      for (const c of asignados.length ? asignados : el.children) visit(c, out);
+      return;
+    }
+    if (el.shadowRoot) {
+      // Con shadow root, los hijos de luz solo se ven si un slot los toma: entran por ahí.
+      for (const c of el.shadowRoot.children) visit(c, out);
+      return;
+    }
     for (const c of el.children) visit(c, out);
+  }
+
+  // Recorrido completo de la página, como lo usan snapshot y find.
+  function recorrer(max) {
+    const out = { lines: [], claves: [], meta: [], max: max || 400, indent: '', ajenos: 0 };
+    visit(document.body || document.documentElement, out);
+    return out;
   }
 
   function element(ref) {
@@ -160,6 +265,207 @@
     const role = roleOf(el) || el.tagName.toLowerCase();
     const name = cut(nameOf(el), 50);
     return role + (name ? ' ' + q(name) : '');
+  }
+
+  // Lo que el agente escribe en español para find(rol) → el rol de la foto.
+  const ROL_ES = { boton: 'button', enlace: 'link', liga: 'link', campo: 'textbox', texto: 'textbox', input: 'textbox',
+    casilla: 'checkbox', radio: 'radio', lista: 'combobox', select: 'combobox', menu: 'combobox', encabezado: 'heading',
+    titulo: 'heading', pestana: 'tab', opcion: 'option', interruptor: 'switch', archivo: 'file', marco: 'iframe',
+    busqueda: 'searchbox', buscador: 'searchbox', editable: 'textbox' };
+
+  // El texto que la página pinta (innerText respeta display:none), con el de los iframes del
+  // mismo origen, para wait_for.
+  function textoPintado(doc) {
+    let t = (doc.body && doc.body.innerText) || '';
+    for (const f of doc.querySelectorAll('iframe, frame')) {
+      const d = documentoDe(f);
+      if (d) t += '\n' + textoPintado(d);
+    }
+    return t;
+  }
+
+  // ── Llenar campos (fill_form) ────────────────────────────────────────────────────────────
+
+  // querySelector que también entra a los shadow roots abiertos y a los iframes del mismo
+  // origen, para cuando el agente da un selector en vez de una referencia.
+  function porSelector(sel) {
+    const buscar = (raiz) => {
+      let e = null;
+      try { e = raiz.querySelector(sel); } catch (err) { throw new Error('Selector no válido: ' + sel); }
+      if (e) return e;
+      for (const h of raiz.querySelectorAll('*')) {
+        if (h.shadowRoot) { const f = buscar(h.shadowRoot); if (f) return f; }
+        if (h.tagName === 'IFRAME' || h.tagName === 'FRAME') { const d = documentoDe(h); if (d) { const f = buscar(d); if (f) return f; } }
+      }
+      return null;
+    };
+    return buscar(document);
+  }
+
+  function campoDe(c) {
+    if (c && c.ref) return element(c.ref);
+    if (c && c.selector) {
+      const e = porSelector(c.selector);
+      if (!e) throw new Error('No hay ningún elemento con el selector ' + q(c.selector) + '.');
+      return e;
+    }
+    throw new Error('Cada campo necesita ref (de snapshot o find) o selector.');
+  }
+
+  const DE_FECHA = new Set(['date', 'time', 'datetime-local', 'month', 'week']);
+  const FORMATO = { date: 'AAAA-MM-DD', time: 'HH:MM', 'datetime-local': 'AAAA-MM-DDTHH:MM', month: 'AAAA-MM', week: 'AAAA-WSS' };
+
+  function tipoDeCampo(e) {
+    const t = e.tagName;
+    if (t === 'SELECT') return 'select';
+    if (t === 'TEXTAREA') return 'text';
+    if (t === 'INPUT') {
+      const ty = (e.type || 'text').toLowerCase();
+      if (['button', 'submit', 'reset', 'image'].includes(ty)) return 'boton';
+      return ty;
+    }
+    if (t === 'BUTTON' || (t === 'A' && e.hasAttribute('href'))) return 'boton';
+    if (e.isContentEditable) return 'editable';
+    const role = e.getAttribute('role');
+    if (role === 'checkbox' || role === 'switch' || role === 'radio') return 'aria-' + role;
+    return 'otro';
+  }
+
+  const esVerdadero = (v) => v === true || v === 1 || ['true', '1', 'si', 'yes', 'on', 'marcado', 'marcar'].includes(fold(v));
+  const esFalso = (v) => v === false || v === 0 || ['false', '0', 'no', 'off', 'sin marcar', 'desmarcar'].includes(fold(v));
+
+  function enfocar(e, clear) {
+    const doc = e.ownerDocument;
+    e.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+    if (typeof e.focus === 'function') e.focus();
+    if (clear) {
+      if (e.isContentEditable) doc.execCommand('selectAll');
+      else if (typeof e.select === 'function') e.select();
+    }
+    return doc.activeElement === e || e.contains(doc.activeElement);
+  }
+
+  function valorDe(e) {
+    return e.isContentEditable ? (e.innerText || '') : (e.value !== undefined ? String(e.value) : '');
+  }
+
+  // Escribe sin eventos nativos. Primero por el camino de edición del navegador (execCommand
+  // insertText, que dispara beforeinput/input como al teclear); si el valor no cambió, con el
+  // setter nativo de value + input/change, que es lo que React escucha en un input controlado.
+  // execCommand va en el documento del campo: el de arriba no edita dentro de un iframe.
+  function escribir(e, text, clear) {
+    enfocar(e, clear);
+    const antes = valorDe(e);
+    try { e.ownerDocument.execCommand('insertText', false, text); } catch (err) { /* sigue abajo */ }
+    if (valorDe(e) !== antes || (antes.endsWith(text) && !clear)) return valorDe(e);
+    if (e.isContentEditable) return valorDe(e);
+    const proto = e instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+    setter.call(e, (clear ? '' : e.value) + text);
+    e.dispatchEvent(new Event('input', { bubbles: true }));
+    e.dispatchEvent(new Event('change', { bubbles: true }));
+    return valorDe(e);
+  }
+
+  // Valor directo con el setter nativo (fechas, números, colores, rangos): el camino de edición
+  // no aplica y el navegador valida el formato al asignar.
+  function asignar(e, valor) {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    setter.call(e, String(valor));
+    e.dispatchEvent(new Event('input', { bubbles: true }));
+    e.dispatchEvent(new Event('change', { bubbles: true }));
+    return e.value;
+  }
+
+  function elegir(e, wanted) {
+    const w = fold(wanted);
+    const opts = Array.from(e.options);
+    const opt = opts.find((o) => fold(o.value) === w || fold(o.text) === w) || opts.find((o) => fold(o.text).includes(w));
+    if (!opt) throw new Error('No hay una opción ' + q(String(wanted)) + '. Opciones: ' + opts.map((o) => clean(o.text)).join(' | '));
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+    setter.call(e, opt.value);
+    e.dispatchEvent(new Event('input', { bubbles: true }));
+    e.dispatchEvent(new Event('change', { bubbles: true }));
+    return clean(opt.text);
+  }
+
+  // Un campo, un valor. Devuelve la línea del informe. Las casillas se marcan con click() (así
+  // disparan input/change y los manejadores de React solos); una fecha o número con el setter y
+  // se comprueba que el navegador la aceptó.
+  function llenar(e, valor) {
+    const tipo = tipoDeCampo(e);
+    const desc = describe(e);
+    if (valor === undefined || valor === null) throw new Error('falta valor.');
+    switch (tipo) {
+      case 'boton': throw new Error('es un botón o enlace; fill_form no da clics, usa click.');
+      case 'file': throw new Error('es un campo de archivo; usa upload_file.');
+      case 'otro': throw new Error('no es un campo que se pueda llenar (' + e.tagName.toLowerCase() + ').');
+      case 'checkbox':
+      case 'aria-checkbox':
+      case 'aria-switch': {
+        const querido = esVerdadero(valor) ? true : esFalso(valor) ? false : null;
+        if (querido === null) throw new Error('para una casilla el valor es true o false.');
+        const marcado = () => (tipo === 'checkbox' ? e.checked : e.getAttribute('aria-checked') === 'true');
+        if (marcado() !== querido) {
+          e.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+          e.click();
+        }
+        if (marcado() !== querido) throw new Error('la casilla no cambió al hacer click.');
+        return desc + (querido ? ' marcada' : ' sin marcar');
+      }
+      case 'radio':
+      case 'aria-radio': {
+        let objetivo = e;
+        if (esFalso(valor)) throw new Error('un radio no se desmarca; marca otro del grupo.');
+        if (!esVerdadero(valor)) {
+          // Un texto elige dentro del grupo: por valor o por etiqueta.
+          const grupo = tipo === 'radio' && e.name
+            ? Array.from(e.ownerDocument.querySelectorAll('input[type=radio]')).filter((r) => r.name === e.name && r.form === e.form)
+            : [e];
+          const w = fold(valor);
+          objetivo = grupo.find((r) => fold(r.value) === w || fold(nameOf(r)) === w) || grupo.find((r) => fold(nameOf(r)).includes(w));
+          if (!objetivo) throw new Error('ninguna opción del grupo se llama ' + q(String(valor)) + '. Opciones: ' + grupo.map((r) => nameOf(r) || r.value).join(' | '));
+        }
+        const marcado = () => (tipo === 'radio' ? objetivo.checked : objetivo.getAttribute('aria-checked') === 'true');
+        if (!marcado()) {
+          objetivo.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+          objetivo.click();
+        }
+        if (!marcado()) throw new Error('el radio no quedó marcado al hacer click.');
+        return describe(objetivo) + ' marcado';
+      }
+      case 'select': {
+        if (Array.isArray(valor)) {
+          if (!e.multiple) throw new Error('la lista no admite varias opciones.');
+          const opts = Array.from(e.options);
+          const elegidas = valor.map((v) => {
+            const w = fold(v);
+            const o = opts.find((x) => fold(x.value) === w || fold(x.text) === w) || opts.find((x) => fold(x.text).includes(w));
+            if (!o) throw new Error('no hay una opción ' + q(String(v)) + '.');
+            return o;
+          });
+          for (const o of opts) o.selected = elegidas.includes(o);
+          e.dispatchEvent(new Event('input', { bubbles: true }));
+          e.dispatchEvent(new Event('change', { bubbles: true }));
+          return desc + ' = ' + q(elegidas.map((o) => clean(o.text)).join(', '));
+        }
+        return desc + ' = ' + q(elegir(e, valor));
+      }
+      case 'editable':
+      case 'text': case 'email': case 'password': case 'search': case 'tel': case 'url': {
+        const v = escribir(e, String(valor), true);
+        return desc + ' = ' + (tipo === 'password' ? '(contraseña escrita)' : q(cut(v, 60)));
+      }
+      default: {
+        // date, time, number, range, color, hidden y lo que venga.
+        const v = asignar(e, valor);
+        if (DE_FECHA.has(tipo) && v !== String(valor)) {
+          throw new Error('no aceptó ' + q(String(valor)) + '; el formato de un campo ' + tipo + ' es ' + FORMATO[tipo] + '.');
+        }
+        if (tipo === 'number' && v === '' && String(valor) !== '') throw new Error('no aceptó ' + q(String(valor)) + ' como número.');
+        return desc + ' = ' + q(cut(v, 60));
+      }
+    }
   }
 
 
@@ -278,7 +584,7 @@
   // Dónde está hoy la marca, en el viewport: por renglón si es texto, un rectángulo si no. Vacío
   // si su objetivo se fue del DOM o está oculto (display:none da 0×0).
   function geometria(m) {
-    if (m.elemento) return m.elemento.isConnected ? [inflar(enVista(m.elemento.getBoundingClientRect()), 4)] : [];
+    if (m.elemento) return m.elemento.isConnected ? [inflar(enVista(rectTop(m.elemento)), 4)] : [];
     if (m.rango) return renglonesDe(m.rango).map((r) => inflar(r, 3));
     if (m.contenedor && m.contenedor.isConnected) {
       const rc = m.contenedor.getBoundingClientRect();
@@ -681,29 +987,111 @@
   window.__kurth = {
     marcas,
 
-    snapshot(max) {
-      const out = { lines: [], max: max || 400 };
-      visit(document.body || document.documentElement, out);
+    // Con delta: true devuelve solo lo que cambió desde la foto anterior de esta misma página
+    // (nuevos, cambiados, quitados), comparando línea por línea por referencia. Cada foto, con o
+    // sin delta, es la base de la siguiente.
+    snapshot(max, delta) {
+      const out = recorrer(max);
+      podar();
       const header = 'Página: ' + (document.title || '(sin título)') + ' — ' + location.href +
         '\nScroll: ' + Math.round(scrollY) + ' de ' + Math.max(0, document.documentElement.scrollHeight - innerHeight) + ' px';
       const tail = out.lines.length >= out.max ? '\n… (la foto se cortó en ' + out.max + ' elementos)' : '';
-      const frames = document.querySelectorAll('iframe').length;
-      const note = frames ? '\n(' + frames + ' iframe(s) no incluidos en la foto)' : '';
-      return header + '\n\n' + out.lines.join('\n') + tail + note;
+      const note = out.ajenos ? '\n(' + out.ajenos + ' iframe(s) de otro origen: se listan pero no se leen)' : '';
+      const actual = new Map();
+      out.lines.forEach((l, i) => actual.set(out.claves[i], l));
+      const anterior = ultimaFoto;
+      ultimaFoto = { url: location.href, lineas: actual };
+      if (delta && anterior && anterior.url === location.href) {
+        const nuevos = [], cambiados = [], quitados = [];
+        for (const [k, l] of actual) {
+          if (!anterior.lineas.has(k)) nuevos.push(l);
+          else if (anterior.lineas.get(k) !== l) cambiados.push(l);
+        }
+        for (const [k, l] of anterior.lineas) if (!actual.has(k)) quitados.push(l);
+        if (!nuevos.length && !cambiados.length && !quitados.length) {
+          return header + '\n\nSin cambios desde la foto anterior (' + actual.size + ' elementos; las referencias siguen valiendo).' + tail + note;
+        }
+        const bloque = (titulo, lista) => (lista.length ? '\n\n' + titulo + ':\n' + lista.join('\n') : '');
+        return header + '\n\nCambios desde la foto anterior: ' + nuevos.length + ' nuevos, ' + cambiados.length + ' cambiados, ' +
+          quitados.length + ' quitados (' + actual.size + ' elementos en total; lo que no aparece sigue igual y con la misma referencia).' +
+          bloque('Nuevos', nuevos) + bloque('Cambiados', cambiados) + bloque('Quitados (sus referencias ya no sirven)', quitados) + tail + note;
+      }
+      const aviso = delta ? '\n(No había foto anterior de esta página: va completa.)' : '';
+      return header + aviso + '\n\n' + out.lines.join('\n') + tail + note;
+    },
+
+    // Busca en la foto por rol, texto (en el nombre o en la línea entera) y/o expresión regular
+    // (sobre la línea). Devuelve las líneas que coinciden, con su referencia lista para usar.
+    find(o) {
+      const out = recorrer(5000);
+      const rol = o.rol ? (ROL_ES[fold(o.rol)] || fold(o.rol)) : null;
+      const texto = o.texto ? fold(o.texto) : null;
+      let re = null;
+      if (o.regex) {
+        try { re = new RegExp(o.regex, 'i'); } catch (e) { throw new Error('Expresión regular no válida: ' + e.message); }
+      }
+      if (!rol && !texto && !re) throw new Error('Dime qué buscar: texto, rol o regex.');
+      const max = Math.max(1, Math.min(o.max || 20, 50));
+      const lineas = [];
+      let total = 0;
+      out.lines.forEach((l, i) => {
+        const m = out.meta[i];
+        const t = l.trim();
+        if (rol && m.rol !== rol) return;
+        if (texto && !fold(m.nombre).includes(texto) && !fold(t).includes(texto)) return;
+        if (re && !re.test(t)) return;
+        total++;
+        if (lineas.length < max) lineas.push(t);
+      });
+      return { total, lineas, revisados: out.lines.length };
+    },
+
+    // Primer paso de fill_form: resuelve cada campo y dice qué es, para que Nook frene las
+    // casillas delicadas antes de tocar nada. Falla completo si un campo no se encuentra.
+    formPlan(campos) {
+      return campos.map((c, i) => {
+        let e;
+        try { e = campoDe(c); } catch (err) { throw new Error('Campo ' + (i + 1) + ': ' + err.message); }
+        const tipo = tipoDeCampo(e);
+        return { desc: describe(e), tipo, clic: tipo === 'checkbox' || tipo === 'radio' || tipo.startsWith('aria-') };
+      });
+    },
+
+    // Segundo paso: llena en orden y se detiene en el primer campo que falle, diciendo cuáles
+    // quedaron hechos. Todo por JavaScript (setter nativo + input/change, click en casillas).
+    formFill(campos) {
+      const hechos = [];
+      for (let i = 0; i < campos.length; i++) {
+        const c = campos[i];
+        let e;
+        try {
+          e = campoDe(c);
+          hechos.push(llenar(e, c.valor));
+        } catch (err) {
+          return { hechos, error: 'Campo ' + (i + 1) + (e ? ' (' + describe(e) + ')' : '') + ': ' + err.message };
+        }
+      }
+      return { hechos, error: null };
     },
 
     // Deja el elemento a la vista y devuelve su centro en coordenadas del viewport (px CSS), para
     // el click nativo. Arma una sonda que anota el siguiente click que llegue, y si fue humano.
     prepare(ref) {
       const e = element(ref);
+      // scrollIntoView también desplaza los iframes que lo contienen (mismo origen).
       e.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
-      const r = e.getBoundingClientRect();
+      const local = e.getBoundingClientRect();
+      const hit = e.ownerDocument.elementFromPoint(local.left + local.width / 2, local.top + local.height / 2);
+      const covered = hit && hit !== e && !e.contains(hit) && !hit.contains(e) ? describe(hit) : null;
+      // El click nativo va en coordenadas de la ventana de arriba; dentro de un iframe hay que
+      // sumar dónde está el iframe.
+      const r = rectTop(e);
       const x = r.left + r.width / 2;
       const y = r.top + r.height / 2;
-      const hit = document.elementFromPoint(x, y);
-      const covered = hit && hit !== e && !e.contains(hit) && !hit.contains(e) ? describe(hit) : null;
       lastClick = null;
-      window.addEventListener('click', (ev) => {
+      // El click de un elemento dentro de un iframe no sube a la ventana de arriba: la sonda se
+      // pone en la ventana del propio elemento.
+      ventanaDe(e).addEventListener('click', (ev) => {
         lastClick = { trusted: ev.isTrusted, onTarget: ev.target === e || e.contains(ev.target) };
       }, { capture: true, once: true });
       return { x, y, vw: innerWidth, vh: innerHeight, covered, target: describe(e) };
@@ -722,8 +1110,7 @@
         if (!e || !e.isConnected || !visible(e)) return false;
       }
       if (texto) {
-        const cuerpo = clean((document.body && document.body.innerText) || '').toLowerCase();
-        if (!cuerpo.includes(clean(texto).toLowerCase())) return false;
+        if (!clean(textoPintado(document)).toLowerCase().includes(clean(texto).toLowerCase())) return false;
       }
       return true;
     },
@@ -774,53 +1161,16 @@
       return describe(e);
     },
 
-    focus(ref, clear) {
-      const e = element(ref);
-      e.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
-      if (typeof e.focus === 'function') e.focus();
-      if (clear) {
-        if (e.isContentEditable) document.execCommand('selectAll');
-        else if (typeof e.select === 'function') e.select();
-      }
-      return document.activeElement === e || e.contains(document.activeElement);
-    },
+    focus(ref, clear) { return enfocar(element(ref), clear); },
 
-    valueOf(ref) {
-      const e = element(ref);
-      return e.isContentEditable ? (e.innerText || '') : (e.value !== undefined ? String(e.value) : '');
-    },
+    valueOf(ref) { return valorDe(element(ref)); },
 
-    // Escribe sin eventos nativos. Primero por el camino de edición del navegador
-    // (execCommand insertText, que dispara beforeinput/input como al teclear); si el valor no
-    // cambió, con el setter nativo de value + input/change, que es lo que React escucha en un
-    // input controlado.
-    typeJS(ref, text, clear) {
-      const e = element(ref);
-      window.__kurth.focus(ref, clear);
-      const antes = window.__kurth.valueOf(ref);
-      try { document.execCommand('insertText', false, text); } catch (err) { /* sigue abajo */ }
-      if (window.__kurth.valueOf(ref) !== antes || (antes.endsWith(text) && !clear)) return window.__kurth.valueOf(ref);
-      if (e.isContentEditable) return window.__kurth.valueOf(ref);
-      const proto = e instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-      const setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
-      setter.call(e, (clear ? '' : e.value) + text);
-      e.dispatchEvent(new Event('input', { bubbles: true }));
-      e.dispatchEvent(new Event('change', { bubbles: true }));
-      return window.__kurth.valueOf(ref);
-    },
+    typeJS(ref, text, clear) { return escribir(element(ref), text, clear); },
 
     select(ref, wanted) {
       const e = element(ref);
       if (e.tagName !== 'SELECT') throw new Error('@' + ref + ' no es una lista de opciones (select).');
-      const w = clean(String(wanted)).toLowerCase();
-      const opt = Array.from(e.options).find((o) => o.value.toLowerCase() === w || clean(o.text).toLowerCase() === w)
-        || Array.from(e.options).find((o) => clean(o.text).toLowerCase().includes(w));
-      if (!opt) throw new Error('No hay una opción ' + q(String(wanted)) + '. Opciones: ' + Array.from(e.options).map((o) => clean(o.text)).join(' | '));
-      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
-      setter.call(e, opt.value);
-      e.dispatchEvent(new Event('input', { bubbles: true }));
-      e.dispatchEvent(new Event('change', { bubbles: true }));
-      return clean(opt.text);
+      return elegir(e, wanted);
     },
 
     scroll(ref, dx, dy) {
