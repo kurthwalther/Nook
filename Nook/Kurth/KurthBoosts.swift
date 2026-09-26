@@ -29,6 +29,17 @@ import os
 @Observable
 final class KurthBoosts {
     static let shared = KurthBoosts()
+
+    /// Ventana cuyo popover de Boost debe abrirse (lo pide el panel de opciones; KurthBoostAncla lo
+    /// abre y lo limpia). Espera a que el panel de opciones termine de cerrarse: dos popovers
+    /// seguidos en el mismo instante se pisan.
+    private(set) var popoverPedido: UUID?
+
+    func abrirPopover(en ventana: UUID) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self.popoverPedido = ventana }
+    }
+
+    func popoverAbierto() { popoverPedido = nil }
     @ObservationIgnored fileprivate static let log = Logger(subsystem: "com.nook.browser", category: "KurthBoosts")
 
     static let ajuste = "kurth.boosts"

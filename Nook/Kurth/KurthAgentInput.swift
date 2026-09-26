@@ -118,18 +118,14 @@ struct KurthAgentInput: View {
         .shadow(color: .black.opacity(0.08), radius: 6, y: 1)
         .onDrop(of: [.fileURL, .url, .image], isTargeted: $soltando, perform: soltar)
         .animation(NookDesign.Motion.standard, value: soltando)
-        // kurth: la lista de «/» y «@» flota sobre la caja, del mismo ancho, tapando la fila de «+»
-        // y Señalar mientras está abierta. Como capa y no en la columna: así no empuja la
-        // conversación ni cambia el alto que mide el chat para su máscara.
-        .overlay(alignment: .top) {
+        // kurth: la lista de «/» y «@» sale como pop-up encima de la caja, del mismo ancho, en su
+        // propia ventana (KurthPopupFlotante): no la recorta el panel y no toma el teclado.
+        .background {
             let lista = sugerencias
-            if !lista.isEmpty {
+            KurthPopupFlotante(visible: !lista.isEmpty) {
                 KurthListaDeSugerencias(sugerencias: lista, seleccion: $seleccion, elegir: elegir)
-                    .alignmentGuide(.top) { $0[.bottom] + 6 }
-                    .transition(.opacity.combined(with: .offset(y: 4)))
             }
         }
-        .animation(NookDesign.Motion.quick, value: sugerencias.isEmpty)
         .padding(.horizontal, 8)
     }
 

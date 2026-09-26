@@ -165,10 +165,11 @@ struct KurthListaDeSugerencias: View {
                 scroll.scrollTo(sugerencias[nueva].id)
             }
         }
-        .background(Color(nsColor: .textBackgroundColor), in: forma)
+        // Material de menú de macOS sobre su propia ventana (KurthPopupFlotante): se distingue de la
+        // caja blanca de abajo. La sombra la pone la ventana, que sigue esta forma.
+        .background(.regularMaterial, in: forma)
         .clipShape(forma)
-        .overlay { forma.strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5) }
-        .shadow(color: .black.opacity(0.08), radius: 6, y: 1)
+        .overlay { forma.strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5) }
     }
 
     /// Mide su contenido hasta 8 filas (más un título de grupo); de ahí en adelante, scroll.

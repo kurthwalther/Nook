@@ -21,16 +21,20 @@ import NookWeb
 /// Menú de clic derecho y popover sobre la cápsula del dominio (KurthTopBarView.address).
 struct KurthBoostAncla: ViewModifier {
     let session: PageSession
+    /// Sin menú de clic derecho: en la tira compacta el clic derecho ya es de las pestañas; ahí el
+    /// popover solo se abre desde el panel de opciones.
+    var conMenu = true
     @Environment(BrowserWindowState.self) private var windowState
     @State private var abierto = false
 
     func body(content: Content) -> some View {
         let host = KurthBoostsModelo.host(de: session.url)
-        content
-            .contextMenu {
-                // Solo https: en http una red ajena podría hacerse pasar por el sitio y recibir el JS.
-                Button("Boost para este sitio…") { abierto = true }
-                    .disabled(host == nil)
+        conMenuSiToca(content, host: host)
+            // Desde el panel de opciones (botón Boost).
+            .onChange(of: KurthBoosts.shared.popoverPedido) { _, ventana in
+                guard ventana == windowState.id else { return }
+                KurthBoosts.shared.popoverAbierto()
+                if host != nil { abierto = true }
             }
             .popover(isPresented: $abierto, arrowEdge: .bottom) {
                 if let host {
@@ -40,6 +44,21 @@ struct KurthBoostAncla: ViewModifier {
                     }
                 }
             }
+    }
+
+    /// El menú de clic derecho solo donde se pide: un contextMenu vacío igual se quedaría el clic
+    /// derecho de la tira compacta.
+    @ViewBuilder
+    private func conMenuSiToca(_ content: Content, host: String?) -> some View {
+        if conMenu {
+            content.contextMenu {
+                // Solo https: en http una red ajena podría hacerse pasar por el sitio y recibir el JS.
+                Button("Boost para este sitio…") { abierto = true }
+                    .disabled(host == nil)
+            }
+        } else {
+            content
+        }
     }
 }
 

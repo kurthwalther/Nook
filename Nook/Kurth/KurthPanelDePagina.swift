@@ -6,7 +6,7 @@
 //  Lo que se hace con la página, en el panel del botón de al lado del chat (ExtensionLibraryView),
 //  que ya tenía Copiar enlace, Copiar título, Silenciar y el zoom (Kurth, 25 sep: "todas las
 //  opciones nuevas mételas en el de opciones"):
-//  - una segunda fila con Imprimir, PDF y Captura de la página completa (Archivo web quedó solo en
+//  - una segunda fila con Imprimir, Boost (antes PDF) y Captura de la página completa (Archivo web quedó solo en
 //    el menú Archivo: en el panel no sumaba, Kurth 25 sep); la captura dice dónde quedó;
 //  - "Tamaño del texto" junto a "Page Zoom", con el mismo −/%/+.
 //  Los mismos botones y filas que ya usa el panel, copiados en su forma (allá son privados).
@@ -43,10 +43,10 @@ struct KurthAccionesDePagina: View {
                 KurthImprimir.imprimir(pagina)
                 return false
             }
-            KurthBotonDePanel(icono: "doc.richtext", texto: "PDF") {
-                guard let pagina else { return false }
+            // Boost en lugar de PDF (Kurth, 26 sep): abre el popover de la cápsula de dirección.
+            KurthBotonDePanel(icono: "wand.and.stars", texto: "Boost") {
                 onDismiss()
-                KurthImprimir.exportarPDF(pagina, titulo: titulo)
+                KurthBoosts.shared.abrirPopover(en: windowState.id)
                 return false
             }
             KurthBotonDePanel(icono: "camera.viewfinder", texto: "Captura", listo: "Guardada") {

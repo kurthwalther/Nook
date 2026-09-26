@@ -160,13 +160,6 @@ struct KurthTopBarView: View {
                 // queda para cuando aparece un menú fijo al hacer scroll.
                 .animation(isAtTop ? nil : .easeOut(duration: 0.15), value: headerFill)
 
-            // Sin cápsula (tinted, pestañas separadas) el progreso va de lado a lado en la orilla de
-            // abajo de la barra, donde vive la línea divisoria.
-            if !isCapsules && !isCompact && hasPage {
-                KurthProgresoDeCarga(webView: windowWebView)
-                    .frame(height: barHeight)
-            }
-
             Rectangle()
                 .fill(.primary.opacity(hairlineOpacity))
                 .frame(height: 1 / displayScale)
@@ -273,42 +266,43 @@ struct KurthTopBarView: View {
     private var address: some View {
         if let tab = browserManager.tabs.selectedSession(in: windowState) {
             if isCompact {
-                // Pestañas compactas (KurthTabStrip.swift): la tira ocupa todo el centro.
+                // Pestañas compactas (KurthTabStrip.swift): la tira ocupa todo el centro; traducir va
+                // afuera, a su derecha, en su propio círculo de vidrio (Kurth, 26 sep).
+                HStack(spacing: NookDesign.Spacing.sm) {
                 KurthTabStrip(glass: isCapsules, tint: glassTint, iconsOnly: compactTabs == "icons")
-                    // La tira es la cápsula de la dirección en este modo: el progreso va en su orilla.
-                    .overlay { KurthProgresoDeCarga(webView: windowWebView).clipShape(Capsule()) }
                     .padding(.horizontal, isCapsules ? 8 : NookDesign.Spacing.md)
                     // La tira publica su cápsula si todas caben; si se desplaza por dentro, no se
                     // desliza entre pestañas: ahí el gesto mueve la tira (KurthGestosDePestanas).
                     .onPreferenceChange(KurthZonaDeDeslizar.self) { zona in
                         MainActor.assumeIsolated { KurthGestos.de(windowState).zonaDeDeslizar = zona }
                     }
+                traduccionAfuera
+                }
+                .animation(NookDesign.Motion.standard, value: muestraTraduccion)
+                .modifier(KurthBoostAncla(session: tab, conMenu: false)) // kurth: Boost desde el panel de opciones
             } else if isCapsules {
                 // Cápsula: el dominio centrado y los íconos anclados a las orillas, no al texto.
                 // Mide lo que ocupa el dominio (mínimo `addressMinWidth`) y crece si es largo.
-                // Con el ícono de traducir hay dos íconos a la derecha: el hueco crece de los dos
-                // lados para que el dominio siga centrado.
+                // Traducir va afuera, a la derecha de la cápsula, en su propio círculo (Kurth, 26 sep).
+                HStack(spacing: NookDesign.Spacing.sm) {
                 hostText(tab)
-                    .padding(.horizontal, Self.capsuleInset + KurthEscala.pt(20) * (muestraTraduccion ? 2 : 1) + NookDesign.Spacing.lg)
+                    .padding(.horizontal, Self.capsuleInset + KurthEscala.pt(20) + NookDesign.Spacing.lg)
                     .frame(minWidth: Self.addressMinWidth)
                     .frame(height: Self.capsuleHeight)
                     .overlay(alignment: .leading) {
                         copyButton(tab).padding(.leading, Self.capsuleInset)
                     }
                     .overlay(alignment: .trailing) {
-                        HStack(spacing: 0) {
-                            traduccionBoton.kurthFieldIcon()
-                            reloadButton.kurthFieldIcon()
-                        }
-                        .padding(.trailing, Self.capsuleInset)
+                        reloadButton.kurthFieldIcon()
+                            .padding(.trailing, Self.capsuleInset)
                     }
-                    // Progreso de carga en la orilla de abajo; KurthGlass lo recorta con la cápsula.
-                    .overlay { KurthProgresoDeCarga(webView: windowWebView) }
-                    .animation(NookDesign.Motion.standard, value: muestraTraduccion)
                     .modifier(KurthGlass(tint: glassTint))
                     .onHoverTracking { isHoveringCapsule = $0 }
                     .modifier(KurthZonaDeDeslizarAqui())
                     .modifier(KurthBoostAncla(session: tab)) // kurth: clic derecho → Boost para este sitio
+                traduccionAfuera
+                }
+                .animation(NookDesign.Motion.standard, value: muestraTraduccion)
             } else {
                 // Copiar junto al dominio; recargar vive con las flechas en esta variante.
                 HStack(spacing: NookDesign.Spacing.md + 2) {
@@ -380,6 +374,22 @@ struct KurthTopBarView: View {
         }
     }
 
+    /// Traducir fuera de la cápsula o de la tira: un círculo de vidrio de la altura de la cápsula.
+    /// En la barra tinted no hay vidrio: solo el ícono.
+    @ViewBuilder
+    private var traduccionAfuera: some View {
+        if muestraTraduccion {
+            if isCapsules {
+                traduccionBoton.kurthFieldIcon()
+                    .frame(width: Self.capsuleHeight, height: Self.capsuleHeight)
+                    .modifier(KurthGlass(tint: glassTint))
+                    .transition(.opacity.combined(with: .scale(scale: 0.8)))
+            } else {
+                traduccionBoton.kurthBarIcon(size: iconSize)
+            }
+        }
+    }
+
     private var muestraTraduccion: Bool {
         windowWebView.map { KurthTraduccion.of($0).muestraControl(ofrecer: ofrecerTraduccion) } ?? false
     }
@@ -403,11 +413,6 @@ struct KurthTopBarView: View {
 
     private var trailingControls: some View {
         HStack(spacing: NookDesign.Spacing.xxs) {
-            // Con pestañas compactas no hay cápsula de dirección: traducir va con los demás íconos.
-            if isCompact {
-                traduccionBoton.kurthBarIcon(size: iconSize)
-            }
-
             if let extensionManager = browserManager.extensionManager {
                 let pinnedIDs = nookSettings.pinnedExtensionIDs
                 let pinned = extensionManager.installedExtensions.filter { pinnedIDs.contains($0.id) }
