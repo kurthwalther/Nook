@@ -21,6 +21,7 @@ final class FocusableWKWebView: WKWebView, SessionWebView {
         super.init(frame: frame, configuration: configuration)
         KurthSenalar.instalar(en: self)
         KurthPasswords.instalar(en: self) // kurth: llave de contraseñas de Apple en los campos de acceso
+        KurthAutoconsent.instalar(en: self) // kurth: contesta los banners de cookies (rechazar)
     }
 
     required init?(coder: NSCoder) {

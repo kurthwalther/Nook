@@ -18,6 +18,8 @@ struct PrivacySettingsView: View {
     @StateObject private var cookieManager = CookieManager()
     @StateObject private var cacheManager = CacheManager()
     @State private var isClearing = false
+    // kurth: banners de cookies contestados por Nook (Nook/Kurth/KurthAutoconsent.swift).
+    @AppStorage(KurthAutoconsent.ajuste) private var autoconsent = true
 
     var body: some View {
         @Bindable var settings = nookSettings
@@ -104,6 +106,11 @@ struct PrivacySettingsView: View {
                     .onChange(of: nookSettings.blockCrossSiteTracking) { _, enabled in
                         browserManager.contentBlockerManager.setEnabled(enabled)
                     }
+                // kurth: autoconsent, siempre rechazando.
+                Toggle(isOn: $autoconsent) {
+                    Text("Contestar banners de cookies por mí")
+                    Text("Rechaza las cookies opcionales en los avisos de consentimiento. Si en un sitio no lo logra, ahí deja de intentarlo.")
+                }
             }
 
             Section("Website Data") {

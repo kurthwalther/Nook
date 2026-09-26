@@ -61,6 +61,10 @@ enum KurthMCPTools {
                 info: "Aplicar las reglas por sitio: mientras la pestaña activa esté en un host con regla, el agente toma ese modo de permisos y al salir vuelve al que tenía"),
         Setting(key: "kurth.passwords", type: "bool", defaultValue: true,
                 info: "Llave de contraseñas de Apple en los campos de usuario y contraseña de las páginas (Touch ID → llena la página). Se aplica a las páginas que se abran después de reiniciar Nook"),
+        Setting(key: KurthAutoconsent.ajuste, type: "bool", defaultValue: true,
+                info: "Contestar solos los banners de cookies, siempre rechazando (autoconsent de DuckDuckGo). Apagarlo aplica al momento en las páginas abiertas; encenderlo, a las pestañas nuevas. Estado y eventos en kurth_autoconsent"),
+        Setting(key: KurthAutoconsent.ajusteExcluidos, type: "string", defaultValue: KurthAutoconsent.excluidosDefault,
+                info: "Banners de cookies: dominios donde no se corre (separados por coma; cada uno cubre sus subdominios). Se decide por la página de arriba, también para sus iframes"),
         Setting(key: "kurth.agentCardHeight", type: "number", defaultValue: 0.5,
                 info: "Alto de la tarjeta del agente que se asoma con hover, como fracción del alto de la ventana (0.5 = mitad). Se limita a 360 pt como mínimo y a no tapar la barra de arriba"),
         Setting(key: "kurth.panelMaterial", type: "string", defaultValue: "glass",
@@ -122,12 +126,14 @@ enum KurthMCPTools {
             parameters: ["type": "object", "properties": ["abierta": ["type": "boolean"]]]
         ),
         KurthSuspension.herramienta,
+        KurthAutoconsent.herramienta,
     ]
 
     /// nil si la herramienta no es de la capa Kurth.
     static func call(_ name: String, _ args: [String: Any], window: BrowserWindowState, tabs: TabsController) -> [String: Any]? {
         if let resultado = KurthSync.llamar(name) { return resultado }
         if let resultado = KurthPasswords.llamar(name, args) { return resultado }
+        if let resultado = KurthAutoconsent.llamar(name, args) { return resultado }
         if let resultado = KurthSuspension.llamar(name, args, tabs: tabs) { return resultado }
         if let resultado = KurthSplit.llamar(name, args, window: window, tabs: tabs) { return resultado }
         switch name {
