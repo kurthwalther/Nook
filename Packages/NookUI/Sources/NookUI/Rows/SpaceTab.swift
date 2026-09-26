@@ -76,6 +76,8 @@ public struct SpaceTab: View {
                 ItemFavicon(item: item, session: session)
                     .frame(width: NookDesign.Size.favicon, height: NookDesign.Size.favicon)
                     .clipShape(NookDesign.Radius.shape(NookDesign.Radius.xs))
+                    // kurth: suspendida = solo el favicon al 50 %; el título se queda entero.
+                    .opacity(isUnloaded && !isResaltada ? NookDesign.Surface.suspendedFaviconOpacity : 1)
                 if let session, session.hasAudioContent || session.hasPlayingAudio || session.isAudioMuted {
                     Button(action: { session.toggleMute() }) {
                         Image(systemName: session.isAudioMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
@@ -172,7 +174,6 @@ public struct SpaceTab: View {
             }
             .clipShape(NookDesign.Radius.shape(NookDesign.Radius.md))
             .nookRowSelection(isResaltada) // kurth: también el acceso cuya pestaña está elegida
-            .opacity(isUnloaded && !isResaltada ? NookDesign.Surface.unloadedOpacity : 1)
         }
         .buttonStyle(PlainButtonStyle())
         .onHoverTracking { hovering in

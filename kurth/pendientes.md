@@ -20,6 +20,14 @@ Orden acordado; Trazo (dirección del Creative) descartada por Kurth: "está feo
 2. **Suspensión de pestañas** (M): portar `TabSuspensionService` + `UnloadedTab` de duckduckgo/apple-browsers
    (Apache-2.0). Política por inactividad y presión de memoria; fijadas y favoritos también; indicador de
    suspendida (punto 10); restaurar scroll/forms con `interactionState`.
+   ✅ **Hecho 26 sep (rama `kurth-suspension`, sin probar en vivo):** no se portó DDG; Nook ya traía
+   `TabCompositorManager` (inactividad, presupuesto, presión de memoria) y se le puso la política encima
+   (`KurthSuspension.swift`): `kurth.tabSuspendMinutes` (20, 0 = nunca), fijadas y favoritos también,
+   exentas la visible/split, audio/video, PiP, cámara/micro, diálogo pendiente y Peek; `interactionState`
+   guardado al soltar y restaurado al volver (`PageSession.restore(interactionState:)`); favicon al 50 %
+   en lateral, favoritos y tira; MCP `kurth_tabs_memory` list/suspend/restore. **Pendiente de decidir:**
+   una fijada suspendida por inactividad desaparece de la tira y de la cuadrícula (el filtro "abierta"
+   es `!isUnloaded`); si debe seguir ahí al 50 %, el filtro pasa a `session != nil`.
 3. **MCP con dientes** (S por tool, M el snapshot): `fill_form`, `find`, `batch`, refs estables + `--delta`,
    iframes y shadow DOM (portar `ariaSnapshot.ts` de Playwright). Después: `network_requests` (M parcial),
    Space "Agente" no persistente, tareas programadas por launchd.
