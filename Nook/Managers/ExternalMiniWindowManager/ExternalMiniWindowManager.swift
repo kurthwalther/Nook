@@ -108,6 +108,18 @@ final class MiniBrowserWindowController: NSWindowController, NSWindowDelegate {
         )
     }
 
+    /// kurth: el tamaño que pide la página (acotado al 90 % de la ventana que la abrió y al máximo);
+    /// sin tamaño pedido, 60 × 70 % de esa ventana con tope de 900 × 720, no 75 % de la pantalla.
+    private static func initialSize(requested: CGSize?, parent: NSWindow?) -> NSSize {
+        let bounds = parent?.frame.size ?? NSScreen.main?.visibleFrame.size ?? maximumSize
+        let limit = NSSize(width: min(maximumSize.width, bounds.width * 0.9),
+                           height: min(maximumSize.height, bounds.height * 0.9))
+        let wanted = requested.flatMap { $0.width > 0 && $0.height > 0 ? NSSize(width: $0.width, height: $0.height) : nil }
+            ?? NSSize(width: min(900, bounds.width * 0.6), height: min(720, bounds.height * 0.7))
+        return NSSize(width: max(minimumSize.width, min(limit.width, wanted.width)),
+                      height: max(minimumSize.height, min(limit.height, wanted.height)))
+    }
+
     init(
         page: PageSession, targetSpaceName: String, adoptAction: @escaping () -> Void,
         onClose: @escaping () -> Void, gradientColorManager: GradientColorManager
@@ -121,8 +133,10 @@ final class MiniBrowserWindowController: NSWindowController, NSWindowDelegate {
             .environmentObject(gradientColorManager)
 
         let hostingController = NSHostingController(rootView: contentView)
+        let parent = NSApp.keyWindow ?? NSApp.mainWindow // kurth: la ventana del navegador que la abrió
+        let size = Self.initialSize(requested: page.kurthTamañoPedido, parent: parent)
         let window = MiniBrowserWindow(
-            contentRect: NSRect(origin: .zero, size: Self.defaultSize),
+            contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -133,8 +147,14 @@ final class MiniBrowserWindowController: NSWindowController, NSWindowDelegate {
         // Without this the hosting controller shrinks the window to the view's minimum size.
         hostingController.sizingOptions = []
         window.contentViewController = hostingController
-        window.setContentSize(Self.defaultSize)
-        window.center()
+        window.setContentSize(size)
+        // kurth: centrada sobre la ventana que la abrió, no sobre la pantalla.
+        if let parentFrame = parent?.frame {
+            let frame = window.frame
+            window.setFrameOrigin(NSPoint(x: parentFrame.midX - frame.width / 2, y: parentFrame.midY - frame.height / 2))
+        } else {
+            window.center()
+        }
 
         super.init(window: window)
 

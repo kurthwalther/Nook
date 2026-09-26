@@ -95,6 +95,10 @@ extension PageSession: WKUIDelegate {
         if !isFromExtension, let url, isLikelyOAuthOrExternalWindow(url: url, windowFeatures: windowFeatures) {
             guard let popup = controller?.openDetachedPopup(configuration: popupConfiguration(), url: url, opener: self)
             else { return nil }
+            // kurth: la ventana de inicio de sesión abre del tamaño que pidió la página, como Firefox o Arc.
+            popup.kurthTamañoPedido = windowFeatures.width.flatMap { w in
+                windowFeatures.height.map { CGSize(width: w.doubleValue, height: $0.doubleValue) }
+            }
             delegate.presentPopupWindow(popup)
             return popup.webView
         }

@@ -43,6 +43,9 @@ public final class PageSession: NSObject, Identifiable {
     @ObservationIgnored public internal(set) weak var detachedWindow: BrowserWindowState?
     /// Runs when the page calls `window.close()`, so Peek or the mini window can close.
     @ObservationIgnored public var onClose: (() -> Void)?
+    /// kurth: el tamaño que la página pidió en `window.open` para esta ventana emergente (inicio de
+    /// sesión); la mini ventana abre con él. Nil si no pidió ninguno.
+    @ObservationIgnored public var kurthTamañoPedido: CGSize?
     public var isDetached: Bool { detachedProfile != nil }
 
     // MARK: - Page State
