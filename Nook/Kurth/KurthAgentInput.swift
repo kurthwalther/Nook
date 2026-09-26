@@ -561,7 +561,7 @@ struct KurthAgentInput: View {
         case ("mode", "acceptEdits"): return "Aceptar ediciones"
         case ("mode", "plan"): return "Plan"
         case ("mode", "auto"): return "Auto"
-        case ("mode", "bypassPermissions"): return "Sin permisos"
+        case ("mode", "bypassPermissions"): return "Sin restricciones"
         case ("fast", "on"): return "Encendido"
         case ("fast", "off"): return "Apagado"
         default: return eleccion.name

@@ -102,7 +102,7 @@ struct KurthReglasPopover: View {
 
     /// Modos del agente; si aún no hay sesión, los cinco que existen.
     private var opciones: [(String, String)] {
-        modos.isEmpty ? [("auto", "Auto"), ("acceptEdits", "Acepta ediciones"), ("bypassPermissions", "Sin permisos"),
+        modos.isEmpty ? [("auto", "Auto"), ("acceptEdits", "Acepta ediciones"), ("bypassPermissions", "Sin restricciones"),
                          ("plan", "Plan"), ("default", "Manual")] : modos
     }
 
