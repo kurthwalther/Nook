@@ -499,6 +499,8 @@
            box-shadow:0 1px 4px rgba(0,0,0,.25);pointer-events:auto;cursor:pointer}
       .pulso{position:absolute;border:3px solid var(--c);border-radius:12px;animation:pulso 1.2s ease-out infinite}
       @keyframes pulso{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--c) 55%,transparent)}100%{box-shadow:0 0 0 14px transparent}}
+      .espera{position:absolute;border:1.5px solid var(--c);box-sizing:border-box;animation:aparece .2s ease-out}
+      @keyframes aparece{from{opacity:0}to{opacity:1}}
       .destello{animation:destello .9s ease-out 2}
       @keyframes destello{0%,100%{opacity:1}50%{opacity:.25}}`;
     sombra.appendChild(estilo);
@@ -615,6 +617,7 @@
     while (m.cajas.length < rects.length) m.cajas.push(nodo(m.claseCaja, m.autor, ''));
     while (m.cajas.length > rects.length) m.cajas.pop().remove();
     rects.forEach((r, i) => colocar(m.cajas[i], r.x, r.y, r.w, r.h));
+    if (m.radio !== undefined) m.cajas.forEach((c) => { c.style.borderRadius = m.radio + 'px'; });
     const primero = rects[0];
     for (const n of [m.pin, m.notaNodo]) if (n) n.style.display = primero ? '' : 'none';
     if (!primero) return;
@@ -721,10 +724,20 @@
       colocarMarca(m);
       return o.id;
     },
+    // espera: true es el anillo naranja fino del modo con cabeza (KurthCabeza.swift): el botón que
+    // el agente va a tocar y que espera el sí de Kurth. Sin relleno, para que el botón se lea igual,
+    // y con el radio del botón más los 4 px de holgura, para que el anillo le quede concéntrico.
     elemento(o) {
       const e = element(o.ref);
-      const m = base(o, o.pulso ? 'pulso' : 'elemento', o.pulso ? 'pulso' : 'caja');
+      const clase = o.espera ? 'espera' : o.pulso ? 'pulso' : 'caja';
+      const m = base(o, o.espera ? 'espera' : o.pulso ? 'pulso' : 'elemento', clase);
       m.elemento = e;
+      if (o.espera) {
+        const cs = getComputedStyle(e), r = cs.borderTopLeftRadius || '0';
+        const b = e.getBoundingClientRect();
+        const px = r.endsWith('%') ? Math.min(b.width, b.height) * parseFloat(r) / 100 : parseFloat(r) || 0;
+        m.radio = Math.min(px, Math.min(b.width, b.height) / 2) + 4;
+      }
       registro.set(o.id, m);
       adornos(m, o.id, o.numero, o.nota);
       colocarMarca(m);

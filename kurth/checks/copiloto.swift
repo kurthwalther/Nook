@@ -178,6 +178,17 @@ func ok(_ nombre: String, _ condicion: Bool, _ detalle: @autoclosure () -> Strin
         let clics = try await pagina("return document.getElementById('marco').contentWindow.clicMarco || 0") as? NSNumber ?? 0
         ok("clickJS dentro del iframe llega y la sonda lo anota", clics.intValue == 1 && sonda["onTarget"] as? Bool == true, "clics=\(clics) sonda=\(sonda)")
 
+        // ── anillo de espera (modo con cabeza, KurthCabeza.swift) ───────────────────────
+        let pagar = try await js("return window.__kurth.find({texto: 'Pagar ahora', rol: 'button', max: 1})") as? [String: Any] ?? [:]
+        let lineaPagar = (pagar["lineas"] as? [String])?.first ?? ""
+        let refPagar = lineaPagar.range(of: #"@e\d+"#, options: .regularExpression).map { String(lineaPagar[$0].dropFirst()) } ?? ""
+        let descrito = try await js("return window.__kurth.describir(ref)", ["ref": refPagar]) as? String ?? ""
+        ok("describir nombra el botón delicado", descrito == "button \"Pagar ahora\"", descrito)
+        _ = try await js("return window.__kurth.marcas.elemento({id: 'espera-prueba', autor: 'agente', ref, espera: true})", ["ref": refPagar])
+        let lista = try await js("return window.__kurth.marcas.lista()") as? [[String: Any]] ?? []
+        ok("el anillo de espera queda registrado", lista.contains { $0["id"] as? String == "espera-prueba" && $0["tipo"] as? String == "espera" }, "\(lista)")
+        ok("el anillo de espera se quita", try await js("return window.__kurth.marcas.quitar('espera-prueba')") as? Bool == true)
+
         // ── seVe con texto del iframe ───────────────────────────────────────────────────
         ok("seVe encuentra texto dentro del iframe", try await js("return window.__kurth.seVe('texto dentro del marco', null)") as? Bool == true)
         ok("seVe no inventa", try await js("return window.__kurth.seVe('esto no está', null)") as? Bool == false)

@@ -109,8 +109,8 @@ enum KurthACPEvent: Sendable {
     /// `title`: el adaptador lo manda de nuevo cuando ya tiene la entrada completa (al empezar,
     /// una terminal se llama "Terminal"; después, el comando).
     case toolUpdated(id: String, status: String, title: String?)
-    /// El plan de trabajo que el agente publica y va actualizando.
-    case plan([String])
+    /// El plan de trabajo que el agente publica y va actualizando, con el estado de cada paso.
+    case plan([KurthACPPlanEntry])
     /// Los comandos que el agente ofrece («/model», «/context», y cada skill del usuario).
     /// Llegan poco después de abrir la sesión, no en la respuesta de session/new.
     case commands([KurthACPCommand])
@@ -167,6 +167,16 @@ struct KurthACPResourceLink: Sendable {
     }
 }
 
+/// Un paso del plan (ACP `plan.entries`). El agente manda el plan entero en cada cambio.
+struct KurthACPPlanEntry: Sendable, Equatable {
+    let content: String
+    /// "pending", "in_progress" o "completed".
+    let status: String
+
+    var hecho: Bool { status == "completed" }
+    var enCurso: Bool { status == "in_progress" }
+}
+
 /// Un comando de los que el agente publica. Se manda como texto del prompt, tal cual.
 struct KurthACPCommand: Sendable, Identifiable, Equatable {
     var name: String
@@ -185,6 +195,9 @@ struct KurthACPPermission: Sendable {
     let toolTitle: String
     let toolKind: String
     let options: [Option]
+    /// Los argumentos con que el agente quiere llamar la herramienta (ACP `toolCall.rawInput`).
+    /// Con ellos el panel dice qué va a hacer en lenguaje humano (KurthCabeza.revisarPermiso).
+    var rawInput: KurthJSON? = nil
 
     /// La opción que conviene resaltar: permitir sólo esta vez.
     var preferred: Option? {
@@ -573,7 +586,10 @@ final class KurthACPClient {
             }
             if !comandos.isEmpty { onEvent?(.commands(comandos)) }
         case "plan":
-            let pasos = (update["entries"]?.arrayValue ?? []).compactMap { $0["content"]?.stringValue }
+            let pasos = (update["entries"]?.arrayValue ?? []).compactMap { e -> KurthACPPlanEntry? in
+                guard let texto = e["content"]?.stringValue else { return nil }
+                return KurthACPPlanEntry(content: texto, status: e["status"]?.stringValue ?? "pending")
+            }
             if !pasos.isEmpty { onEvent?(.plan(pasos)) }
         case "config_option_update":
             let opciones = KurthACPConfigOption.parse(update["configOptions"])
@@ -604,7 +620,8 @@ final class KurthACPClient {
                 return KurthACPPermission.Option(id: id,
                                                  name: $0["name"]?.stringValue ?? id,
                                                  kind: $0["kind"]?.stringValue ?? "allow_once")
-            })
+            },
+            rawInput: call["rawInput"])
 
         Task { @MainActor [weak self] in
             guard let self else { return }

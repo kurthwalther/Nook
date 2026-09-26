@@ -85,6 +85,9 @@ final class KurthAgentService {
         let opciones: [KurthACPPermission.Option]
         /// Se llama con el id de la opción elegida, o nil para cancelar.
         let responder: (String?) -> Void
+        /// Si lo que pide es tocar un botón de comprar, pagar, borrar o publicar: qué botón y dónde,
+        /// para que la tarjeta lo diga en lenguaje humano (KurthCabeza).
+        var delicada: KurthCabeza.Pendiente? = nil
     }
 
     enum Estado: Equatable {
@@ -98,8 +101,9 @@ final class KurthAgentService {
     private(set) var mensajes: [Mensaje] = []
     private(set) var estado: Estado = .apagado
     private(set) var permiso: Permiso?
-    /// El plan que el agente publica y va actualizando mientras trabaja.
-    private(set) var plan: [String] = []
+    /// El plan que el agente publica y va actualizando mientras trabaja, con el estado de cada
+    /// paso (se pinta en KurthAgentPlan).
+    private(set) var plan: [KurthACPPlanEntry] = []
     /// Última línea de diagnóstico del subproceso; sirve para saber por qué no arranca.
     private(set) var ultimoDiagnostico: String?
     /// Lo que el agente ofrece con «/»: sus comandos y cada skill del usuario.
@@ -608,6 +612,7 @@ final class KurthAgentService {
         guard !limpio.isEmpty, aceptaMensajes else { return }
         let adjuntados = adjuntos
         adjuntos.removeAll()
+        KurthCabeza.shared.nuevoMensaje() // kurth: si lo había detenido, con esto quiere que siga
 
         // En el globo, lo adjuntado va con «📎» para que se pinte con clip y no con el visor; lo
         // mencionado, con «@ » (kurth: KurthAgentChat lo pinta con arroba).
@@ -685,6 +690,12 @@ final class KurthAgentService {
     func responderPermiso(_ opcionId: String?) {
         guard let permiso else { return }
         self.permiso = nil
+        // Un botón delicado aprobado aquí ya no vuelve a preguntar por chat (KurthCabeza.autorizar);
+        // rechazado, se le quita el anillo de la página.
+        if let delicada = permiso.delicada {
+            let kind = permiso.opciones.first { $0.id == opcionId }?.kind ?? ""
+            if kind.hasPrefix("allow") { KurthCabeza.shared.autorizar(delicada) } else { KurthCabeza.shared.descartarPendiente() }
+        }
         permiso.responder(opcionId)
     }
 
@@ -735,13 +746,18 @@ final class KurthAgentService {
 
         cliente.onPermission = { [weak self] pedido in
             guard let self else { return nil }
+            // Modo con cabeza: si es un click en un botón delicado, la tarjeta dice cuál desde que
+            // aparece. Se resuelve antes de mostrarla (el agente está detenido de todos modos) para
+            // que no salga genérica y cambie un instante después (KurthCabeza.revisarPermiso).
+            let delicada = await KurthCabeza.shared.revisarPermiso(titulo: pedido.toolTitle, entrada: pedido.rawInput)
             return await withCheckedContinuation { continuation in
                 // El agente queda detenido hasta que la vista conteste. Se guarda aquí para que
                 // el botón del chat sea el que responda, en vez de un diálogo del sistema.
                 self.permiso = Permiso(titulo: pedido.toolTitle,
                                        kind: pedido.toolKind,
                                        opciones: pedido.options,
-                                       responder: { continuation.resume(returning: $0) })
+                                       responder: { continuation.resume(returning: $0) },
+                                       delicada: delicada)
             }
         }
     }
@@ -775,6 +791,7 @@ final class KurthAgentService {
     }
 
     private func cerrarTurno() {
+        KurthCabeza.shared.turnoTerminado() // kurth: la pestaña deja de verse controlada
         if let indice = indiceDelTurno {
             mensajes[indice].enCurso = false
             mensajes[indice].duracion = Date().timeIntervalSince(mensajes[indice].hora)
