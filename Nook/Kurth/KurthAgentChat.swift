@@ -114,6 +114,9 @@ struct KurthAgentChat: View {
             .animation(NookDesign.Motion.standard, value: agente.permiso?.id)
             // Abrir y cerrar el panel enciende y apaga el agente (KurthAgentService.panelAbierto).
             // La marca evita contar dos veces si SwiftUI repite onAppear sin onDisappear.
+            .onChange(of: browserManager.tabs.selectedSession(in: windowState)?.url, initial: true) { _, url in
+                agente.pestañaActiva(url)
+            }
             .onAppear {
                 if !panelRegistrado { panelRegistrado = true; agente.panelAbierto() }
                 if !flotante { escribiendo = true }

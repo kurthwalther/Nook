@@ -118,6 +118,7 @@ final class KurthAgentService {
     private static let opcionesQueSeRecuerdan = ["model", "effort", "fast", "mode"]
 
     func cambiarOpcion(_ id: String, a valor: String) {
+        if id == "mode" { modoAntesDelSitio = nil }
         if Self.opcionesQueSeRecuerdan.contains(id) {
             var elegidas = UserDefaults.standard.dictionary(forKey: Self.claveOpciones) as? [String: String] ?? [:]
             elegidas[id] = valor
@@ -136,6 +137,8 @@ final class KurthAgentService {
         guard estado != .arrancando else { return }
         var elegidas = UserDefaults.standard.dictionary(forKey: Self.claveOpciones) as? [String: String] ?? [:]
         for opcion in opciones where Self.opcionesQueSeRecuerdan.contains(opcion.id) {
+            // El auto que puso el sitio no es elección del usuario: se guarda el modo de antes.
+            if opcion.id == "mode", let anterior = modoAntesDelSitio, opcion.currentValue == "auto" { elegidas["mode"] = anterior; continue }
             elegidas[opcion.id] = opcion.currentValue
         }
         UserDefaults.standard.set(elegidas, forKey: Self.claveOpciones)
@@ -296,6 +299,8 @@ final class KurthAgentService {
                 await self.aplicarOpcionesGuardadas()
                 self.modos = self.cliente.availableModes
                 self.modoActual = self.cliente.currentModeId
+                self.modoAntesDelSitio = nil
+                self.revisarSitio()
                 self.sesionLista()
             } catch {
                 // Si el proceso murió, su último mensaje de error dice por qué; "el agente no está
@@ -341,6 +346,93 @@ final class KurthAgentService {
         KurthRemoto.shared.apagar()
     }
 
+    /// Lo que se mandó desde esta caja al cel y todavía no vuelve como eco del hook.
+    private var ecoPendiente: String?
+
+    /// Lo que los hooks de la sesión del cel reportan: lo que entró (de allá o de aquí), qué
+    /// herramienta usó y qué contestó. Se pinta con los mismos globos, por mensaje completo.
+    func ecoDelCel(rol: String, texto: String) {
+        switch rol {
+        case "user":
+            if let eco = ecoPendiente, texto.hasPrefix(eco) { ecoPendiente = nil; return }
+            if let indice = indiceDelTurno, mensajes[indice].texto.isEmpty, mensajes[indice].herramientas.isEmpty {
+                mensajes.remove(at: indice)
+            }
+            mensajes.append(Mensaje(autor: .usuario, texto: texto))
+            mensajes.append(Mensaje(autor: .agente, texto: "", enCurso: true))
+            estado = .trabajando
+        case "tool":
+            if indiceDelTurno == nil { mensajes.append(Mensaje(autor: .agente, texto: "", enCurso: true)); estado = .trabajando }
+            let nombre = texto.split(separator: " · ").first.map(String.init) ?? texto
+            actualizarHerramienta(id: UUID().uuidString, titulo: texto, kind: Self.kindDeHerramienta(nombre), estado: "completed")
+        default:
+            if indiceDelTurno == nil { mensajes.append(Mensaje(autor: .agente, texto: "", enCurso: true)); estado = .trabajando }
+            let separador = mensajes[indiceDelTurno!].texto.isEmpty ? "" : "\n\n"
+            anexarAlAgente(separador + texto)
+            cerrarTurno()
+        }
+    }
+
+    private static func kindDeHerramienta(_ nombre: String) -> String {
+        switch nombre {
+        case "Read", "Glob", "Grep", "LS": return "read"
+        case "Edit", "Write", "MultiEdit", "NotebookEdit": return "edit"
+        case "Bash": return "execute"
+        case "WebSearch": return "search"
+        case "WebFetch": return "fetch"
+        default: return "other"
+        }
+    }
+
+    // MARK: - Auto por sitio
+
+    /// Sitios donde el agente va en modo auto sin que el usuario lo cambie a mano (Kurth, 26 sep:
+    /// "si estoy en Meta o Google y la URL es la oficial, que ahí vaya en auto, siempre y cuando no
+    /// salga de esas URL"). Se compara el host de la pestaña activa; al salir vuelve el modo anterior.
+    static let sitiosOficialesPorDefecto = "facebook.com, instagram.com, meta.com, google.com, youtube.com"
+
+    /// La pestaña activa está en un sitio de la lista (para pintar "Auto · sitio").
+    private(set) var enSitioOficial = false
+    private var modoAntesDelSitio: String?
+    private var ultimaURL: URL?
+
+    static func esSitioOficial(_ url: URL?) -> Bool {
+        guard UserDefaults.standard.object(forKey: "kurth.autoPorSitio") as? Bool ?? true,
+              let host = url?.host()?.lowercased(), url?.scheme == "https" else { return false }
+        let lista = (UserDefaults.standard.string(forKey: "kurth.autoSitios") ?? sitiosOficialesPorDefecto)
+            .split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }.filter { !$0.isEmpty }
+        return lista.contains { host == $0 || host.hasSuffix("." + $0) }
+    }
+
+    /// La vista avisa cada vez que cambia la pestaña activa (o su dirección).
+    func pestañaActiva(_ url: URL?) {
+        ultimaURL = url
+        revisarSitio()
+    }
+
+    private func revisarSitio() {
+        let oficial = Self.esSitioOficial(ultimaURL)
+        enSitioOficial = oficial
+        guard cliente.isRunning, let modo = opciones.first(where: { $0.id == "mode" }) else { return }
+        if oficial {
+            guard modo.currentValue != "auto", modo.choices.contains(where: { $0.value == "auto" }) else { return }
+            if modoAntesDelSitio == nil { modoAntesDelSitio = modo.currentValue }
+            aplicarModo("auto")
+        } else if let anterior = modoAntesDelSitio {
+            modoAntesDelSitio = nil
+            if modo.currentValue == "auto" { aplicarModo(anterior) }
+        }
+    }
+
+    /// Cambia el modo en la sesión sin guardarlo como elección del usuario (es temporal, por sitio).
+    private func aplicarModo(_ valor: String) {
+        Task {
+            try? await cliente.setConfigOption("mode", value: valor)
+            opciones = cliente.configOptions
+            modoActual = cliente.currentModeId
+        }
+    }
+
     // MARK: - Escribir mientras abre la sesión
 
     /// Lo que se mandó mientras la sesión abría (Kurth, 25 sep: "que se pueda escribir mientras
@@ -349,8 +441,8 @@ final class KurthAgentService {
 
     /// Si se puede mandar un mensaje ahora: con la sesión lista, o abriéndose y sin otro esperando.
     var aceptaMensajes: Bool {
-        // Con el cel encendido la conversación es de ese proceso y se sigue allá.
-        if KurthRemoto.shared.encendido { return false }
+        // Con el cel encendido la conversación es de ese proceso: se le escribe por su terminal.
+        if KurthRemoto.shared.encendido { return KurthRemoto.shared.url != nil && estado != .trabajando }
         return estado == .listo || (estado == .arrancando && enEspera == nil)
     }
 
@@ -489,6 +581,18 @@ final class KurthAgentService {
         // En el globo, lo adjuntado va con «📎» para que se pinte con clip y no con el visor.
         let chips = señalados.map { "\($0.numero) \($0.resumen)" } + adjuntados.map { "📎 " + $0.nombre }
         mensajes.append(Mensaje(autor: .usuario, texto: limpio, señalados: chips.isEmpty ? nil : chips))
+        if KurthRemoto.shared.encendido {
+            // Al cel: el texto, la pestaña como texto (allá no hay resource links) y lo señalado. El hook
+            // de la sesión lo devuelve como eco; se reconoce por el texto y no se pinta dos veces.
+            var partes = [limpio]
+            if let pagina { partes.append("(Pestaña abierta: \(pagina.name) — \(pagina.uri))") }
+            partes += señalados.map(KurthSenalar.descripcion)
+            ecoPendiente = limpio
+            mensajes.append(Mensaje(autor: .agente, texto: "", enCurso: true))
+            estado = .trabajando
+            KurthRemoto.shared.enviar(partes.joined(separator: " "))
+            return
+        }
         let mandar: () -> Void = { [weak self] in
             self?.mandar(limpio, pagina: pagina, contenido: contenido, señalados: señalados, adjuntados: adjuntados)
         }
@@ -531,6 +635,7 @@ final class KurthAgentService {
     /// Interrumpe el turno. El agente conserva la sesión y lo ya dicho.
     func cancelar() {
         guard estado == .trabajando else { return }
+        if KurthRemoto.shared.encendido { KurthRemoto.shared.interrumpir(); return }
         cliente.cancel()
     }
 
@@ -640,6 +745,8 @@ final class KurthAgentService {
         permiso = nil
         if case .error = estado {} else if cliente.isRunning {
             estado = .listo
+        } else if KurthRemoto.shared.encendido {
+            estado = .apagado
         }
         guardarConversacion()
         // Si el panel se cerró mientras trabajaba, el apagado quedó pendiente.

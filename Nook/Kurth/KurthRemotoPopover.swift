@@ -20,7 +20,7 @@ struct KurthRemotoPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
-                Image(systemName: "iphone.radiowaves.left.and.right")
+                Image(systemName: "iphone")
                 Text("Sigue en el cel")
                     .font(.system(size: 13, weight: .semibold))
             }
@@ -101,7 +101,7 @@ struct KurthRemotoPopover: View {
     private var nota: String {
         var partes: [String] = []
         if remoto.encendido {
-            partes.append("El chat de aquí queda pausado y Nook mantiene la Mac despierta mientras está encendido.")
+            partes.append("Lo que pase en el cel se ve aquí y lo que escribas aquí llega allá. Nook mantiene la Mac despierta mientras está encendido.")
             if !remoto.conMCP {
                 partes.append("Browser Control está apagado (Ajustes › AI), así que desde el cel el agente no podrá manejar Nook.")
             }

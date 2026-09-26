@@ -141,7 +141,7 @@ struct KurthAgentInput: View {
 
     /// Siempre el mismo: que la sesión está abriendo se dice arriba del bloque, y un error, en el
     /// encabezado del panel (antes salía también aquí, dos veces; Kurth, 25 sep).
-    private var marcador: String { KurthRemoto.shared.encendido ? "Sigue en el cel; apágalo para escribir aquí" : "Pídele algo…" }
+    private var marcador: String { KurthRemoto.shared.encendido && KurthRemoto.shared.url == nil ? "Conectando el cel…" : "Pídele algo…" }
 
     private var menuDeAgregar: some View {
         Menu {
@@ -341,7 +341,11 @@ struct KurthAgentInput: View {
             Divider()
             Button("Elegir carpeta…") { elegirCarpeta() }
         } label: {
-            etiquetaDeMenu { Image(systemName: "folder") }
+            // En azul cuando trabaja en un proyecto y no en la carpeta personal (Kurth, 26 sep).
+            etiquetaDeMenu {
+                Image(systemName: enProyecto ? "folder.fill" : "folder")
+                    .foregroundStyle(enProyecto ? Color.accentColor : Color.primary.opacity(0.5))
+            }
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
@@ -350,9 +354,18 @@ struct KurthAgentInput: View {
         .help("Trabaja en: \(nombreCorto(agente.carpetaDeTrabajo)). Decide qué memorias tiene y qué archivos puede tocar.")
     }
 
+    private var enProyecto: Bool {
+        agente.carpetaDeTrabajo.path != FileManager.default.homeDirectoryForCurrentUser.path
+    }
+
+    @AppStorage("kurth.autoPorSitio") private var autoPorSitio = true
+
     private var menuDePermisos: some View {
         let modo = opcion("mode")
         return Menu {
+            Toggle("Auto en sitios oficiales", isOn: $autoPorSitio)
+                .help("Meta, Google y los de kurth.autoSitios: ahí el agente va en auto y al salir vuelve al modo elegido")
+            Divider()
             if let modo {
                 Picker("Permisos", selection: Binding(
                     get: { modo.currentValue },
@@ -370,13 +383,20 @@ struct KurthAgentInput: View {
                 // Fuera de Manual se dice cuál, porque cambia qué hace sin preguntar; si el panel es
                 // angosto, queda el icono (cada uno tiene el suyo).
                 ViewThatFits(in: .horizontal) {
-                    if let nombre = nombreDelModo(modo) {
+                    if agente.enSitioOficial && modo?.currentValue == "auto" {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.shield.fill")
+                            Text("Auto · sitio")
+                        }
+                        .foregroundStyle(Color.accentColor)
+                    } else if let nombre = nombreDelModo(modo) {
                         HStack(spacing: 4) {
                             Image(systemName: iconoDePermisos(modo?.currentValue))
                             Text(nombre)
                         }
                     }
                     Image(systemName: iconoDePermisos(modo?.currentValue))
+                        .foregroundStyle(agente.enSitioOficial && modo?.currentValue == "auto" ? Color.accentColor : Color.primary.opacity(0.5))
                 }
             }
         }
@@ -398,7 +418,7 @@ struct KurthAgentInput: View {
             popoverCel = true
         } label: {
             etiquetaDeMenu {
-                Image(systemName: "iphone.radiowaves.left.and.right")
+                Image(systemName: "iphone")
                     .foregroundStyle(remoto.encendido ? Color.accentColor : Color.primary.opacity(0.5))
                     .overlay(alignment: .topTrailing) {
                         if remoto.encendido {

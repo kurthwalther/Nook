@@ -16,9 +16,16 @@ la sesión; hay que ir a Code › Nook (falta que confirme que sí aparece).
   /exit). Consecuencias: (1) no se puede pintar en el panel lo del cel leyendo el archivo; (2) al
   apagar el cel, el panel retoma la conversación como estaba ANTES del cel (`claude --resume` tampoco
   la trae). Hoy la caja queda pausada con el cel encendido.
-- **Propuesta para bidireccional:** con el cel encendido, el panel muestra la terminal de esa sesión
-  (SwiftTerm, MIT, headless o con vista) y la caja escribe en ella; se ven las dos direcciones sin
-  raspar la pantalla. `KurthRemoto.enviar`/`interrumpir` ya escriben al pseudo-terminal. Esperar OK.
+- ✅ **Bidireccional por hooks (26 sep 00:15):** a la sesión del cel se le pasan por `--settings` tres
+  hooks (UserPromptSubmit, Stop, PostToolUse → `remoto-hook.py` → MCP `kurth_remote_control echo`) y
+  el panel pinta lo que entra, la herramienta y la respuesta (por mensaje completo). La caja escribe al
+  pseudo-terminal (`send`), con eco deduplicado. Probado: "manzana" en 4 s. Lo que sigue sin volver:
+  al apagar el cel, la conversación local es la de antes (el servidor no la baja).
+- ✅ **Auto por sitio (26 sep):** `kurth.autoPorSitio` + `kurth.autoSitios` (facebook, instagram, meta,
+  google, youtube; subdominios incluidos, solo https). Con la pestaña activa ahí, el modo pasa a auto y
+  al salir vuelve al anterior; el escudo se pinta azul "Auto · sitio". Probado con google.com el cambio
+  de color; **falta probar el vaivén del modo con Manual elegido** (Kurth tenía auto fijo).
+- ✅ Carpeta en azul (folder.fill) cuando no es la personal; icono del cel = "iphone".
 - Nook mantiene la Mac despierta mientras está encendido (beginActivity); con la tapa cerrada no.
 
 ## Al cerrar el 25 sep (José) — seguir en la Pro el fin

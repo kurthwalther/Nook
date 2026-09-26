@@ -57,6 +57,10 @@ enum KurthMCPTools {
                 info: "Dejar que WebKit extienda el color del borde superior de la página bajo la barra"),
         Setting(key: "kurth.scrollPocket", type: "bool", defaultValue: false,
                 info: "Mostrar el scroll pocket de WebKit (el velo al hacer scroll bajo la barra)"),
+        Setting(key: "kurth.autoPorSitio", type: "bool", defaultValue: true,
+                info: "Permisos del agente en automático (modo auto) mientras la pestaña activa esté en un sitio oficial de la lista kurth.autoSitios; al salir vuelve al modo que tenía"),
+        Setting(key: "kurth.autoSitios", type: "string", defaultValue: KurthAgentService.sitiosOficialesPorDefecto,
+                info: "Dominios separados por coma donde el agente va en auto (también sus subdominios)"),
         Setting(key: "kurth.passwords", type: "bool", defaultValue: true,
                 info: "Llave de contraseñas de Apple en los campos de usuario y contraseña de las páginas (Touch ID → llena la página). Se aplica a las páginas que se abran después de reiniciar Nook"),
         Setting(key: "kurth.agentCardHeight", type: "number", defaultValue: 0.5,
@@ -103,7 +107,9 @@ enum KurthMCPTools {
             name: "kurth_remote_control",
             description: "El cel: Remote Control de Claude Code sobre la conversación del panel del agente (botón junto al de permisos). action: on enciende y devuelve el enlace en cuanto lo hay; off apaga; status dice estado, enlace y desde cuándo.",
             parameters: ["type": "object", "properties": [
-                "action": ["type": "string", "enum": ["on", "off", "status"]],
+                "action": ["type": "string", "enum": ["on", "off", "status", "send", "echo"]],
+                "text": ["type": "string", "description": "send: lo que se manda a la conversación como desde la caja. echo: lo que la sesión del cel reporta (lo usan sus hooks)"],
+                "role": ["type": "string", "enum": ["user", "assistant", "tool"], "description": "echo: quién lo dijo"],
             ], "required": ["action"]]
         ),
         AIToolDefinition(
@@ -134,6 +140,15 @@ enum KurthMCPTools {
                 if !remoto.encendido { agente.encenderRemoto() }
             case "off":
                 remoto.apagar()
+            case "send":
+                guard let agente = KurthAgentService.actual else { return text("El panel del agente no ha abierto nunca en esta ejecución", error: true) }
+                guard let texto = args["text"] as? String, !texto.isEmpty else { return text("send necesita text", error: true) }
+                guard agente.aceptaMensajes else { return text("La caja no acepta mensajes ahora", error: true) }
+                agente.enviar(texto)
+            case "echo":
+                guard let texto = args["text"] as? String, !texto.isEmpty else { return text("echo necesita text", error: true) }
+                KurthAgentService.actual?.ecoDelCel(rol: (args["role"] as? String) ?? "user", texto: texto)
+                return text("ok")
             default: break
             }
             var estado: [String: Any] = ["sessionId": remoto.sessionId ?? NSNull(), "conMCP": remoto.conMCP]

@@ -17,7 +17,11 @@
 //  estaba ANTES del cel: mientras Remote Control está conectado, Claude Code guarda la conversación
 //  en los servidores de Anthropic y no en el archivo local (doc de Remote Control, y medido el 25 sep
 //  con cierre por señal y con /exit: ni una línea user/assistant llega al .jsonl). Por eso tampoco se
-//  puede pintar aquí lo que pasa en el cel leyendo ese archivo: lo que se ve del cel está en el cel.
+//  puede pintar aquí lo que pasa en el cel leyendo ese archivo. Lo que sí se puede: hooks. A la sesión
+//  del cel se le pasan tres (UserPromptSubmit, Stop y PostToolUse, por --settings, solo para ese
+//  proceso) que le mandan a Nook por su MCP local lo que entró, lo que contestó y qué herramienta usó
+//  (kurth_remote_control echo). El panel lo pinta como globos, y lo que se escribe en la caja va al
+//  pseudo-terminal: ida y vuelta, sin raspar pantalla. El texto llega por mensaje completo.
 //
 //  Lo que la CLI puede preguntar al arrancar, y qué se contesta (sondas del 25 sep):
 //   · "trust this folder" → Sí: la carpeta la eligió el usuario y el panel ya trabaja ahí sin preguntar.
@@ -74,6 +78,7 @@ final class KurthRemoto {
     private var vigilante: Task<Void, Never>?
     private var actividad: NSObjectProtocol?
     private var archivoMCP: URL?
+    private var archivoAjustes: URL?
 
     // MARK: - Encender y apagar
 
@@ -145,6 +150,8 @@ final class KurthRemoto {
         actividad = nil
         if let archivoMCP { try? FileManager.default.removeItem(at: archivoMCP) }
         archivoMCP = nil
+        if let archivoAjustes { try? FileManager.default.removeItem(at: archivoAjustes) }
+        archivoAjustes = nil
     }
 
     // MARK: - El proceso en su pseudo-terminal
@@ -164,6 +171,7 @@ final class KurthRemoto {
         } else {
             conMCP = false
         }
+        if let ajustes = escribirHooks() { argumentos += ["--settings", ajustes.path]; archivoAjustes = ajustes }
         argumentos += ["--append-system-prompt", instrucciones]
         if let modelo = opciones["model"], modelo != "default" { argumentos += ["--model", modelo] }
         if let esfuerzo = opciones["effort"], esfuerzo != "default" { argumentos += ["--effort", esfuerzo] }
@@ -408,6 +416,54 @@ final class KurthRemoto {
         let archivo = carpeta.appendingPathComponent("remoto-mcp.json")
         guard (try? datos.write(to: archivo, options: .atomic)) != nil else { return nil }
         try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: archivo.path)
+        return archivo
+    }
+
+    /// Los hooks de la sesión del cel: cada uno corre el mismo script con el papel como argumento; el
+    /// script lee el JSON del hook por stdin, saca el texto y se lo manda a Nook por el MCP local con el
+    /// token leído de su archivo. Va por --settings, así que solo aplica a ese proceso.
+    private func escribirHooks() -> URL? {
+        let carpeta = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("com.gstudios.nook/Kurth")
+        try? FileManager.default.createDirectory(at: carpeta, withIntermediateDirectories: true)
+        let script = carpeta.appendingPathComponent("remoto-hook.py")
+        let puerto = DevMCPServer.port.rawValue
+        let codigo = """
+        #!/usr/bin/env python3
+        # Nook (rama kurth): eco de la sesión del cel hacia el panel del agente. Lo escribe KurthRemoto.
+        import sys, json, os, urllib.request
+        rol = sys.argv[1] if len(sys.argv) > 1 else "user"
+        try: d = json.load(sys.stdin)
+        except Exception: sys.exit(0)
+        if rol == "user": texto = d.get("prompt") or ""
+        elif rol == "assistant": texto = d.get("last_assistant_message") or ""
+        else:
+            nombre = d.get("tool_name") or ""; entrada = d.get("tool_input") or {}
+            detalle = ""
+            if isinstance(entrada, dict):
+                detalle = entrada.get("command") or entrada.get("file_path") or entrada.get("pattern") or entrada.get("query") or entrada.get("url") or ""
+            detalle = str(detalle).split("\\n")[0][:60]
+            texto = nombre + (" · " + detalle if detalle else "")
+        if not texto: sys.exit(0)
+        try: token = open(os.path.expanduser("~/Library/Application Support/com.gstudios.nook/dev-mcp-token")).read().strip()
+        except Exception: sys.exit(0)
+        cuerpo = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "kurth_remote_control", "arguments": {"action": "echo", "role": rol, "text": texto}}}).encode()
+        req = urllib.request.Request("http://127.0.0.1:\(puerto)/mcp", data=cuerpo, headers={"Authorization": "Bearer " + token, "Content-Type": "application/json", "Accept": "application/json, text/event-stream"})
+        try: urllib.request.urlopen(req, timeout=3).read()
+        except Exception: pass
+        """
+        guard (try? codigo.write(to: script, atomically: true, encoding: .utf8)) != nil else { return nil }
+        func gancho(_ rol: String) -> [String: Any] {
+            ["hooks": [["type": "command", "command": "/usr/bin/python3 '\(script.path)' \(rol)", "timeout": 5]]]
+        }
+        let ajustes: [String: Any] = ["hooks": [
+            "UserPromptSubmit": [gancho("user")],
+            "Stop": [gancho("assistant")],
+            "PostToolUse": [gancho("tool")],
+        ]]
+        guard let datos = try? JSONSerialization.data(withJSONObject: ajustes) else { return nil }
+        let archivo = carpeta.appendingPathComponent("remoto-settings.json")
+        guard (try? datos.write(to: archivo, options: .atomic)) != nil else { return nil }
         return archivo
     }
 
