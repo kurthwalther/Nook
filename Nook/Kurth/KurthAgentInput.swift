@@ -68,6 +68,8 @@ struct KurthAgentInput: View {
         return HStack(spacing: 4) {
             menuDeAgregar
             botonSeñalar
+            // kurth: Workflows (grabar, editar, ejecutar, programar) junto a Señalar (KurthWorkflowsPopover.swift).
+            KurthWorkflowsBoton(control: control)
             Spacer(minLength: 8)
             if remoto.encendido {
                 HStack(spacing: 5) {
@@ -214,7 +216,11 @@ struct KurthAgentInput: View {
 
     /// Siempre el mismo: que la sesión está abriendo se dice arriba del bloque, y un error, en el
     /// encabezado del panel (antes salía también aquí, dos veces; Kurth, 25 sep).
-    private var marcador: String { KurthRemoto.shared.encendido && KurthRemoto.shared.url == nil ? "Conectando el cel…" : "Pídele algo…" }
+    private var marcador: String {
+        // Grabando un workflow en esta ventana, lo que se escribe es narración (KurthAgentChat.enviar).
+        if KurthWorkflows.shared.grabandoEn(windowState.id) { return "Cuenta lo que haces…" }
+        return KurthRemoto.shared.encendido && KurthRemoto.shared.url == nil ? "Conectando el cel…" : "Pídele algo…"
+    }
 
     private var menuDeAgregar: some View {
         Menu {

@@ -98,6 +98,44 @@ Orden acordado; Trazo (dirección del Creative) descartada por Kurth: "está feo
    trackpad:** que el umbral de 64 pt se sienta bien (se cambia en vivo con
    `kurth.pullToRefreshDistancia`), el golpe háptico, cómo se ve la flecha y la línea de progreso.
 
+## Workflows grabados — 26 sep (rama `kurth-workflows`, solo compila, sin instalar)
+
+Kurth: "grabar workflow, ve los clics, ve cómo hago, y el agente lo repite"; "desde el botón se crean, se
+editan y se ejecutan, sin /"; "que se puedan programar". Botón `record.circle` a la derecha de Señalar →
+popover Workflows: Grabar nuevo; filas con Ejecutar (pregunta parámetros con el valor de la última vez) y
+⋯ (Editar, Programar…, Renombrar…, Volver a grabar, Redactar el skill otra vez, Borrar…).
+- **Grabar:** `KurthGrabadora.js` (mundo "KurthGrabadora", `// Nook`, quieto hasta que Nook le contesta
+  que su ventana graba): clic con rol/texto/selector de respaldo, un paso por campo, listas, casillas,
+  archivos, Enter/Esc/⌘-atajos, envíos sin clic, scroll de ¾ de pantalla o más; solo eventos isTrusted;
+  contraseñas, campos de tarjeta, códigos y lo que fue contraseña → «secreto» (y Luhn como segunda red en
+  Swift). Swift suma pestañas y direcciones por Observation (sin sondeo). Narración: micrófono con
+  SFSpeechRecognizer es-MX solo en el dispositivo (si falta el dictado sin conexión, lo dice y no usa
+  servidor) + lo que se escribe en la caja del agente mientras graba (placeholder "Cuenta lo que haces…").
+  Aviso: cápsula de vidrio "Grabando · 0:42 · 7 pasos" con mic, Descartar y Terminar; Terminar la estira
+  (glassEffectID) a la tarjeta del nombre. En el panel, los últimos 5 pasos en gris sobre la caja.
+- **Guardar:** Nook escribe `Application Support/…/Kurth/workflows/<nombre>.json` (fuente de verdad de la
+  lista) y le pide al agente el `SKILL.md` (`nook-workflow: true`); el agente lo registra con
+  `kurth_workflow define` (descripción y parámetros). Editar reescribe el skill (pasos quitados, "Siempre",
+  "Pedir un cambio").
+- **Programar:** regla en el JSON (una vez, diario, días, cada N h); una sola Task dormida hasta la más
+  próxima (reloj continuo), rearmada al despertar, al cambiar la hora y al abrir Nook. Si se pasó (Nook
+  cerrado o Mac dormida) queda "Se saltó la de las 9:00 · Correr ahora" + notificación; nunca a ciegas,
+  nunca despierta la Mac. Corrida programada = pestaña propia del agente en segundo plano; se detiene ante
+  lo irreversible y notifica; al terminar, notificación con la línea «Resultado: …»; registro de corridas
+  en el detalle. Permiso de notificaciones al programar por primera vez. Ajustes `kurth.workflows`,
+  `kurth.workflowsVoz`, `kurth.workflowsProgramados`.
+- **Entitlement nuevo:** `com.apple.security.device.audio-input` en Nook.entitlements y Nook-CI.entitlements
+  (con hardened runtime, sin él no hay micrófono; también habilita el micrófono para páginas con permiso).
+  `NSMicrophoneUsageDescription` y `NSSpeechRecognitionUsageDescription` en Info.plist.
+- **Prueba sin Nook:** `kurth/checks/workflows.sh` (69 ✅: modelo, secretos, programación, tienda y el
+  grabador en un WKWebView sin ventana con eventos simulados).
+- **Falta en vivo:** todo por `kurth/mcp.sh kurth_workflow` (start → clics con el copiloto → note → status →
+  stop con nombre → list/get → run → schedule/runs); mic y clics reales con Kurth; que el agente llame
+  `define`; que la tarjeta del nombre tome el teclado sobre la página; notificaciones con Nook al frente
+  (sin delegado de UNUserNotificationCenter puede que no se vean). **Sin decidir:** una corrida programada
+  en modo Manual pide permiso por cada herramienta (se queda "esperando"): para que corra sola, el modo
+  del agente tiene que dejar pasar las herramientas de nook. Iframes no se graban (solo el marco principal).
+
 ## El cel (Remote Control) — 25 sep noche, instalado
 
 Botón a la derecha del de permisos (`KurthRemoto.swift`, `KurthRemotoPopover.swift`, MCP
