@@ -341,18 +341,10 @@ struct KurthAgentInput: View {
             Divider()
             Button("Elegir carpeta…") { elegirCarpeta() }
         } label: {
-            // Icono y nombre de la carpeta actual; en azul cuando es un proyecto y no la personal
-            // (Kurth, 26 sep: "no se sabe en qué carpeta estás"). Si no cabe, queda el icono.
+            // Solo el icono (Kurth, 26 sep: el nombre va en el menú, con palomita); azul en un proyecto.
             etiquetaDeMenu {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 4) {
-                        Image(systemName: enProyecto ? "folder.fill" : "folder")
-                        Text(nombreCorto(agente.carpetaDeTrabajo))
-                    }
-                    Image(systemName: enProyecto ? "folder.fill" : "folder")
-                }
-                .lineLimit(1)
-                .foregroundStyle(enProyecto ? Color.accentColor : Color.primary.opacity(0.5))
+                Image(systemName: enProyecto ? "folder.fill" : "folder")
+                    .foregroundStyle(enProyecto ? Color.accentColor : Color.primary.opacity(0.5))
             }
         }
         .menuStyle(.button)
