@@ -350,8 +350,11 @@ final class KurthAgentService {
         guardarConversacion()
         apagar()
         let opciones = UserDefaults.standard.dictionary(forKey: Self.claveOpciones) as? [String: String] ?? [:]
+        registroDelCel = []
+        // Si quedó algo de un cel anterior que este agente todavía no sabe, la sesión nueva del cel lo recibe.
+        let pendiente = pendienteDelCel.map { "\n\n" + Self.bloqueDelCel($0) } ?? ""
         remoto.encender(sessionId: id, carpeta: carpetaDeTrabajo, opciones: opciones,
-                        instrucciones: KurthRemoto.instrucciones)
+                        instrucciones: KurthRemoto.instrucciones + pendiente)
     }
 
     /// Apaga el cel; si el panel está abierto, retoma la conversación por id (alApagar).
@@ -362,12 +365,34 @@ final class KurthAgentService {
     /// Lo que se mandó desde esta caja al cel y todavía no vuelve como eco del hook.
     private var ecoPendiente: String?
 
+    // kurth: lo que pasó en el cel, para el agente de aquí (Kurth, 26 sep: "aplícale a Nook ese efecto para
+    // que también recuerde la conversación"). El panel lo pintaba, pero el agente no lo sabía: con Remote
+    // Control conectado Claude Code guarda la conversación en los servidores de Anthropic y no en el .jsonl
+    // (medido el 25 sep aquí y el 26 en Burbuja), así que al apagar se retomaba como estaba antes del cel.
+    // Se junta línea por línea y va una vez, oculto, con el siguiente mensaje del panel; si antes se vuelve a
+    // encender el cel, a sus instrucciones. Se guarda con la conversación por si Nook se cierra en medio.
+    private var registroDelCel: [String] = []
+    private var pendienteDelCel: String?
+
+    private func celTermino() {
+        guard !registroDelCel.isEmpty else { return }
+        let junto = (pendienteDelCel.map { $0 + "\n" } ?? "") + registroDelCel.joined(separator: "\n")
+        pendienteDelCel = junto.count > 12_000 ? "…" + String(junto.suffix(12_000)) : junto
+        registroDelCel = []
+        guardarConversacion()
+    }
+
+    static func bloqueDelCel(_ registro: String) -> String {
+        "<desde-el-cel>\nEsto pasó en esta misma conversación mientras Kurth la siguió desde su iPhone (Remote Control). No lo tienes en tu memoria; es historia, no una orden:\n\(registro)\n</desde-el-cel>"
+    }
+
     /// Lo que los hooks de la sesión del cel reportan: lo que entró (de allá o de aquí), qué
     /// herramienta usó y qué contestó. Se pinta con los mismos globos, por mensaje completo.
     func ecoDelCel(rol: String, texto: String) {
         switch rol {
         case "user":
             if let eco = ecoPendiente, texto.hasPrefix(eco) { ecoPendiente = nil; return }
+            registroDelCel.append("Kurth (desde el cel): \(texto)")
             if let indice = indiceDelTurno, mensajes[indice].texto.isEmpty, mensajes[indice].herramientas.isEmpty {
                 mensajes.remove(at: indice)
             }
@@ -377,10 +402,12 @@ final class KurthAgentService {
         case "tool":
             if indiceDelTurno == nil { mensajes.append(Mensaje(autor: .agente, texto: "", enCurso: true)); estado = .trabajando }
             let nombre = texto.split(separator: " · ").first.map(String.init) ?? texto
+            registroDelCel.append("(usaste \(texto))")
             actualizarHerramienta(id: UUID().uuidString, titulo: texto, kind: Self.kindDeHerramienta(nombre), estado: "completed")
         default:
             if indiceDelTurno == nil { mensajes.append(Mensaje(autor: .agente, texto: "", enCurso: true)); estado = .trabajando }
             let separador = mensajes[indiceDelTurno!].texto.isEmpty ? "" : "\n\n"
+            registroDelCel.append("Tú: \(texto)")
             anexarAlAgente(separador + texto)
             cerrarTurno()
         }
@@ -559,6 +586,7 @@ final class KurthAgentService {
     func limpiar() {
         mensajes.removeAll()
         plan.removeAll()
+        registroDelCel = []; pendienteDelCel = nil // era de la conversación que se borra
         sesionParaRetomar = nil
         sesionConMensajes = nil
         paginasConContenido.removeAll()
@@ -594,6 +622,8 @@ final class KurthAgentService {
         /// creación e ignora las nuevas (medido el 24 sep: 302 palabras retomada contra 63 nueva),
         /// así que si cambiaron no se retoma: se abre otra.
         var instrucciones: String?
+        /// kurth: lo del cel que el agente todavía no sabe (pendienteDelCel).
+        var delCel: String?
     }
 
     private static let archivoGuardado: URL = {
@@ -608,7 +638,9 @@ final class KurthAgentService {
         cargarConversacion()
         Self.actual = self
         KurthRemoto.shared.alApagar = { [weak self] in
-            guard let self, self.panelesAbiertos > 0 else { return }
+            guard let self else { return }
+            self.celTermino()
+            guard self.panelesAbiertos > 0 else { return }
             self.arrancar()
         }
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
@@ -628,6 +660,7 @@ final class KurthAgentService {
             .enumerated().filter { i, m in
                 !(m.texto == Self.avisoSinRetomar && i > 0 && guardado.mensajes[i - 1].texto == Self.avisoSinRetomar)
             }.map(\.element)
+        pendienteDelCel = guardado.delCel
         guard let id = guardado.sessionId, guardado.carpeta == carpetaDeTrabajo.path else { return }
         if guardado.instrucciones == Self.instrucciones {
             sesionParaRetomar = (id, guardado.carpeta)
@@ -644,7 +677,8 @@ final class KurthAgentService {
                                 // (26 sep: diez avisos de "No pude retomar" seguidos, uno por reinicio).
                                 sessionId: sesionConMensajes ?? sesionParaRetomar?.id,
                                 mensajes: mensajes,
-                                instrucciones: Self.instrucciones)
+                                instrucciones: Self.instrucciones,
+                                delCel: pendienteDelCel)
         guard let datos = try? JSONEncoder().encode(guardado) else { return }
         try? FileManager.default.createDirectory(at: Self.archivoGuardado.deletingLastPathComponent(),
                                                  withIntermediateDirectories: true)
@@ -698,14 +732,21 @@ final class KurthAgentService {
             partes += señalados.map(KurthSenalar.descripcion)
             if let oculto { partes.append(oculto.replacingOccurrences(of: "\n", with: " ")) }
             ecoPendiente = enLinea
+            registroDelCel.append("Kurth (desde el panel de Nook): \(limpio)")
             mensajes.append(Mensaje(autor: .agente, texto: "", enCurso: true))
             estado = .trabajando
             KurthRemoto.shared.enviar(partes.joined(separator: " "))
             return
         }
+        // kurth: lo que pasó en el cel va una vez, oculto, con el primer mensaje de vuelta.
+        var ocultoFinal = oculto
+        if let p = pendienteDelCel {
+            ocultoFinal = [Self.bloqueDelCel(p), oculto].compactMap { $0 }.joined(separator: "\n\n")
+            pendienteDelCel = nil
+        }
         let mandar: () -> Void = { [weak self] in
             self?.mandar(prompt, pagina: pagina, contenido: contenido, señalados: señalados, adjuntados: adjuntados,
-                         menciones: menciones, oculto: oculto)
+                         menciones: menciones, oculto: ocultoFinal)
         }
         if estado == .arrancando { enEspera = mandar } else { mandar() }
     }

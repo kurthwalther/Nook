@@ -287,8 +287,7 @@ final class KurthRemoto {
         let plano = self.plano
         if !contestado.contains("confianza"), plano.contains("trustthisfolder") {
             contestado.insert("confianza")
-            escribir("\u{1B}[B")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.escribir("\r") }
+            confiarEnLaCarpeta(intento: 1)
         }
         if !contestado.contains("y/n"), texto.contains("(y/n)") {
             contestado.insert("y/n")
@@ -303,6 +302,28 @@ final class KurthRemoto {
             contestado.insert("chrome")
             escribir("\r")   // la opción marcada es "No, keep browser tools off"
         }
+    }
+
+    /// "¿Confías en esta carpeta?" trae marcado "No, exit". La CLI todavía se está dibujando cuando sale y
+    /// vuelve a pintar el diálogo con "No" marcado: la flecha que se mandaba de inmediato se perdía y el Enter
+    /// elegía "No" (el cel cerraba con código 1; visto el 26 sep en Burbuja y aquí). Se espera a que se asiente,
+    /// se baja, y solo se confirma si lo último pintado marca "Yes".
+    private func confiarEnLaCarpeta(intento: Int) {
+        guard intento <= 4 else { fallar("No pude aceptar el aviso de confianza de la carpeta."); return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            guard let self, self.encendido else { return }
+            self.escribir("\u{1B}[B")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+                guard let self, self.encendido else { return }
+                if self.marcado?.hasPrefix("yes") == true { self.escribir("\r") } else { self.confiarEnLaCarpeta(intento: intento + 1) }
+            }
+        }
+    }
+
+    /// La opción que tiene el cursor (❯) en lo último que pintó la CLI, sin espacios y en minúsculas.
+    private var marcado: String? {
+        guard let r = texto.range(of: "❯", options: .backwards) else { return nil }
+        return String(texto[r.upperBound...].lowercased().filter { !$0.isWhitespace }.prefix(12))
     }
 
     private func buscarURL() {
