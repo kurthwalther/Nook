@@ -161,6 +161,40 @@ la sesión; hay que ir a Code › Nook (falta que confirme que sí aparece).
 - ✅ Carpeta en azul (folder.fill) cuando no es la personal; icono del cel = "iphone".
 - Nook mantiene la Mac despierta mientras está encendido (beginActivity); con la tapa cerrada no.
 
+## Memorias de Nook — 26 sep (rama `kurth-memorias`, solo compila, sin instalar)
+
+Kurth: "sea el agente que sea y el proyecto que sea, debe escribir sobre las memorias de Nook internas";
+"igual sí Claude Code las aprenda, eso es independiente; lo que sí es regla es que el navegador tiene sus
+propias memorias". Todo por el MCP de Nook (lo común a cualquier agente ACP); Nook no lee ni escribe
+memorias de ningún agente.
+- **Almacén:** `Application Support/…/Kurth/memorias.json` (id, título, contenido, tipo, hosts, etiquetas,
+  origen agente/kurth/workflow, fechas, veces usada; borradas 30 días como registro). Rechaza al guardar
+  contraseñas, tokens y llaves (sk-, AIza, ya29, EAA, JWT, Bearer, parámetros ?token= en URLs, etiquetas
+  "Contraseña:/NIP:/código de verificación:", cadenas al azar de 32+) y tarjetas (Luhn **y** prefijo de
+  marca: los ids de Meta de 15–16 dígitos pasan Luhn uno de cada diez). `KurthMemoriasModelo.swift`.
+- **MCP:** `nook_memoria_buscar` (texto y/o host), `_guardar` (con id reemplaza; sin id fusiona si es la
+  misma: mismas etiquetas, algún host en común, mismas palabras o unas contenidas en otras), `_listar`,
+  `_borrar`. Búsqueda léxica sin red: sin acentos, prefijos, peso por campo, IDF, host (+4 exacto) y
+  castigo a las de otra marca si el texto nombra una. Sin NLEmbedding: corre en cada mensaje y en la Air
+  cuesta memoria; si la léxica se queda corta con casos reales, es el siguiente paso.
+- **Automático:** `KurthAgentService.enviar` agrega, oculto, `<memorias-de-nook>` con hasta 5 (umbral 2.5 y
+  40 % del mejor), sin repetir en la misma sesión las ya mandadas sin cambios. Ajustes `kurth.memorias` y
+  `kurth.memoriasAuto`. **Las instrucciones del panel cambiaron: la conversación guardada de Kurth empieza
+  de nuevo al instalar** (aviso "Actualicé mis instrucciones…").
+- **Workflows:** al registrarse (`definir`), sus sitios con la URL limpia (solo ocid, __c, act,
+  business_id… ) quedan como memoria `wf-<nombre>`; si el workflow se borra, su memoria se poda al abrir
+  la pestaña. **UI:** control "Workflows | Memorias" arriba del popover; Nueva, buscar, editar, borrar.
+- **Sync:** memorias sí (campo opcional en la instantánea de KurthSync; gana lo más reciente por
+  registro; el conteo de uso no viaja). **Workflows no:** llevan programación, corridas y un SKILL.md en
+  ~/.claude que viaja por kurth-config; hay que decidir si una corrida programada debe existir en las dos
+  Macs. Tampoco las memorias de workflows, por lo mismo. Dos Macs que aprenden lo mismo por separado
+  quedan con dos memorias (ids distintos): se ve y se borra una.
+- **Después del merge con `kurth-replay`:** unificar las piezas visuales repetidas (fila resaltable, campo,
+  pastilla) entre KurthWorkflowsPopover y KurthMemoriasPopover (hoy son privadas de cada archivo).
+- **Prueba sin Nook:** `kurth/checks/memorias.sh`. **Falta en vivo:** las 4 tools por `kurth/mcp.sh`; que
+  el agente las llame solo (buscar antes de navegar, guardar lo que aprende); que el contexto llegue al
+  agente (preguntarle "¿qué memorias de Nook te llegaron?"); el popover con mouse; la sync con la Air.
+
 ## Al cerrar el 25 sep (José) — seguir en la Pro el fin
 
 **Esperan su OK:**

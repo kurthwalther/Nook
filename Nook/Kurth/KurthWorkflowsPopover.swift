@@ -53,7 +53,7 @@ struct KurthWorkflowsBoton: View {
             .help(grabando ? "Grabando un workflow" : "Workflows: graba cómo haces algo y el agente lo repite")
             .accessibilityLabel("Workflows")
             .popover(isPresented: $abierto, arrowEdge: .top) {
-                KurthWorkflowsPopover(cerrar: { abierto = false })
+                KurthWorkflowsYMemorias(cerrar: { abierto = false }) // kurth: + pestaña Memorias (KurthMemoriasPopover.swift)
                     .environment(windowState)
                     .environmentObject(browserManager)
             }
@@ -65,6 +65,8 @@ struct KurthWorkflowsBoton: View {
 
 struct KurthWorkflowsPopover: View {
     let cerrar: () -> Void
+    /// kurth: lo que va en lugar del título "Workflows" (el control "Workflows | Memorias").
+    var titulo: AnyView? = nil
     @Environment(BrowserWindowState.self) private var windowState
     @EnvironmentObject private var browserManager: BrowserManager
 
@@ -114,11 +116,12 @@ struct KurthWorkflowsPopover: View {
 
     private var lista: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Workflows")
-                .font(NookDesign.Font.body.weight(.semibold))
-                .padding(.horizontal, 14)
-                .padding(.top, 12)
-                .padding(.bottom, 6)
+            Group {
+                if let titulo { titulo } else { Text("Workflows").font(NookDesign.Font.body.weight(.semibold)) }
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 12)
+            .padding(.bottom, 6)
             filaDeGrabar
                 .padding(.horizontal, 6)
             if w.workflows.isEmpty {
