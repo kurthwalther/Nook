@@ -159,7 +159,7 @@ enum KurthMCPTools {
         if let resultado = KurthSuspension.llamar(name, args, tabs: tabs) { return resultado }
         if let resultado = KurthSplit.llamar(name, args, window: window, tabs: tabs) { return resultado }
         if let resultado = KurthBoosts.llamar(name, args, window: window, tabs: tabs) { return resultado }
-        if let resultado = KurthMemorias.llamar(name, args) { return resultado }
+        // Las memorias se atienden antes, en DevMCPServer.callTool: no necesitan ventana.
         switch name {
         case "kurth_panel":
             let agente = (args["cual"] as? String) == "agente"

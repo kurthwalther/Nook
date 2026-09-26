@@ -324,6 +324,9 @@ final class DevMCPServer {
     }
 
     private func callTool(_ rawName: String, _ args: [String: Any]) async -> [String: Any] {
+        // kurth: las memorias son del navegador, no de una ventana; con Nook abierto y sin ventanas
+        // también se leen y escriben (Burbuja y otros agentes llegan sin pestaña de por medio).
+        if let result = KurthMemorias.llamar(rawName, args) { return result }
         guard let bm = browserManager, let window else { return text("No browser window", error: true) }
 
         // The chat's executeJavaScript evaluates an expression, so `return` (which
