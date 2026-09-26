@@ -272,6 +272,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             if manager.siteRoutingManager.applyRoute(url: url, from: nil) {
                 return
             }
+            // kurth: en su app si la tiene, si no en pestaña (Nook/Kurth/KurthLinksExternos.swift)
+            if await KurthLinksExternos.abrir(url, manager) { return }
             manager.presentExternalURL(url)
         }
     }
