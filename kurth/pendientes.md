@@ -33,8 +33,17 @@ Orden acordado; Trazo (dirección del Creative) descartada por Kurth: "está feo
    26 sep; prueba sin Nook en `kurth/checks/copiloto.sh`, 47 comprobaciones). Falta probarlo en vivo
    por `kurth/mcp.sh` y con clic nativo dentro de un iframe. Después: `network_requests` (M parcial),
    Space "Agente" no persistente, tareas programadas por launchd.
-4. **Skills con `/`, "guardar como skill", `@pestaña` / `@Space`** (S / S–M). `/` ya lista comandos; falta
-   el guardado y el `@`.
+4. **Skills con `/`, "guardar como skill", `@pestaña` / `@Space`** (S / S–M).
+   ✅ **Hecho 26 sep (rama `kurth-skills`, solo compila, sin probar en vivo):** lista flotante sobre la
+   caja (`KurthAgentSugerencias.swift`) para `/` y `@`, ↑/↓, Enter/Tab eligen, Esc cierra, 8 filas y
+   scroll; skills de Kurth arriba (se reconocen en disco: `~/.claude/{skills,commands}`, la carpeta de
+   trabajo y `plugin:skill`), comandos del sistema abajo. `@` ofrece las pestañas abiertas del Space y los
+   Spaces; chip gris en la caja; al enviar, pestaña = resource_link + contenido si está cargada, Space =
+   enlaces de todas sus pestañas (tope 60) sin contenido (`KurthAgentMenciones.swift`). «…» en el
+   encabezado → "Guardar como skill…": pide nombre y el agente escribe `~/.claude/skills/<nombre>/SKILL.md`
+   con sus herramientas (`KurthGuardarSkill.swift`). **Probar:** que ↑/↓/Esc lleguen al campo (onKeyPress
+   sobre TextField vertical), que la lista reciba clics fuera del alto del inset, y que la skill nueva
+   aparezca en `/` sin reiniciar la sesión (depende de cuándo el adaptador reenvía la lista).
 5. **Boosts por dominio + "describe una extensión"** (M): CSS/JS por sitio que el agente escribe y Nook
    instala como WKUserScript/WKUserStyleSheet; `user_scripts` es la mitad.
 6. **Modo "con cabeza"** (M): velo + borde en la pestaña controlada + Detener + tarjeta de plan +

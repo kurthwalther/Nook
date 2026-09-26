@@ -597,36 +597,47 @@ final class KurthAgentService {
     /// misma página no lo repite. Se vacía con una sesión nueva o al limpiar.
     private(set) var paginasConContenido = Set<String>()
 
+    /// `menciones`: lo elegido con «@» ya resuelto (KurthMenciones.resolver). `paraElAgente`: si el
+    /// globo debe decir algo más corto que lo que recibe el agente (kurth: "Guardar como skill…").
     func enviar(_ texto: String, pagina: KurthACPResourceLink? = nil, contenido: String? = nil,
-                señalados: [KurthSenalar.Referencia] = []) {
+                señalados: [KurthSenalar.Referencia] = [], menciones: [KurthContextoMencionado] = [],
+                paraElAgente: String? = nil) {
         let limpio = texto.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !limpio.isEmpty, aceptaMensajes else { return }
         let adjuntados = adjuntos
         adjuntos.removeAll()
 
-        // En el globo, lo adjuntado va con «📎» para que se pinte con clip y no con el visor.
+        // En el globo, lo adjuntado va con «📎» para que se pinte con clip y no con el visor; lo
+        // mencionado, con «@ » (kurth: KurthAgentChat lo pinta con arroba).
         let chips = señalados.map { "\($0.numero) \($0.resumen)" } + adjuntados.map { "📎 " + $0.nombre }
+            + menciones.map { "@ " + $0.chip }
         mensajes.append(Mensaje(autor: .usuario, texto: limpio, señalados: chips.isEmpty ? nil : chips))
+        let prompt = paraElAgente ?? limpio
         if KurthRemoto.shared.encendido {
             // Al cel: el texto, la pestaña como texto (allá no hay resource links) y lo señalado. El hook
             // de la sesión lo devuelve como eco; se reconoce por el texto y no se pinta dos veces.
-            var partes = [limpio]
+            // En una sola línea: al pseudo-terminal, cada salto de línea es un Enter que manda a medias.
+            let enLinea = prompt.replacingOccurrences(of: "\n", with: " ")
+            var partes = [enLinea]
             if let pagina { partes.append("(Pestaña abierta: \(pagina.name) — \(pagina.uri))") }
+            partes += menciones.flatMap(\.enlaces).map { "(Mencionada: \($0.name) — \($0.uri))" }
             partes += señalados.map(KurthSenalar.descripcion)
-            ecoPendiente = limpio
+            ecoPendiente = enLinea
             mensajes.append(Mensaje(autor: .agente, texto: "", enCurso: true))
             estado = .trabajando
             KurthRemoto.shared.enviar(partes.joined(separator: " "))
             return
         }
         let mandar: () -> Void = { [weak self] in
-            self?.mandar(limpio, pagina: pagina, contenido: contenido, señalados: señalados, adjuntados: adjuntados)
+            self?.mandar(prompt, pagina: pagina, contenido: contenido, señalados: señalados, adjuntados: adjuntados,
+                         menciones: menciones)
         }
         if estado == .arrancando { enEspera = mandar } else { mandar() }
     }
 
     private func mandar(_ limpio: String, pagina: KurthACPResourceLink?, contenido: String?,
-                        señalados: [KurthSenalar.Referencia], adjuntados: [Adjunto]) {
+                        señalados: [KurthSenalar.Referencia], adjuntados: [Adjunto],
+                        menciones: [KurthContextoMencionado]) {
         mensajes.append(Mensaje(autor: .agente, texto: "", enCurso: true))
         plan.removeAll()
         estado = .trabajando
@@ -634,11 +645,14 @@ final class KurthAgentService {
         Task { [weak self] in
             guard let self else { return }
             do {
-                let recursos = contenido.flatMap { c in pagina.map { [(uri: $0.uri, texto: c)] } } ?? []
+                var recursos = contenido.flatMap { c in pagina.map { [(uri: $0.uri, texto: c)] } } ?? []
                 if let uri = pagina?.uri, contenido != nil { self.paginasConContenido.insert(uri) }
+                // kurth: lo mencionado con «@» — su contenido cuenta como ya enviado, igual que la activa.
+                recursos += menciones.flatMap(\.contenidos)
+                self.paginasConContenido.formUnion(menciones.flatMap(\.contenidos).map(\.uri))
                 let textoCompleto = señalados.isEmpty ? limpio
                     : limpio + "\n\n" + señalados.map(KurthSenalar.descripcion).joined(separator: "\n\n")
-                var enlaces = pagina.map { [$0] } ?? []
+                var enlaces = (pagina.map { [$0] } ?? []) + menciones.flatMap(\.enlaces)
                 var imagenes = señalados.compactMap(\.recorte)
                 for a in adjuntados {
                     switch a.tipo {

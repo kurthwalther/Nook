@@ -35,10 +35,12 @@ struct KurthAgentInput: View {
     @Binding var texto: String
     var escribiendo: FocusState<Bool>.Binding
     let puedeEnviar: Bool
-    /// Los comandos que se ofrecen al escribir «/»; Tab completa el primero.
-    let sugerencias: [KurthACPCommand]
     let enviar: () -> Void
 
+    /// La fila elegida en la lista de «/» o «@» (↑/↓ la mueven).
+    @State private var seleccion = 0
+    /// El texto con que se cerró la lista con Esc: no vuelve a salir hasta que el texto cambie.
+    @State private var listaCerradaEn: String?
     /// Hay algo arrastrándose encima de la caja.
     @State private var soltando = false
     /// El popover del cel (QR, estado, apagar).
@@ -97,7 +99,8 @@ struct KurthAgentInput: View {
 
     private var caja: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if !KurthSenalar.shared.referencias.isEmpty || !agente.adjuntos.isEmpty {
+            if !KurthSenalar.shared.referencias.isEmpty || !agente.adjuntos.isEmpty
+                || !KurthMenciones.shared.elegidas.isEmpty {
                 fichas
             }
             HStack(alignment: .bottom, spacing: 6) {
@@ -115,7 +118,66 @@ struct KurthAgentInput: View {
         .shadow(color: .black.opacity(0.08), radius: 6, y: 1)
         .onDrop(of: [.fileURL, .url, .image], isTargeted: $soltando, perform: soltar)
         .animation(NookDesign.Motion.standard, value: soltando)
+        // kurth: la lista de «/» y «@» flota sobre la caja, del mismo ancho, tapando la fila de «+»
+        // y Señalar mientras está abierta. Como capa y no en la columna: así no empuja la
+        // conversación ni cambia el alto que mide el chat para su máscara.
+        .overlay(alignment: .top) {
+            let lista = sugerencias
+            if !lista.isEmpty {
+                KurthListaDeSugerencias(sugerencias: lista, seleccion: $seleccion, elegir: elegir)
+                    .alignmentGuide(.top) { $0[.bottom] + 6 }
+                    .transition(.opacity.combined(with: .offset(y: 4)))
+            }
+        }
+        .animation(NookDesign.Motion.quick, value: sugerencias.isEmpty)
         .padding(.horizontal, 8)
+    }
+
+    // MARK: - «/» y «@»
+
+    /// Lo que se ofrece mientras se escribe. «/» solo cuando abre el mensaje y no hay espacios:
+    /// «/model» sí, «dime /algo» no. «@» en la palabra que se está escribiendo al final. Con un
+    /// permiso esperando no sale nada: la tarjeta de arriba manda.
+    private var sugerencias: [KurthSugerencia] {
+        guard agente.permiso == nil, texto != listaCerradaEn else { return [] }
+        if texto.hasPrefix("/"), !texto.contains(where: \.isWhitespace) {
+            let escrito = String(texto.dropFirst())
+            let encontrados = agente.comandos(queEmpiecenCon: escrito)
+            // Con el nombre completo escrito ya no hay nada que sugerir: Enter manda.
+            if encontrados.count == 1 && encontrados[0].name == escrito { return [] }
+            return KurthSkillsLocales.sugerencias(encontrados, carpeta: agente.carpetaDeTrabajo)
+        }
+        if let consulta = KurthMenciones.consultaDeArroba(texto) {
+            return KurthMenciones.sugerencias(para: consulta, tabs: browserManager.tabs, ventana: windowState)
+        }
+        return []
+    }
+
+    /// La fila elegida, si la lista está abierta.
+    private var sugerenciaElegida: KurthSugerencia? {
+        let lista = sugerencias
+        return lista.indices.contains(seleccion) ? lista[seleccion] : lista.first
+    }
+
+    private func elegir(_ sugerencia: KurthSugerencia) {
+        switch sugerencia.accion {
+        case .comando(let nombre):
+            texto = "/" + nombre + " "
+        case .mencion(let mencion):
+            KurthMenciones.shared.agregar(mencion)
+            texto = KurthMenciones.sinArroba(texto)
+        }
+        seleccion = 0
+        // Un clic en la lista no debe dejar la caja sin foco: se sigue escribiendo.
+        escribiendo.wrappedValue = true
+    }
+
+    private func mover(_ paso: Int) -> KeyPress.Result {
+        let total = sugerencias.count
+        guard total > 0 else { return .ignored }
+        // Da la vuelta en las puntas: ↑ desde la primera lleva a la última sin recorrer la lista.
+        seleccion = ((seleccion + paso) % total + total) % total
+        return .handled
     }
 
     private var campo: some View {
@@ -127,11 +189,26 @@ struct KurthAgentInput: View {
             .focused(escribiendo)
             // Sin .disabled mientras el agente trabaja: el Enter que envía desactivaba el campo a
             // media pulsación y macOS sonaba el aviso de error. Lo que se bloquea es enviar.
-            .onSubmit(enviar)
+            // kurth: con la lista abierta, Enter elige la fila en vez de mandar "/pd" a medias. Va en
+            // onSubmit y no en onKeyPress(.return): así vale aunque el campo se quede el Enter antes.
+            .onSubmit {
+                if let elegida = sugerenciaElegida { elegir(elegida) } else { enviar() }
+            }
             .onKeyPress(.tab) {
-                guard let primero = sugerencias.first else { return .ignored }
-                texto = "/" + primero.name + " "
+                guard let elegida = sugerenciaElegida else { return .ignored }
+                elegir(elegida)
                 return .handled
+            }
+            .onKeyPress(.upArrow) { mover(-1) }
+            .onKeyPress(.downArrow) { mover(1) }
+            .onKeyPress(.escape) {
+                guard !sugerencias.isEmpty else { return .ignored }
+                listaCerradaEn = texto
+                return .handled
+            }
+            .onChange(of: texto) { _, nuevo in
+                seleccion = 0
+                if nuevo != listaCerradaEn { listaCerradaEn = nil }
             }
             .padding(.vertical, 6)
             // El texto empieza donde el icono de carpeta de abajo (6 + 8 del borde).
@@ -213,6 +290,9 @@ struct KurthAgentInput: View {
                 ForEach(agente.adjuntos) { adjunto in
                     fichaDeAdjunto(adjunto)
                 }
+                ForEach(KurthMenciones.shared.elegidas) { mencion in
+                    fichaDeMencion(mencion)
+                }
             }
             .padding(2) // que la sombra de las fichas no se corte en el borde del scroll
         }
@@ -246,6 +326,25 @@ struct KurthAgentInput: View {
         .padding(.horizontal, 7)
         .padding(.vertical, 4)
         .background(Color(red: 0.04, green: 0.52, blue: 1).opacity(0.10), in: Capsule())
+    }
+
+    /// kurth: lo mencionado con «@». Cápsula como la de lo señalado, pero en el gris de los controles
+    /// y no en azul: el azul dice "esto lo marcaste en la página", y una pestaña no se marcó.
+    private func fichaDeMencion(_ mencion: KurthMencion) -> some View {
+        HStack(spacing: 5) {
+            KurthIconoDeMencion(tipo: mencion.tipo)
+            Text(mencion.titulo)
+                .font(NookDesign.Font.caption)
+                .foregroundStyle(Color.primary.opacity(0.85))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: 160, alignment: .leading)
+            botonQuitar { KurthMenciones.shared.quitar(mencion) }
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(Color.primary.opacity(0.06), in: Capsule())
+        .help(mencion.titulo)
     }
 
     /// Como la tarjeta de Aside: vista previa o icono, nombre y de dónde viene.
