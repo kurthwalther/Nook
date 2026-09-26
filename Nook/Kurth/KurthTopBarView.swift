@@ -374,19 +374,13 @@ struct KurthTopBarView: View {
         }
     }
 
-    /// Traducir fuera de la cápsula o de la tira: un círculo de vidrio de la altura de la cápsula.
-    /// En la barra tinted no hay vidrio: solo el ícono.
+    /// Traducir fuera de la cápsula o de la tira: solo el ícono, sin vidrio ni cápsula propia
+    /// (Kurth, 26 sep).
     @ViewBuilder
     private var traduccionAfuera: some View {
         if muestraTraduccion {
-            if isCapsules {
-                traduccionBoton.kurthFieldIcon()
-                    .frame(width: Self.capsuleHeight, height: Self.capsuleHeight)
-                    .modifier(KurthGlass(tint: glassTint))
-                    .transition(.opacity.combined(with: .scale(scale: 0.8)))
-            } else {
-                traduccionBoton.kurthBarIcon(size: iconSize)
-            }
+            traduccionBoton.kurthBarIcon(size: iconSize)
+                .transition(.opacity.combined(with: .scale(scale: 0.8)))
         }
     }
 
