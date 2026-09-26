@@ -41,7 +41,9 @@ struct KurthWorkflowsBoton: View {
         if activo {
             let grabando = KurthWorkflows.shared.grabacion?.ventana == windowState.id
             Button { abierto.toggle() } label: {
-                Image(systemName: grabando ? "record.circle.fill" : "record.circle")
+                // Kurth, 26 sep: "cambia el ícono de workflows". En reposo, un recorrido de un punto a
+                // otro (un proceso que se repite), no "grabar"; grabando, el punto rojo que respira.
+                Image(systemName: grabando ? "record.circle.fill" : "point.topleft.down.to.point.bottomright.curvepath")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(grabando ? Color(nsColor: .systemRed) : Color.primary.opacity(0.7))
                     .symbolEffect(.breathe.pulse, options: .repeating, isActive: grabando && !reduceMotion)
