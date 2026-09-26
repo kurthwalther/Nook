@@ -35,9 +35,14 @@ enum KurthLinksExternos {
     private static func abrirEnApp(_ url: URL) async -> Bool {
         let universal = NSWorkspace.OpenConfiguration()
         universal.requiresUniversalLinks = true // si ninguna app lo declara, falla en vez de volver a Nook
+        // Sin esto macOS no falla en silencio: saca el aviso de Finder "No hay ninguna aplicación definida
+        // para abrir la URL…" por cada link que no es universal (visto el 26 sep en la primera prueba).
+        universal.promptsUserIfNeeded = false
         if (try? await NSWorkspace.shared.open(url, configuration: universal)) != nil { return true }
         guard let enApp = KurthLinksExternosModelo.traducir(url),
               NSWorkspace.shared.urlForApplication(toOpen: enApp) != nil else { return false }
-        return (try? await NSWorkspace.shared.open(enApp, configuration: NSWorkspace.OpenConfiguration())) != nil
+        let config = NSWorkspace.OpenConfiguration()
+        config.promptsUserIfNeeded = false
+        return (try? await NSWorkspace.shared.open(enApp, configuration: config)) != nil
     }
 }
