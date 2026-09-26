@@ -3,6 +3,12 @@
 Una sola lista para las dos Macs. Quien avance, la actualiza en el mismo commit.
 Detalle de Zen en `kurth/plan-zen.md`.
 
+## Decisiones de Kurth · 26 sep noche
+- Pestañas en árbol (tab trails de 1.1.1): **se quedan**.
+- Workflows **no viajan** entre Macs (evitar corridas programadas dobles). Las memorias sí.
+- Programados **sin restricciones**; manuales con la guardia de irreversibles.
+- Trazo (dirección del Creative): descartada.
+
 ## Plan aprobado por Kurth · 26 sep (del barrido de Ernest, `projects/Nook/barrido-ernest-2026-09-26.md`)
 
 Orden acordado; Trazo (dirección del Creative) descartada por Kurth: "está feo".
