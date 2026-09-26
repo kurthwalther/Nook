@@ -137,7 +137,13 @@ final class SplitDropCaptureView: NSView {
     /// Check if drag location is within card bounds and return which side
     /// Card dimensions: 237x394, positioned with 20pt padding from edges
     private func sideForDragInCard(_ sender: NSDraggingInfo) -> SplitViewManager.Side? {
-        let loc = convert(sender.draggingLocation, from: nil)
+        side(atLocal: convert(sender.draggingLocation, from: nil))
+    }
+
+    /// kurth: el mismo cálculo con un punto local, para el arrastre de la tira compacta
+    /// (KurthSplit.ArrastreDeTira), y la orilla derecha antes que las tarjetas.
+    func side(atLocal loc: CGPoint) -> SplitViewManager.Side? {
+        if let side = KurthSplit.ladoPorOrilla(loc, en: bounds) { return side }
         let cardWidth: CGFloat = 237
         let cardHeight: CGFloat = 394
         let cardPadding: CGFloat = 20

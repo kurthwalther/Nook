@@ -40,8 +40,15 @@ Orden acordado; Trazo (dirección del Creative) descartada por Kurth: "está feo
 6. **Modo "con cabeza"** (M): velo + borde en la pestaña controlada + Detener + tarjeta de plan +
    confirmación antes de publicar/enviar/comprar/borrar. Maqueta aprobada por artifact (26 sep).
 7. **Autoconsent** (S, **opcional, con interruptor**): duckduckgo/autoconsent como user script.
-8. **Split útil** (M): abrir link en el split / pestaña seguidora, arrastrar a la orilla para dividir,
-   ⌥-clic para unir/separar.
+8. ✅ **Split útil** (26 sep, `KurthSplit.swift`, rama `kurth-split`, sin instalar): clic derecho en un
+   link → "Abrir en el split" (reemplaza el derecho si ya hay); "Seguir aquí los links" en el menú de
+   la pestaña (lateral, mitad del split y tira) con flecha ↳ en la seguidora, se apaga al cerrar el
+   split o cambiar el panel; arrastrar una pestaña (lateral o tira) a la orilla derecha de la página
+   (40 pt, `kurth.splitEdgeWidth`) muestra la franja y al soltar divide; ⌥-clic en una mitad del split
+   la saca, en una fila normal con split la mete a la derecha (`kurth.splitOptionClick`). MCP
+   `kurth_split` open/close/follow/status. **Solo compila (Release limpio); nada probado en vivo
+   porque no se instaló.** Al instalar: primero `kurth_split` por `kurth/mcp.sh`, y con mouse los
+   arrastres (lateral y tira), el ⌥-clic y el clic derecho en un link.
 9. **Traducción on-device** (M): framework Translation; lo difícil es reinyectar el texto traducido.
 10. **Detalles Apple** (S): pull-to-refresh, progreso de carga en la barra, indicador de pestaña suspendida.
 

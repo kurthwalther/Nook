@@ -50,6 +50,9 @@ struct KurthTabStrip: View {
     @State private var dragFrames: [UUID: CGRect] = [:]
     /// Acaba de haber un arrastre: el clic de ese mismo soltar no cuenta como selección.
     @State private var justDragged = false
+    /// El mismo arrastre, si baja a la página: vista previa del split y soltar en la orilla o en
+    /// una tarjeta (KurthSplit.ArrastreDeTira).
+    @State private var arrastreALaPagina = KurthSplit.ArrastreDeTira()
     /// Ancho natural de los segmentos, del + y de la ranura que la barra le deja a la tira. La tira
     /// va como capa (overlay) sobre una ranura vacía y flexible: así la ranura mide lo que de verdad
     /// hay entre las cápsulas de los lados y nunca la empuja (medida sobre la barra, la barra crecía
@@ -222,10 +225,19 @@ struct KurthTabStrip: View {
                     justDragged = true
                 }
                 dragTranslation = value.translation.width
+                arrastreALaPagina.mover(en: windowState)
             }
             .onEnded { _ in
                 // El botón dispara con el mismo mouse-up que termina el arrastre: se deja pasar.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { justDragged = false }
+                // Soltado sobre la página: split (o nada) y el segmento vuelve a su lugar sin reordenar.
+                if arrastreALaPagina.soltar(entry.id, en: windowState) {
+                    withAnimation(NookDesign.Motion.spring) {
+                        dragging = nil
+                        dragTranslation = 0
+                    }
+                    return
+                }
                 let insertion = insertionIndex(for: entry.id, in: entries)
                 let others = entries.filter { $0.id != entry.id }
                 let previous = insertion > 0 ? others[insertion - 1] : nil
@@ -302,6 +314,8 @@ struct KurthTabStrip: View {
 
         return Button {
             guard !justDragged else { return }
+            // ⌥-clic: sale del split o entra al panel derecho (KurthSplit.clicConOpcion).
+            if KurthSplitGancho.shared.clicConOpcion?(id, windowState) == true { return }
             if isActive {
                 // Como en Safari: la pestaña activa abre el campo para editar la dirección.
                 if let url { commandPalette.openWithCurrentURL(url) } else { commandPalette.open() }
@@ -325,6 +339,13 @@ struct KurthTabStrip: View {
                                 .transition(.opacity)
                         }
                     }
+                if KurthSplitGancho.shared.sigue(id, en: windowState) {
+                    // Esta pestaña carga los links del panel izquierdo (pestaña seguidora).
+                    Image(systemName: "arrow.turn.down.right")
+                        .font(KurthEscala.fuente(10, .semibold))
+                        .foregroundStyle(.secondary)
+                        .help("Sigue los links del panel izquierdo")
+                }
                 if isActive {
                     // La cápsula de siempre: dominio y recargar. Copiar la URL vive en el clic
                     // derecho y en ⌘⇧C; un ícono más al pasar el mouse sobraba (Kurth, 25 sep).
@@ -377,12 +398,11 @@ struct KurthTabStrip: View {
                 }
             }
             // Split view tenía una sola entrada, arrastrar una pestaña a la página, y Kurth no dio
-            // con ella (25 sep): desde aquí, esta pestaña junto a la activa, a la derecha.
-            if !isActive {
-                Button("Abrir en split junto a la activa", systemImage: "rectangle.split.2x1") {
-                    browserManager.enterSplit(with: id, placeOnRight: true, in: windowState)
-                }
-            }
+            // con ella (25 sep). Las entradas viven en KurthSplitMenu (NookUI), las mismas que en la
+            // lateral: al panel derecho y "Seguir aquí los links".
+            KurthSplitMenu(itemID: id)
+                .environment(windowState)
+                .environment(tabs)
             if browserManager.splitManager.isSplit(for: windowState.id) {
                 Button("Separar el split", systemImage: "rectangle") {
                     browserManager.separateSplit(in: windowState)

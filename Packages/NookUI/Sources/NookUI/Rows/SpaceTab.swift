@@ -61,6 +61,8 @@ public struct SpaceTab: View {
     public var body: some View {
         let title = tabs.title(for: item)
         Button(action: {
+            // kurth: ⌥-clic con un split abierto mete esta pestaña al panel derecho (KurthSplitGancho).
+            if KurthSplitGancho.shared.clicConOpcion?(item.id, windowState) == true { return }
             if isCurrentTab {
                 startRename(title)
             } else {

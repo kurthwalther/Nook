@@ -358,6 +358,7 @@ private struct SplitPreviewOverlay: View {
                 .padding(.trailing, cardPadding)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay { KurthSplitZonaDeOrilla() } // kurth: soltar en la orilla derecha = split (KurthSplit.swift)
             .allowsHitTesting(false) // Don't intercept mouse events - let drag handling work
         }
     }

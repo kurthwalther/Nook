@@ -18,6 +18,7 @@ enum WebContextMenuItem {
     case pageCopyAddress
 
     case linkOpenInNewTab
+    case linkOpenInSplit // kurth: la página del link al panel derecho (KurthSplit.abrirLink)
     case linkCopy
 
     case imageOpenInNewTab
@@ -52,7 +53,7 @@ enum WebContextMenuItem {
         case .textSelection:
             return [.systemLookUp, .systemTranslate, .textCopy, .separator, .systemShare, .separator, .systemInspect]
         case .link:
-            return [.linkOpenInNewTab, .separator, .linkCopy, .separator, .systemShare, .separator, .systemInspect]
+            return [.linkOpenInNewTab, .linkOpenInSplit, .separator, .linkCopy, .separator, .systemShare, .separator, .systemInspect] // kurth: + split
         case .image:
             return [
                 .imageOpenInNewTab,
@@ -127,6 +128,7 @@ enum WebContextMenuItem {
         case .pageReload: return "Reload Page"
         case .pageCopyAddress: return "Copy Page Address"
         case .linkOpenInNewTab: return "Open Link in New Tab"
+        case .linkOpenInSplit: return "Abrir en el split" // kurth
         case .linkCopy: return "Copy Link"
         case .imageOpenInNewTab: return "Open Image in New Tab"
         case .imageSaveToDownloads: return "Save Image to Downloads"
@@ -175,6 +177,10 @@ enum WebContextMenuItem {
         case .linkOpenInNewTab:
             if let url = payload.linkURL {
                 webView.openLinkInNewTab(url)
+            }
+        case .linkOpenInSplit: // kurth
+            if let url = payload.linkURL {
+                KurthSplit.abrirLink(url, desde: webView.owningSession)
             }
         case .linkCopy:
             if let url = payload.linkURL {

@@ -73,6 +73,10 @@ enum KurthMCPTools {
                 info: "Ancho del panel del agente en pt (200–520). Es el último que dejó el usuario al soltar el borde; cambiarlo aquí aplica a las ventanas que se abran después"),
         Setting(key: KurthSuspension.clave, type: "number", defaultValue: KurthSuspension.minutosDefault,
                 info: "Minutos sin ser la pestaña activa tras los que se suelta su vista web (se conservan título, favicon, URL, scroll y formularios; al elegirla se recarga sola). 0 = nunca por inactividad; la presión de memoria del sistema sigue suspendiendo. Fijadas y favoritos también; nunca la visible, la que reproduce audio o video, la de Peek ni la que tiene un diálogo pendiente"),
+        Setting(key: "kurth.splitEdgeWidth", type: "number", defaultValue: 40.0,
+                info: "Split: ancho en pt de la franja en la orilla derecha de la página donde soltar una pestaña arrastrada (lateral o tira) la abre en el panel derecho"),
+        Setting(key: "kurth.splitOptionClick", type: "bool", defaultValue: true,
+                info: "Split: ⌥-clic en una mitad del split la saca; ⌥-clic en una pestaña de la lateral o la tira con split abierto la mete al panel derecho"),
     ]
 
     static let tools: [AIToolDefinition] = [
@@ -125,6 +129,7 @@ enum KurthMCPTools {
         if let resultado = KurthSync.llamar(name) { return resultado }
         if let resultado = KurthPasswords.llamar(name, args) { return resultado }
         if let resultado = KurthSuspension.llamar(name, args, tabs: tabs) { return resultado }
+        if let resultado = KurthSplit.llamar(name, args, window: window, tabs: tabs) { return resultado }
         switch name {
         case "kurth_panel":
             let agente = (args["cual"] as? String) == "agente"
