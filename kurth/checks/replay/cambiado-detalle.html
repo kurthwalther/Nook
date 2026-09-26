@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Detalle del producto</title>
+<script>const anotar = (x) => window.webkit.messageHandlers.anotar.postMessage(x);</script>
+</head><body>
+<h1>Detalle del producto</h1>
+<button class="x" onclick="anotar('cancelar')">Cancelar</button>
+<label for="n2">Notas internas</label>
+<textarea id="n2"></textarea>
+<button class="y" onclick="anotar('guardar:' + document.getElementById('n2').value)">Guardar cambios</button>
+</body></html>

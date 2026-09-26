@@ -123,6 +123,8 @@ final class KurthAgentService {
 
     func cambiarOpcion(_ id: String, a valor: String) {
         if id == "mode" { modoAntesDelSitio = nil }
+        // kurth: si Kurth elige un modo durante una corrida programada, gana su elección.
+        if id == "mode" { modoForzado = nil; modoAntesDeForzar = nil }
         if Self.opcionesQueSeRecuerdan.contains(id) {
             var elegidas = UserDefaults.standard.dictionary(forKey: Self.claveOpciones) as? [String: String] ?? [:]
             elegidas[id] = valor
@@ -141,8 +143,13 @@ final class KurthAgentService {
         guard estado != .arrancando else { return }
         var elegidas = UserDefaults.standard.dictionary(forKey: Self.claveOpciones) as? [String: String] ?? [:]
         for opcion in opciones where Self.opcionesQueSeRecuerdan.contains(opcion.id) {
-            // El auto que puso el sitio no es elección del usuario: se guarda el modo de antes.
+            // El auto que puso el sitio no es elección del usuario: se guarda el modo de antes. Tampoco
+            // el "sin restricciones" de una corrida programada (kurth: forzarModo).
             if opcion.id == "mode", let anterior = modoAntesDelSitio { elegidas["mode"] = anterior; continue }
+            if opcion.id == "mode", modoForzado != nil {
+                if let anterior = modoAntesDeForzar { elegidas["mode"] = anterior }
+                continue
+            }
             elegidas[opcion.id] = opcion.currentValue
         }
         UserDefaults.standard.set(elegidas, forKey: Self.claveOpciones)
@@ -443,6 +450,13 @@ final class KurthAgentService {
         let regla = Self.regla(para: ultimaURL)
         reglaActiva = regla
         guard cliente.isRunning, let modo = opciones.first(where: { $0.id == "mode" }) else { return }
+        // kurth: una corrida programada manda sobre la regla del sitio mientras dura (forzarModo).
+        if let forzado = modoForzado {
+            guard modo.currentValue != forzado, modo.choices.contains(where: { $0.value == forzado }) else { return }
+            if modoAntesDeForzar == nil { modoAntesDeForzar = modo.currentValue }
+            aplicarModo(forzado)
+            return
+        }
         if let regla {
             guard modo.currentValue != regla.modo, modo.choices.contains(where: { $0.value == regla.modo }) else { return }
             if modoAntesDelSitio == nil { modoAntesDelSitio = modo.currentValue }
@@ -450,6 +464,41 @@ final class KurthAgentService {
         } else if let anterior = modoAntesDelSitio {
             modoAntesDelSitio = nil
             aplicarModo(anterior)
+        }
+    }
+
+    // MARK: - Modo de una corrida programada (kurth, 26 sep)
+
+    /// Kurth, 26 sep: "los programados siempre van en sin permisos porque replican lo que el usuario
+    /// hizo". Cuando el agente entra a una corrida programada de un workflow (KurthWorkflowsReplay, o
+    /// el workflow completo si no tiene pasos que repetir), la sesión pasa a este modo y vuelve al
+    /// de antes al terminar. No se guarda como elección del usuario, manda sobre las reglas por sitio
+    /// mientras dura, y si la sesión todavía no abre, se aplica en cuanto abra (revisarSitio corre
+    /// después de aplicarOpcionesGuardadas). Si Kurth elige otro modo a media corrida, gana él.
+    private(set) var modoForzado: String?
+    private var modoAntesDeForzar: String?
+
+    func forzarModo(_ valor: String?) {
+        if let valor {
+            modoForzado = valor
+            revisarSitio()
+            return
+        }
+        guard modoForzado != nil else { return }
+        modoForzado = nil
+        let anterior = modoAntesDeForzar
+        modoAntesDeForzar = nil
+        guard let anterior, cliente.isRunning else { revisarSitio(); return }
+        // No se pasa por revisarSitio: aplicarModo es asíncrono y ahí se leería todavía el modo
+        // forzado como "el de antes del sitio". Se decide aquí con lo que ya se sabe.
+        let regla = Self.regla(para: ultimaURL)
+        reglaActiva = regla
+        if let regla {
+            if modoAntesDelSitio == nil { modoAntesDelSitio = anterior }
+            aplicarModo(regla.modo)
+        } else {
+            aplicarModo(modoAntesDelSitio ?? anterior)
+            modoAntesDelSitio = nil
         }
     }
 

@@ -462,6 +462,8 @@ struct KurthAgentChat: View {
     /// La confirmación que se muestra cuando el agente frenó en un botón delicado y terminó el turno
     /// para preguntar. Mientras trabaja no: todavía no ha preguntado.
     private var confirmacionPendiente: KurthCabeza.Pendiente? {
+        // kurth: el replay de un workflow espera la respuesta aunque el agente no esté corriendo.
+        if KurthCabeza.activo, KurthCabeza.shared.replayEspera { return KurthCabeza.shared.pendiente }
         guard KurthCabeza.activo, agente.estado != .trabajando, agente.aceptaMensajes else { return nil }
         return KurthCabeza.shared.pendiente
     }

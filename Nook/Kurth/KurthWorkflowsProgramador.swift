@@ -15,9 +15,11 @@
 //     minutos): la corrida queda como "saltada", el popover ofrece "Correr ahora" y sale una
 //     notificación. Igual al abrir Nook con una hora ya pasada.
 //
-//  Sin Kurth enfrente, la corrida es la de siempre (KurthWorkflows.correr con programada: true): el
-//  agente trabaja en su propia pestaña en segundo plano, se detiene ante lo irreversible y Nook avisa
-//  con una notificación que espera confirmación; al terminar, otra con el resumen de una línea.
+//  Sin Kurth enfrente, la corrida es KurthWorkflows.correr con programada: true: desde el 26 sep, el
+//  replay exacto (KurthWorkflowsReplay.swift) en pestañas propias en segundo plano, sin pedir permiso
+//  ni confirmación (Kurth: "los programados siempre van en sin permisos porque replican lo que el
+//  usuario hizo"); si un paso no aparece lo resuelve el agente en "sin restricciones" mientras dura.
+//  Al terminar, una notificación con el resumen; si falla, en qué paso.
 //  El permiso de notificaciones se pide la primera vez que se programa algo, no al abrir Nook.
 //  kurth.workflowsProgramados = false pausa todo sin borrar reglas.
 //

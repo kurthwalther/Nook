@@ -9,6 +9,7 @@ export DEVELOPER_DIR=${DEVELOPER_DIR:-$(xcode-select -p)}
 SALIDA=$(mktemp -d)/workflows
 xcrun swiftc -O -parse-as-library \
   "$REPO/Nook/Kurth/KurthWorkflowsModelo.swift" \
+  "$REPO/Nook/Kurth/KurthWorkflowsReplayModelo.swift" \
   "$REPO/kurth/checks/workflows.swift" \
   -o "$SALIDA"
 "$SALIDA" "$REPO"

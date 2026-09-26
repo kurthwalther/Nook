@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Ventas</title>
+<!-- kurth/checks/replay.sh: la versión con la que se graba el workflow. -->
+<style>
+  body { font: 14px -apple-system, system-ui; margin: 24px; }
+  .btn { padding: 6px 10px; margin-right: 4px; }
+  .btn-primary { background: #0a84ff; color: #fff; }
+  li { margin: 6px 0; }
+</style>
+<script>
+  // Lo que hace la página lo recibe la prueba por un canal (window.name no sobrevive entre archivos).
+  const anotar = (x) => window.webkit.messageHandlers.anotar.postMessage(x);
+  const estado = () => [document.getElementById('q').value, document.getElementById('periodo').value,
+                        document.getElementById('envio').checked].join('|');
+</script>
+</head><body>
+<h1>Ventas</h1>
+<section id="filtros">
+  <input id="q" type="search" placeholder="Buscar producto">
+  <label for="periodo">Periodo</label>
+  <select id="periodo" onchange="anotar('periodo:' + this.value)">
+    <option value="semana">Esta semana</option>
+    <option value="mes">Este mes</option>
+  </select>
+  <label><input type="checkbox" id="envio" onchange="anotar('envio:' + this.checked)"> Incluir envío</label>
+  <div class="barra">
+    <button class="btn btn-primary" id="filtrar" onclick="anotar('filtrar:' + estado())">Filtrar</button>
+    <button class="btn" onclick="anotar('limpiar')">Limpiar</button>
+    <button class="btn" onclick="anotar('descargar')">Descargar informe</button>
+  </div>
+</section>
+<ul id="lista">
+  <li id="fila-krei">Krei <button class="btn-sm" onclick="anotar('editar:krei')">Editar</button></li>
+  <li id="fila-uf">Ultrafemme <button class="btn-sm" onclick="anotar('editar:uf')">Editar</button></li>
+</ul>
+<a href="detalle.html" class="link">Ver detalle</a>
+</body></html>

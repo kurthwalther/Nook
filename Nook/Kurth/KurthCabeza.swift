@@ -30,6 +30,11 @@
 //
 //  Se apaga con kurth.agentConCabeza = false (la guardia de confirmado del MCP sigue igual).
 //
+//  Workflows (26 sep, KurthWorkflowsReplay.swift): en una corrida programada la guardia no frena en
+//  las pestañas de esa corrida (Kurth: "los programados siempre van en sin permisos porque replican
+//  lo que el usuario hizo"); en una manual, la tarjeta es la de siempre y el sí o el no le llegan al
+//  replay, que espera, en vez de mandarse al agente como mensaje.
+//
 
 import AppKit
 import Foundation
@@ -92,6 +97,8 @@ final class KurthCabeza {
     private static let pausaTrasDetener: TimeInterval = 30
 
     func detener() {
+        // kurth: si la pestaña es de un workflow que se está repitiendo, esa corrida para.
+        if let tab = KurthCabezaGancho.shared.controlada { KurthWorkflowsReplay.shared.detener(enPestaña: tab) }
         detenidoHasta = Date().addingTimeInterval(Self.pausaTrasDetener)
         KurthAgentService.actual?.cancelar()
         soltar()
@@ -121,7 +128,7 @@ final class KurthCabeza {
         if delPanel { soltar() }
         // Un botón que esperaba confirmación sobrevive al turno en que se frenó (el agente pregunta
         // y termina) y al siguiente no: si Kurth contestó otra cosa, ya no aplica.
-        if let p = pendiente, p.turno < turno { descartarPendiente() }
+        if let p = pendiente, p.turno < turno, !replayEspera { descartarPendiente() }
     }
 
     // MARK: - Lo irreversible
@@ -209,6 +216,14 @@ final class KurthCabeza {
     /// La respuesta desde la tarjeta de confirmación del panel (cuando el agente preguntó por chat).
     func responder(_ si: Bool) {
         guard let p = pendiente else { return }
+        // kurth: la pregunta es del replay de un workflow: la respuesta va a él, no al agente.
+        if let r = respuestaDelReplay {
+            respuestaDelReplay = nil
+            replayEspera = false
+            if si { autorizar(p) } else { descartarPendiente() }
+            r(si)
+            return
+        }
         let agente = KurthAgentService.actual
         if si {
             autorizar(p)
@@ -217,6 +232,45 @@ final class KurthCabeza {
             descartarPendiente()
             agente?.enviar("No, no lo hagas.")
         }
+    }
+
+    // MARK: - Workflows
+
+    /// Pestañas de corridas programadas, por corrida: ahí lo irreversible no se frena.
+    @ObservationIgnored private var corridas: [ObjectIdentifier: Set<UUID>] = [:]
+    /// Una corrida programada que hace el agente completo (workflow sin pasos que repetir): no se
+    /// sabe de antemano qué pestaña abre, así que vale en todas mientras dura.
+    @ObservationIgnored private var corridaDelAgente = false
+
+    func autorizarCorrida(_ tabs: Set<UUID>?, de dueño: AnyObject) {
+        corridas[ObjectIdentifier(dueño)] = tabs
+    }
+
+    func autorizarCorridaDelAgente(_ si: Bool) { corridaDelAgente = si }
+
+    /// Para las guardias de KurthCopilot (click, fill_form, act).
+    func corridaAutoriza(_ tab: UUID) -> Bool {
+        corridaDelAgente || corridas.values.contains { $0.contains(tab) }
+    }
+
+    @ObservationIgnored private var respuestaDelReplay: ((Bool) -> Void)?
+    /// El replay de una corrida manual espera el sí o el no de la tarjeta: se muestra aunque el
+    /// agente no esté corriendo (KurthAgentChat.confirmacionPendiente).
+    private(set) var replayEspera = false
+
+    func esperarRespuestaDelReplay(_ r: @escaping (Bool) -> Void) {
+        respuestaDelReplay = r
+        replayEspera = true
+    }
+
+    /// El replay se detuvo mientras esperaba: la tarjeta se va y la espera termina en no.
+    func soltarReplay() {
+        let r = respuestaDelReplay
+        respuestaDelReplay = nil
+        guard replayEspera else { return }
+        replayEspera = false
+        descartarPendiente()
+        r?(false)
     }
 
     // MARK: - Desde el permiso de ACP

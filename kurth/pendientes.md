@@ -136,6 +136,40 @@ popover Workflows: Grabar nuevo; filas con Ejecutar (pregunta parámetros con el
   en modo Manual pide permiso por cada herramienta (se queda "esperando"): para que corra sola, el modo
   del agente tiene que dejar pasar las herramientas de nook. Iframes no se graban (solo el marco principal).
 
+## Workflows: replay exacto y programados sin restricciones — 26 sep (rama `kurth-replay`, solo compila, sin instalar)
+
+Kurth: "cambia el ícono de workflows"; "los programados siempre van en sin permisos porque replican lo que
+el usuario hizo, pero debe ser exacto o casi exacto por si cambia ligeramente el diseño".
+- **Ícono:** `point.topleft.down.to.point.bottomright.curvepath` (recorrido, no "grabar"); grabando sigue el
+  punto rojo que respira. "Grabar nuevo" y "Volver a grabar" conservan `record.circle`.
+- **Replay sin LLM** (`KurthWorkflowsReplay.swift` + `KurthWorkflowsReplayModelo.swift` + `KurthReplay.js` en el
+  mundo del copiloto): Ejecutar, `run` y lo programado repiten el JSON paso por paso; actúa por
+  `KurthCopilot.call` (clic nativo o JS, diálogos, guardia). Localiza en 6 niveles: exacto → normalizado →
+  etiqueta → selector (uno de estructura solo si el nombre se parece: con el orden movido apuntaría a otro)
+  → difuso (umbral 0.5 y ventaja de 0.08 sobre el segundo; si empatan, no adivina) → posición (solo íconos
+  sin nombre). Hasta 15 s por paso; un difuso no se acepta antes de 1.5 s. La grabadora ahora guarda `pos`
+  y `orden` para desempatar dos "Editar". Si un paso no aparece: primero va a la dirección grabada, luego
+  el agente del panel resuelve SOLO ese paso (5 min tope), si no "falló en el paso N" + notificación.
+  «secreto» detiene con "necesita que inicies sesión". No se repiten: Space, ⌘-clic (su pestaña nueva sí),
+  archivos (solo hay el nombre). Manual: primera pestaña al frente, se quedan abiertas. Programada: segundo
+  plano, se cierran si terminó bien. Workflow sin pasos (solo narración): sigue yendo completo al agente.
+- **Permisos:** programada = la guardia de irreversibles no frena en las pestañas de la corrida
+  (`KurthCabeza.corridaAutoriza`) y el agente del respaldo va en `bypassPermissions` solo mientras resuelve
+  (`KurthAgentService.forzarModo`, no se guarda como elección, manda sobre las reglas por sitio, si Kurth
+  elige otro modo gana él). Manual = guardia normal: la tarjeta "Va a publicar…" sale en el panel aunque el
+  agente esté apagado y el replay espera el sí/no. Detener en la cápsula para esa corrida.
+- **Registro:** cada corrida (`modo: "replay"`) guarda por paso nivel, ms, resultado y, si cambió, "Cambió de
+  «Descargar informe» a «Descargar reporte»"; el detalle lo pinta y ofrece "Actualizar el workflow con
+  esto" (cambia nombre y selector de esos pasos; no pide reescribir el skill). MCP `kurth_workflow`:
+  `replay` (programada, esperar), `detener`, `actualizar`, `runs` con `pasos`.
+- **Prueba sin Nook:** `kurth/checks/replay.sh` graba con la grabadora real y repite con el bucle real contra la
+  original y contra una cambiada en la misma dirección (texto, clases, ids, orden, enlace→botón, acentos):
+  completa en ~9 s (4 difusos, 3 normalizados). También respaldo, detener y secreto.
+- **Falta en vivo:** todo lo de Nook (pestañas reales, clic nativo en la manual, la tarjeta con el replay
+  esperando, el respaldo del agente de punta a punta, `forzarModo` con el vaivén de reglas por sitio,
+  notificaciones). **Sin decidir:** textos nuevos visibles ("Corriendo…", "Actualizar el workflow con esto",
+  "Ver los N pasos") no pasaron por Kurth; umbral 0.5 medido solo con la página de prueba.
+
 ## El cel (Remote Control) — 25 sep noche, instalado
 
 Botón a la derecha del de permisos (`KurthRemoto.swift`, `KurthRemotoPopover.swift`, MCP

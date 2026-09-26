@@ -15,9 +15,10 @@
 //     fuente de verdad de la lista) y le pide al agente del panel que escriba el skill en
 //     ~/.claude/skills/<nombre>/SKILL.md con sus herramientas y permisos (Nook no escribe en
 //     ~/.claude). El agente lo registra de vuelta con kurth_workflow define: descripción y parámetros.
-//   · Ejecutar: una orden al agente (con los parámetros) desde el popover, el MCP o el programador
-//     (KurthWorkflowsProgramador.swift). El agente trabaja con el modo "con cabeza" de siempre y cierra
-//     con una línea «Resultado: …» que se guarda como corrida.
+//   · Ejecutar (popover, MCP o programador, KurthWorkflowsProgramador.swift): desde el 26 sep, Nook
+//     repite los pasos del JSON sin LLM (KurthWorkflowsReplay.swift) y el agente solo resuelve el paso
+//     que no aparezca. Un workflow sin pasos que repetir (solo narración) sigue yendo completo al
+//     agente, que cierra con una línea «Resultado: …» que se guarda como corrida.
 //  Ajuste kurth.workflows (false = sin botón ni grabador en páginas nuevas).
 //
 
@@ -284,6 +285,9 @@ final class KurthWorkflows {
         p.detalle = texto("detalle")
         p.secreto = (d["secreto"] as? Bool) == true ? true : nil
         p.doble = (d["doble"] as? Bool) == true ? true : nil
+        // kurth: para que el replay desempate dos elementos que se llaman igual (KurthReplay.js).
+        p.pos = (d["pos"] as? [NSNumber])?.map(\.doubleValue)
+        p.orden = (d["orden"] as? NSNumber)?.intValue
         p.url = webView.url?.absoluteString
         p.titulo = webView.title
         p.tab = pestaña(de: webView)?.uuidString
@@ -545,6 +549,18 @@ final class KurthWorkflows {
     @ObservationIgnored private(set) var activa: CorridaActiva?
 
     func correr(_ nombre: String, valores: [String: String], programada: Bool) throws {
+        guard let wf = tienda.cargar(nombre) else { throw Problema.noExiste(nombre) }
+        // El replay exacto, sin LLM (KurthWorkflowsReplay). El agente completo solo si no hay pasos.
+        if wf.acciones > 0 {
+            try KurthWorkflowsReplay.shared.correr(nombre, valores: valores, programada: programada)
+            return
+        }
+        try correrConAgente(nombre, valores: valores, programada: programada)
+    }
+
+    /// La corrida de antes del replay: el agente lee el skill y lo sigue. Programada, su sesión va en
+    /// "sin restricciones" y la guardia de lo irreversible no frena mientras dura (Kurth, 26 sep).
+    func correrConAgente(_ nombre: String, valores: [String: String], programada: Bool) throws {
         guard var wf = tienda.cargar(nombre) else { throw Problema.noExiste(nombre) }
         var efectivos: [String: String] = [:]
         for p in wf.parametros { efectivos[p.nombre] = valores[p.nombre] ?? wf.valorInicial(p) }
@@ -559,7 +575,11 @@ final class KurthWorkflows {
         pedirAlAgente(visible, instrucciones) { [weak self] in
             // Si esperó en la cola, la corrida empieza cuando de verdad sale.
             self?.activa = CorridaActiva(nombre: nombre, corrida: corrida.id, programada: programada)
-            self?.actualizarCorrida(nombre, corrida.id) { $0.inicio = Date() }
+            self?.actualizarCorrida(nombre, corrida.id) { $0.inicio = Date(); $0.modo = "agente" }
+            if programada {
+                KurthAgentService.actual?.forzarModo("bypassPermissions")
+                KurthCabeza.shared.autorizarCorridaDelAgente(true)
+            }
         }
     }
 
@@ -573,6 +593,9 @@ final class KurthWorkflows {
     /// Gancho en KurthAgentService.cerrarTurno: se lee cómo acabó la corrida y sale lo encolado.
     func turnoTerminado() {
         defer { despacharCola() }
+        // El turno era el del respaldo de un replay: su respuesta es para el replay.
+        if let agente = KurthAgentService.actual,
+           KurthWorkflowsReplay.shared.turnoDelAgente(agente.mensajes.last { $0.autor == .agente }?.texto ?? "") { return }
         guard var a = activa, let agente = KurthAgentService.actual else { return }
         a.turnos += 1
         activa = a
@@ -597,6 +620,11 @@ final class KurthWorkflows {
             $0.estado = estado
             $0.resumen = resumen
             $0.fin = estado == .esperando ? nil : Date()
+        }
+        // Programada: el modo y la guardia vuelven a lo de siempre en cuanto el agente suelta el turno.
+        if a.programada {
+            KurthAgentService.actual?.forzarModo(nil)
+            KurthCabeza.shared.autorizarCorridaDelAgente(false)
         }
         switch estado {
         case .esperando:
