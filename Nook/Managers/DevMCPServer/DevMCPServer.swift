@@ -335,6 +335,7 @@ final class DevMCPServer {
         if let result = KurthMCPTools.call(name, args, window: window, tabs: bm.tabs) { return result }
         if let result = await KurthCopilot.call(name, args, browserManager: bm) { return result }
         if let result = await KurthTraduccion.llamar(name, args, browserManager: bm) { return result } // kurth: traducir la página (KurthTraduccion.swift)
+        if let result = await KurthWorkflows.llamar(name, args, browserManager: bm, window: window) { return result } // kurth: workflows grabados (KurthWorkflowsMCP.swift)
 
         do {
             if BrowserTools.toolsByName[name] != nil {

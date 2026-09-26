@@ -78,6 +78,7 @@ struct NookApp: App {
                         KurthAccesos.registrar(tabs: browserManager.tabs) // kurth: favoritos y guardados como accesos
                         KurthSplit.registrar(browserManager: browserManager) // kurth: split útil (KurthSplit.swift)
                         KurthSync.shared.arrancar(tabs: browserManager.tabs) // kurth: iCloud Drive (KurthSync.swift)
+                        KurthWorkflows.shared.arrancar(browserManager: browserManager) // kurth: workflows y su programador
                     }
                 
                 

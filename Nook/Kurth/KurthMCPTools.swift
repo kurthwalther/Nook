@@ -91,6 +91,12 @@ enum KurthMCPTools {
                 info: "Boosts: aplicar el CSS y JS propios por sitio (kurth_boost). En false se quitan de todas las pestañas al instante (el CSS en vivo; las que tienen JS se recargan) sin borrar ninguno"),
         Setting(key: KurthCabeza.clave, type: "bool", defaultValue: true,
                 info: "Agente con cabeza: mientras el agente del panel actúa en una pestaña, anillo fino en esa pestaña (tira y lateral) y cápsula «Trabajando en esta pestaña · Detener» sobre la página; ante un botón de comprar, pagar, borrar o publicar, anillo naranja en el botón y tarjeta en el panel que dice qué va a hacer. false = sin nada de eso (la guardia confirmado: true del MCP sigue)"),
+        Setting(key: KurthWorkflows.ajuste, type: "bool", defaultValue: true,
+                info: "Workflows grabados: botón junto al de captura en el panel del agente (grabar, editar, ejecutar, programar) y el grabador en las páginas. false quita el botón al momento; el grabador sale de las páginas que se abran después de reiniciar Nook. Herramienta kurth_workflow"),
+        Setting(key: KurthWorkflows.ajusteVoz, type: "bool", defaultValue: true,
+                info: "Workflows: encender el micrófono al empezar a grabar (dictado en la Mac, es-MX, sin servidor). Lo cambia también el botón del micrófono del aviso"),
+        Setting(key: KurthWorkflows.ajusteProgramados, type: "bool", defaultValue: true,
+                info: "Workflows programados: false pausa todas las corridas programadas sin borrar sus reglas; al reanudar, lo que tocó durante la pausa aparece como saltado (se ofrece correrlo, no se corre solo)"),
     ]
 
     static let tools: [AIToolDefinition] = [
@@ -138,6 +144,7 @@ enum KurthMCPTools {
         KurthSuspension.herramienta,
         KurthAutoconsent.herramienta,
         KurthBoosts.herramienta,
+        KurthWorkflows.herramienta, // se atiende en DevMCPServer.callTool (camino async)
     ]
 
     /// nil si la herramienta no es de la capa Kurth.
@@ -240,6 +247,7 @@ enum KurthMCPTools {
             defaults.removeObject(forKey: key)
             if key == KurthSuspension.clave { KurthSuspension.ajusteCambio() }
             if key == KurthBoosts.ajuste { KurthBoosts.shared.ajusteCambio() }
+            if key == KurthWorkflows.ajusteProgramados { KurthWorkflows.shared.reprogramar() }
             return nil
         }
         switch setting.type {
@@ -262,6 +270,8 @@ enum KurthMCPTools {
         if key == KurthSuspension.clave { KurthSuspension.ajusteCambio() }
         // Los boosts se ponen o se quitan de las pestañas abiertas en ese momento.
         if key == KurthBoosts.ajuste { KurthBoosts.shared.ajusteCambio() }
+        // Pausar o reanudar lo programado duerme o rearma el temporizador.
+        if key == KurthWorkflows.ajusteProgramados { KurthWorkflows.shared.reprogramar() }
         return nil
     }
 

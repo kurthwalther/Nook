@@ -110,6 +110,7 @@ final class KurthPageState {
         KurthPasswords.instalar(en: webView)
         KurthAutoconsent.instalar(en: webView)
         KurthBoosts.instalar(en: webView)
+        KurthWorkflows.instalar(en: webView)
         guard objc_getAssociatedObject(webView, &observedKey) == nil else { return }
         objc_setAssociatedObject(webView, &observedKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         let selector = NSSelectorFromString("_setNeedsScrollGeometryUpdates:")

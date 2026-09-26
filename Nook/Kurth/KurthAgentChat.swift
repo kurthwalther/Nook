@@ -98,7 +98,12 @@ struct KurthAgentChat: View {
                         tarjetaDeConfirmacion(pendiente)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
-                    if muestraPlan {
+                    if let grabacion = KurthWorkflows.shared.grabacion, grabacion.ventana == windowState.id,
+                       grabacion.fase == .grabando {
+                        // kurth: lo que se va grabando, una línea gris por paso (KurthWorkflowsAviso.swift).
+                        KurthWorkflowsEnVivo(grabacion: grabacion)
+                            .transition(.opacity)
+                    } else if muestraPlan {
                         KurthAgentPlan(pasos: agente.plan, trabajando: agente.estado == .trabajando)
                             .transition(.opacity)
                     }
@@ -544,7 +549,9 @@ struct KurthAgentChat: View {
     }
 
     private var puedeEnviar: Bool {
-        agente.aceptaMensajes
+        // Grabando un workflow aquí, lo escrito es una nota de la grabación: no depende del agente.
+        if KurthWorkflows.shared.grabandoEn(windowState.id) { return !texto.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        return agente.aceptaMensajes
             && (!texto.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !KurthSenalar.shared.referencias.isEmpty
                 || !agente.adjuntos.isEmpty || !KurthMenciones.shared.elegidas.isEmpty)
     }
@@ -558,6 +565,12 @@ struct KurthAgentChat: View {
 
     private func enviar() {
         guard puedeEnviar else { return }
+        // kurth: mientras se graba un workflow en esta ventana, lo escrito se guarda como narración.
+        if KurthWorkflows.shared.grabandoEn(windowState.id) {
+            KurthWorkflows.shared.anotar(texto.trimmingCharacters(in: .whitespacesAndNewlines))
+            texto = ""
+            return
+        }
         let escrito = texto.trimmingCharacters(in: .whitespacesAndNewlines)
         let señalados = KurthSenalar.shared.tomarReferencias()
         let mensaje = escrito.isEmpty ? (señalados.isEmpty ? "Mira lo que te adjunté." : "Mira lo que señalé.") : escrito
