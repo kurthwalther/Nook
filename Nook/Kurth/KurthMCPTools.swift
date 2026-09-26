@@ -83,6 +83,8 @@ enum KurthMCPTools {
                 info: "Minutos sin ser la pestaña activa tras los que se suelta su vista web (se conservan título, favicon, URL, scroll y formularios; al elegirla se recarga sola). 0 = nunca por inactividad; la presión de memoria del sistema sigue suspendiendo. Fijadas y favoritos también; nunca la visible, la que reproduce audio o video, la de Peek ni la que tiene un diálogo pendiente"),
         Setting(key: "kurth.splitEdgeWidth", type: "number", defaultValue: 40.0,
                 info: "Split: ancho en pt de la franja en la orilla derecha de la página donde soltar una pestaña arrastrada (lateral o tira) la abre en el panel derecho"),
+        Setting(key: KurthTraduccion.ajuste, type: "bool", defaultValue: true,
+                info: "Traducción en el dispositivo: si la página está en un idioma que no es del sistema y Translation lo soporta, la cápsula de dirección ofrece traducirla (ícono translate). Apagado no detecta idioma; kurth_translate sigue funcionando"),
         Setting(key: "kurth.splitOptionClick", type: "bool", defaultValue: true,
                 info: "Split: ⌥-clic en una mitad del split la saca; ⌥-clic en una pestaña de la lateral o la tira con split abierto la mete al panel derecho"),
     ]

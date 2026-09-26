@@ -60,6 +60,8 @@ struct KurthTopBarView: View {
     @State private var isHoveringAddress = false
     /// El mouse está sobre la cápsula del dominio: ahí aparece el ícono de copiar (Kurth, 25 sep).
     @State private var isHoveringCapsule = false
+    /// kurth: ofrecer traducir páginas en otro idioma (KurthTraduccionControl.swift).
+    @AppStorage(KurthTraduccion.ajuste) private var ofrecerTraduccion = true
 
     private var isCapsules: Bool { barStyle != "tinted" }
     private var isCompact: Bool { tabLayout == "compact" }
@@ -86,6 +88,9 @@ struct KurthTopBarView: View {
             if activo { inmersiva.encender(en: windowState) } else { inmersiva.apagar() }
         }
         .onDisappear { inmersiva.apagar() }
+        // kurth: detecta el idioma de la pestaña a la vista y pide la descarga de idiomas
+        // (invisible; KurthTraduccionControl.swift).
+        .background { KurthTraduccionAncla() }
     }
 
     /// Siempre, salvo en modo inmersivo; ahí, con el mouse encima, con el panel de opciones o el del
@@ -281,18 +286,25 @@ struct KurthTopBarView: View {
             } else if isCapsules {
                 // Cápsula: el dominio centrado y los íconos anclados a las orillas, no al texto.
                 // Mide lo que ocupa el dominio (mínimo `addressMinWidth`) y crece si es largo.
+                // Con el ícono de traducir hay dos íconos a la derecha: el hueco crece de los dos
+                // lados para que el dominio siga centrado.
                 hostText(tab)
-                    .padding(.horizontal, Self.capsuleInset + KurthEscala.pt(20) + NookDesign.Spacing.lg)
+                    .padding(.horizontal, Self.capsuleInset + KurthEscala.pt(20) * (muestraTraduccion ? 2 : 1) + NookDesign.Spacing.lg)
                     .frame(minWidth: Self.addressMinWidth)
                     .frame(height: Self.capsuleHeight)
                     .overlay(alignment: .leading) {
                         copyButton(tab).padding(.leading, Self.capsuleInset)
                     }
                     .overlay(alignment: .trailing) {
-                        reloadButton.kurthFieldIcon().padding(.trailing, Self.capsuleInset)
+                        HStack(spacing: 0) {
+                            traduccionBoton.kurthFieldIcon()
+                            reloadButton.kurthFieldIcon()
+                        }
+                        .padding(.trailing, Self.capsuleInset)
                     }
                     // Progreso de carga en la orilla de abajo; KurthGlass lo recorta con la cápsula.
                     .overlay { KurthProgresoDeCarga(webView: windowWebView) }
+                    .animation(NookDesign.Motion.standard, value: muestraTraduccion)
                     .modifier(KurthGlass(tint: glassTint))
                     .onHoverTracking { isHoveringCapsule = $0 }
                     .modifier(KurthZonaDeDeslizarAqui())
@@ -301,7 +313,9 @@ struct KurthTopBarView: View {
                 HStack(spacing: NookDesign.Spacing.md + 2) {
                     copyButton(tab)
                     hostText(tab)
+                    traduccionBoton.kurthFieldIcon()
                 }
+                .animation(NookDesign.Motion.standard, value: muestraTraduccion)
                 .padding(.horizontal, NookDesign.Spacing.md)
                 .onHoverTracking { isHoveringCapsule = $0 }
                 .modifier(KurthZonaDeDeslizarAqui())
@@ -351,6 +365,19 @@ struct KurthTopBarView: View {
     /// Recargar, cargando (gira) o detener (X, solo al pasar el mouse): KurthReloadButton.swift.
     private var reloadButton: some View { KurthReloadButton(session: session) }
 
+    /// Traducir / ver original (KurthTraduccionControl.swift); nada si la página no lo necesita.
+    @ViewBuilder
+    private var traduccionBoton: some View {
+        if muestraTraduccion, let webView = windowWebView {
+            KurthTraduccionBoton(webView: webView, ventanaID: windowState.id)
+                .transition(.opacity.combined(with: .scale(scale: 0.8)))
+        }
+    }
+
+    private var muestraTraduccion: Bool {
+        windowWebView.map { KurthTraduccion.of($0).muestraControl(ofrecer: ofrecerTraduccion) } ?? false
+    }
+
     /// Solo el dominio, sin "www.": la ruta y el título salen de la barra.
     static func shortHost(_ url: URL) -> String {
         guard let host = url.host(), !host.isEmpty else { return url.absoluteString }
@@ -370,6 +397,11 @@ struct KurthTopBarView: View {
 
     private var trailingControls: some View {
         HStack(spacing: NookDesign.Spacing.xxs) {
+            // Con pestañas compactas no hay cápsula de dirección: traducir va con los demás íconos.
+            if isCompact {
+                traduccionBoton.kurthBarIcon(size: iconSize)
+            }
+
             if let extensionManager = browserManager.extensionManager {
                 let pinnedIDs = nookSettings.pinnedExtensionIDs
                 let pinned = extensionManager.installedExtensions.filter { pinnedIDs.contains($0.id) }
