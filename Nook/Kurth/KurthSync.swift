@@ -48,6 +48,9 @@ struct KurthInstantanea: Codable {
     /// Memorias de Nook, con sus borrados (KurthMemorias). Opcional: una Mac con la versión anterior
     /// escribe instantáneas sin él y lee las nuevas ignorándolo, sin cambiar `formato`.
     var memorias: [KurthMemoria]? = nil
+    /// Extensiones (KurthExtensiones): cuáles, de dónde, prendidas o no y lo que se aprobó. nil = esta Mac no
+    /// las ha cargado todavía; quien lee no toca nada. Opcional por la misma razón que `memorias`.
+    var extensiones: [KurthExtensionSincronizada]? = nil
 }
 
 struct KurthAjusteSincronizado: Codable, Equatable {
@@ -127,6 +130,7 @@ final class KurthSync {
         if estado.ajustes.isEmpty { anotarAjustes(fecha: Date(timeIntervalSince1970: 0)) }
         observarArbol()
         observarTemas()
+        KurthExtensiones.shared.arrancar()
         NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { _ in
             MainActor.assumeIsolated { KurthSync.shared.programarExportacion() }
         }
@@ -223,7 +227,8 @@ final class KurthSync {
             elementos: elementos.values.sorted { $0.id.uuidString < $1.id.uuidString },
             temas: temas,
             ajustes: estado.ajustes,
-            memorias: KurthMemorias.shared.paraSincronizar())
+            memorias: KurthMemorias.shared.paraSincronizar(),
+            extensiones: KurthExtensiones.shared.paraSincronizar())
         guardarEstado()
 
         let codificador = JSONEncoder()
@@ -295,6 +300,7 @@ final class KurthSync {
             mezclarTemas(i)
             mezclarAjustes(i)
             if let memorias = i.memorias { KurthMemorias.shared.mezclarRemotas(memorias) }
+            if let extensiones = i.extensiones { KurthExtensiones.shared.mezclarRemotas(extensiones) }
             estado.leidos[i.dispositivo] = i.escrito
             log.info("Sincronizado con \(i.nombre, privacy: .public)")
         }

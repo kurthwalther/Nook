@@ -261,7 +261,11 @@ extension ExtensionManager {
         let consent = Self.consentItems(for: staged, comparedTo: replacesStoreInstall ? nil : previous)
         let needsConsent = existing == nil || replacesStoreInstall
             || !consent.permissions.isEmpty || !consent.hosts.isEmpty
-        if needsConsent {
+        // kurth: una extensión que llega de la otra Mac (KurthExtensiones) no vuelve a preguntar si pide lo
+        // mismo que Kurth ya aprobó allá; si pide más, pregunta como siempre.
+        if needsConsent, KurthExtensiones.preaprobado(extensionId, permisos: consent.permissions, sitios: consent.hosts) {
+            Self.logger.info("'\(name, privacy: .public)' approved on the other Mac (KurthExtensiones): no sheet")
+        } else if needsConsent {
             guard interactive else {
                 Self.logger.info("Skipping update of '\(name, privacy: .public)': new version requests additional permissions")
                 throw ExtensionError.cancelled
