@@ -219,8 +219,11 @@ struct WebsiteView: View {
                             windowState: windowState,
                             compositorVersion: windowState.compositorVersion,
                             selectedItemID: windowState.selectedItemID,
-                            cornerRadius: cornerRadius,
-                            squareTopCorners: nookSettings.topBarAddressView
+                            // kurth: con la barra flotante la página llega hasta arriba: cuatro esquinas
+                            // redondas con el radio de página (KurthChrome.pageMinimumRadius); la máscara
+                            // de forma de antes se fue con upstream (parpadeaba el video en negro).
+                            cornerRadius: KurthChrome.floatingTopBar && nookSettings.topBarAddressView ? KurthChrome.pageMinimumRadius : cornerRadius,
+                            squareTopCorners: nookSettings.topBarAddressView && !KurthChrome.floatingTopBar
                         )
                         .coordinateSpace(name: dragCoordinateSpace)
                         // The shadow comes from this opaque shape behind the webview, and the
