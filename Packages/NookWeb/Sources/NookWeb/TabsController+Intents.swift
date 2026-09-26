@@ -54,6 +54,9 @@ extension TabsController {
     /// order under it (a trail). A pinned tab, a favorite, or a tab at the depth limit takes no
     /// children; the tab then goes right below it (`newTabPosition`).
     func childTabPosition(in window: BrowserWindowState, opener: UUID) -> (Parent, UUID?)? {
+        // kurth: sin árbol (Kurth, 26 sep: "quitemos las pestañas que se abren en árbol, es raro"). La pestaña
+        // nueva va junto a la que la abrió, al mismo nivel. `kurth.pestanasEnArbol` = true regresa el de upstream.
+        if !UserDefaults.standard.bool(forKey: "kurth.pestanasEnArbol") { return newTabPosition(in: window, after: opener) }
         let source = tree(owner(of: window))
         guard source.spaceID(of: opener) == window.spaceID, source.canTakeChild(opener) else {
             return newTabPosition(in: window, after: opener)

@@ -57,6 +57,8 @@ enum KurthMCPTools {
                 info: "Dejar que WebKit extienda el color del borde superior de la página bajo la barra"),
         Setting(key: "kurth.scrollPocket", type: "bool", defaultValue: false,
                 info: "Mostrar el scroll pocket de WebKit (el velo al hacer scroll bajo la barra)"),
+        Setting(key: "kurth.pestanasEnArbol", type: "bool", defaultValue: false,
+                info: "Pestañas en árbol de upstream (tab trails): la que abre un link cuelga de la que la abrió. false = al mismo nivel, junto a ella"),
         Setting(key: KurthLinksExternos.ajuste, type: "string", defaultValue: "pestana",
                 info: "Links que llegan de otras apps: pestana = en su app si está instalada (universal links, o Zoom/Teams/Spotify/WhatsApp por su esquema), si no pestaña nueva al frente; ventanita = la ventana flotante de upstream"),
         Setting(key: "kurth.autoPorSitio", type: "bool", defaultValue: true,

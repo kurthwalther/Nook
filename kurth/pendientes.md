@@ -4,7 +4,9 @@ Una sola lista para las dos Macs. Quien avance, la actualiza en el mismo commit.
 Detalle de Zen en `kurth/plan-zen.md`.
 
 ## Decisiones de Kurth · 26 sep noche
-- Pestañas en árbol (tab trails de 1.1.1): **se quedan**.
+- ~~Pestañas en árbol (tab trails de 1.1.1): se quedan.~~ **Cambió el 26 sep en la tarde:** "quitemos las pestañas que se
+  abren en árbol, es raro". Ahora van al mismo nivel (`kurth.pestanasEnArbol`, false). Y los links que piden pestaña
+  nueva se abren en la misma página, salvo ventanas emergentes y "abrir en otra pestaña" (⌘-clic, rueda, menú).
 - Workflows **no viajan** entre Macs (evitar corridas programadas dobles). Las memorias sí.
 - Programados **sin restricciones**; manuales con la guardia de irreversibles.
 - Trazo (dirección del Creative): descartada.
