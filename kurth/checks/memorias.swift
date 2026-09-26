@@ -90,8 +90,10 @@ struct MemoriasCheck {
         }
         rechaza("tarjeta Visa con espacios", "La tarjeta es 4111 1111 1111 1111")
         rechaza("tarjeta Amex pegada", "Amex 378282246310005")
-        rechaza("llave de Anthropic", "sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345")
-        rechaza("llave de Google", "AIzaSyA1234567890abcdefghijklmnopqrstuv")
+        rechaza("llave de Anthropic", "sk-ant-" + "api03-abcdefghijklmnopqrstuvwxyz012345")
+        // Partidas a propósito: son de mentira, pero con la forma exacta de una llave el escáner de secretos de
+        // GitHub las marca como fuga (alerta #1, 26 sep). El programa las ve enteras; el escáner, en dos pedazos.
+        rechaza("llave de Google", "AIza" + "SyA1234567890abcdefghijklmnopqrstuv")
         rechaza("token de Meta", "EAAGm0PX4ZCpsBAKZCZBZBZBxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzAB12")
         rechaza("contraseña con etiqueta", "Usuario kurth, Contraseña: Hola123!")
         rechaza("NIP", "NIP: 4455")
