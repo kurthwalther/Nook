@@ -303,11 +303,9 @@ struct WindowView: View {
                     KurthCuadricula() // kurth: todas las pestañas (pellizco o ⇧⌘\)
                         .zIndex(2700)
                 }
-                // El indicador de carga ya no tiene franja propia: va sobre la orilla de arriba de
-                // la barra, sin quitarle clics ni el arrastre de la ventana.
-                WebsiteLoadingIndicator()
-                    .allowsHitTesting(false)
-                    .zIndex(3000)
+                // kurth: el progreso de carga va dentro de la cápsula de la dirección
+                // (KurthProgresoDeCarga en KurthTopBarView); WebsiteLoadingIndicator queda para la
+                // barra de upstream.
             }
             .overlay {
                 if aiService.isExecutingTools {

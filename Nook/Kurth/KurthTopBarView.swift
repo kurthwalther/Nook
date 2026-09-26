@@ -155,6 +155,13 @@ struct KurthTopBarView: View {
                 // queda para cuando aparece un menú fijo al hacer scroll.
                 .animation(isAtTop ? nil : .easeOut(duration: 0.15), value: headerFill)
 
+            // Sin cápsula (tinted, pestañas separadas) el progreso va de lado a lado en la orilla de
+            // abajo de la barra, donde vive la línea divisoria.
+            if !isCapsules && !isCompact && hasPage {
+                KurthProgresoDeCarga(webView: windowWebView)
+                    .frame(height: barHeight)
+            }
+
             Rectangle()
                 .fill(.primary.opacity(hairlineOpacity))
                 .frame(height: 1 / displayScale)
@@ -263,6 +270,8 @@ struct KurthTopBarView: View {
             if isCompact {
                 // Pestañas compactas (KurthTabStrip.swift): la tira ocupa todo el centro.
                 KurthTabStrip(glass: isCapsules, tint: glassTint, iconsOnly: compactTabs == "icons")
+                    // La tira es la cápsula de la dirección en este modo: el progreso va en su orilla.
+                    .overlay { KurthProgresoDeCarga(webView: windowWebView).clipShape(Capsule()) }
                     .padding(.horizontal, isCapsules ? 8 : NookDesign.Spacing.md)
                     // La tira publica su cápsula si todas caben; si se desplaza por dentro, no se
                     // desliza entre pestañas: ahí el gesto mueve la tira (KurthGestosDePestanas).
@@ -282,6 +291,8 @@ struct KurthTopBarView: View {
                     .overlay(alignment: .trailing) {
                         reloadButton.kurthFieldIcon().padding(.trailing, Self.capsuleInset)
                     }
+                    // Progreso de carga en la orilla de abajo; KurthGlass lo recorta con la cápsula.
+                    .overlay { KurthProgresoDeCarga(webView: windowWebView) }
                     .modifier(KurthGlass(tint: glassTint))
                     .onHoverTracking { isHoveringCapsule = $0 }
                     .modifier(KurthZonaDeDeslizarAqui())
