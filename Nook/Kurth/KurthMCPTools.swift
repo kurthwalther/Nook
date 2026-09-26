@@ -87,6 +87,8 @@ enum KurthMCPTools {
                 info: "Traducción en el dispositivo: si la página está en un idioma que no es del sistema y Translation lo soporta, la cápsula de dirección ofrece traducirla (ícono translate). Apagado no detecta idioma; kurth_translate sigue funcionando"),
         Setting(key: "kurth.splitOptionClick", type: "bool", defaultValue: true,
                 info: "Split: ⌥-clic en una mitad del split la saca; ⌥-clic en una pestaña de la lateral o la tira con split abierto la mete al panel derecho"),
+        Setting(key: KurthBoosts.ajuste, type: "bool", defaultValue: true,
+                info: "Boosts: aplicar el CSS y JS propios por sitio (kurth_boost). En false se quitan de todas las pestañas al instante (el CSS en vivo; las que tienen JS se recargan) sin borrar ninguno"),
     ]
 
     static let tools: [AIToolDefinition] = [
@@ -133,6 +135,7 @@ enum KurthMCPTools {
         ),
         KurthSuspension.herramienta,
         KurthAutoconsent.herramienta,
+        KurthBoosts.herramienta,
     ]
 
     /// nil si la herramienta no es de la capa Kurth.
@@ -142,6 +145,7 @@ enum KurthMCPTools {
         if let resultado = KurthAutoconsent.llamar(name, args) { return resultado }
         if let resultado = KurthSuspension.llamar(name, args, tabs: tabs) { return resultado }
         if let resultado = KurthSplit.llamar(name, args, window: window, tabs: tabs) { return resultado }
+        if let resultado = KurthBoosts.llamar(name, args, window: window, tabs: tabs) { return resultado }
         switch name {
         case "kurth_panel":
             let agente = (args["cual"] as? String) == "agente"
@@ -233,6 +237,7 @@ enum KurthMCPTools {
             if key == "kurth.aiSidebarWidth" { KurthPrefs.shared.aiSidebarWidth = setting.defaultValue as? Double ?? 330 }
             defaults.removeObject(forKey: key)
             if key == KurthSuspension.clave { KurthSuspension.ajusteCambio() }
+            if key == KurthBoosts.ajuste { KurthBoosts.shared.ajusteCambio() }
             return nil
         }
         switch setting.type {
@@ -253,6 +258,8 @@ enum KurthMCPTools {
         }
         // Los temporizadores de suspensión se rearman con el valor nuevo.
         if key == KurthSuspension.clave { KurthSuspension.ajusteCambio() }
+        // Los boosts se ponen o se quitan de las pestañas abiertas en ese momento.
+        if key == KurthBoosts.ajuste { KurthBoosts.shared.ajusteCambio() }
         return nil
     }
 

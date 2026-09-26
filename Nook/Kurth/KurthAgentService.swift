@@ -597,8 +597,10 @@ final class KurthAgentService {
     /// misma página no lo repite. Se vacía con una sesión nueva o al limpiar.
     private(set) var paginasConContenido = Set<String>()
 
+    /// `oculto`: va al agente después del texto pero no se pinta en el globo (las instrucciones de
+    /// "Describe lo que quieres" de un Boost, KurthBoosts.describir).
     func enviar(_ texto: String, pagina: KurthACPResourceLink? = nil, contenido: String? = nil,
-                señalados: [KurthSenalar.Referencia] = []) {
+                señalados: [KurthSenalar.Referencia] = [], oculto: String? = nil) {
         let limpio = texto.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !limpio.isEmpty, aceptaMensajes else { return }
         let adjuntados = adjuntos
@@ -613,6 +615,8 @@ final class KurthAgentService {
             var partes = [limpio]
             if let pagina { partes.append("(Pestaña abierta: \(pagina.name) — \(pagina.uri))") }
             partes += señalados.map(KurthSenalar.descripcion)
+            // En una sola línea: un salto en el pseudo-terminal mandaría el mensaje a la mitad.
+            if let oculto { partes.append(oculto.replacingOccurrences(of: "\n", with: " ")) }
             ecoPendiente = limpio
             mensajes.append(Mensaje(autor: .agente, texto: "", enCurso: true))
             estado = .trabajando
@@ -620,13 +624,13 @@ final class KurthAgentService {
             return
         }
         let mandar: () -> Void = { [weak self] in
-            self?.mandar(limpio, pagina: pagina, contenido: contenido, señalados: señalados, adjuntados: adjuntados)
+            self?.mandar(limpio, pagina: pagina, contenido: contenido, señalados: señalados, adjuntados: adjuntados, oculto: oculto)
         }
         if estado == .arrancando { enEspera = mandar } else { mandar() }
     }
 
     private func mandar(_ limpio: String, pagina: KurthACPResourceLink?, contenido: String?,
-                        señalados: [KurthSenalar.Referencia], adjuntados: [Adjunto]) {
+                        señalados: [KurthSenalar.Referencia], adjuntados: [Adjunto], oculto: String? = nil) {
         mensajes.append(Mensaje(autor: .agente, texto: "", enCurso: true))
         plan.removeAll()
         estado = .trabajando
@@ -636,8 +640,8 @@ final class KurthAgentService {
             do {
                 let recursos = contenido.flatMap { c in pagina.map { [(uri: $0.uri, texto: c)] } } ?? []
                 if let uri = pagina?.uri, contenido != nil { self.paginasConContenido.insert(uri) }
-                let textoCompleto = señalados.isEmpty ? limpio
-                    : limpio + "\n\n" + señalados.map(KurthSenalar.descripcion).joined(separator: "\n\n")
+                let textoCompleto = ([limpio] + señalados.map(KurthSenalar.descripcion) + (oculto.map { [$0] } ?? []))
+                    .joined(separator: "\n\n")
                 var enlaces = pagina.map { [$0] } ?? []
                 var imagenes = señalados.compactMap(\.recorte)
                 for a in adjuntados {
