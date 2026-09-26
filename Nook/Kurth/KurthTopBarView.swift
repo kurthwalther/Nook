@@ -266,9 +266,8 @@ struct KurthTopBarView: View {
     private var address: some View {
         if let tab = browserManager.tabs.selectedSession(in: windowState) {
             if isCompact {
-                // Pestañas compactas (KurthTabStrip.swift): la tira ocupa todo el centro; traducir va
-                // afuera, a su derecha, en su propio círculo de vidrio (Kurth, 26 sep).
-                HStack(spacing: NookDesign.Spacing.sm) {
+                // Pestañas compactas (KurthTabStrip.swift): la tira ocupa todo el centro; traducir se
+                // cuelga afuera, a su derecha, sin moverla (traduccionColgada).
                 KurthTabStrip(glass: isCapsules, tint: glassTint, iconsOnly: compactTabs == "icons")
                     .padding(.horizontal, isCapsules ? 8 : NookDesign.Spacing.md)
                     // La tira publica su cápsula si todas caben; si se desplaza por dentro, no se
@@ -276,15 +275,12 @@ struct KurthTopBarView: View {
                     .onPreferenceChange(KurthZonaDeDeslizar.self) { zona in
                         MainActor.assumeIsolated { KurthGestos.de(windowState).zonaDeDeslizar = zona }
                     }
-                traduccionAfuera
-                }
-                .animation(NookDesign.Motion.standard, value: muestraTraduccion)
-                .modifier(KurthBoostAncla(session: tab, conMenu: false)) // kurth: Boost desde el panel de opciones
+                    .modifier(traduccionColgada)
+                    .modifier(KurthBoostAncla(session: tab, conMenu: false)) // kurth: Boost desde el panel de opciones
             } else if isCapsules {
                 // Cápsula: el dominio centrado y los íconos anclados a las orillas, no al texto.
                 // Mide lo que ocupa el dominio (mínimo `addressMinWidth`) y crece si es largo.
-                // Traducir va afuera, a la derecha de la cápsula, en su propio círculo (Kurth, 26 sep).
-                HStack(spacing: NookDesign.Spacing.sm) {
+                // Traducir se cuelga afuera, a la derecha de la cápsula, sin moverla (traduccionColgada).
                 hostText(tab)
                     .padding(.horizontal, Self.capsuleInset + KurthEscala.pt(20) + NookDesign.Spacing.lg)
                     .frame(minWidth: Self.addressMinWidth)
@@ -300,9 +296,7 @@ struct KurthTopBarView: View {
                     .onHoverTracking { isHoveringCapsule = $0 }
                     .modifier(KurthZonaDeDeslizarAqui())
                     .modifier(KurthBoostAncla(session: tab)) // kurth: clic derecho → Boost para este sitio
-                traduccionAfuera
-                }
-                .animation(NookDesign.Motion.standard, value: muestraTraduccion)
+                    .modifier(traduccionColgada)
             } else {
                 // Copiar junto al dominio; recargar vive con las flechas en esta variante.
                 HStack(spacing: NookDesign.Spacing.md + 2) {
@@ -374,13 +368,19 @@ struct KurthTopBarView: View {
         }
     }
 
-    /// Traducir fuera de la cápsula o de la tira: solo el ícono, sin vidrio ni cápsula propia
-    /// (Kurth, 26 sep).
-    @ViewBuilder
-    private var traduccionAfuera: some View {
-        if muestraTraduccion {
-            traduccionBoton.kurthBarIcon(size: iconSize)
-                .transition(.opacity.combined(with: .scale(scale: 0.8)))
+    /// Traducir como un elemento extra colgado a la derecha de la cápsula o de la tira: en un overlay
+    /// corrido hacia afuera, así no ocupa lugar y la cápsula no se mueve al aparecer (Kurth, 26 sep:
+    /// "más sutil, más pequeño y que no empuje el pill"). Ícono chico y más tenue que los de la barra.
+    private var traduccionColgada: KurthColgarALaDerecha<AnyView> {
+        KurthColgarALaDerecha(separacion: NookDesign.Spacing.xs) {
+            AnyView(Group {
+                if muestraTraduccion {
+                    traduccionBoton.kurthFieldIcon()
+                        .opacity(0.8)
+                        .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                }
+            }
+            .animation(NookDesign.Motion.standard, value: muestraTraduccion))
         }
     }
 
@@ -729,5 +729,19 @@ struct KurthBarSettingsMenu: View {
             KurthThemeStore.shared.openPicker(window: windowState, tabs: browserManager.tabs)
         }
         .disabled(windowState.isIncognito || windowState.spaceID == nil)
+    }
+}
+
+/// Pone `extra` pegado por fuera a la orilla derecha de la vista, sin cambiar su tamaño ni su lugar.
+struct KurthColgarALaDerecha<Extra: View>: ViewModifier {
+    var separacion: CGFloat
+    @ViewBuilder var extra: () -> Extra
+
+    func body(content: Content) -> some View {
+        content.overlay(alignment: .trailing) {
+            extra()
+                .fixedSize()
+                .alignmentGuide(.trailing) { $0[.leading] - separacion }
+        }
     }
 }
