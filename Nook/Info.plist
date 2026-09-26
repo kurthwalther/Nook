@@ -35,6 +35,10 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Nook usa el micrófono cuando lo enciendes al grabar un workflow, para guardar lo que explicas junto con los pasos. También lo usan las páginas a las que les das permiso.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Nook convierte en texto, en esta Mac y sin enviarlo a ningún servidor, lo que dices mientras grabas un workflow.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoadsInWebContent</key>

@@ -758,6 +758,8 @@ final class KurthAgentService {
                                        opciones: pedido.options,
                                        responder: { continuation.resume(returning: $0) },
                                        delicada: delicada)
+                // Un workflow corriendo sin Kurth enfrente se queda aquí: se le avisa.
+                KurthWorkflows.shared.esperandoConfirmacion(delicada?.frase ?? pedido.toolTitle)
             }
         }
     }
@@ -811,6 +813,8 @@ final class KurthAgentService {
         guardarConversacion()
         // Si el panel se cerró mientras trabajaba, el apagado quedó pendiente.
         programarApagado()
+        // Cómo acabó la corrida de un workflow, y lo que esperaba turno (KurthWorkflows).
+        KurthWorkflows.shared.turnoTerminado()
     }
 
     private var esError: Bool { if case .error = estado { return true }; return false }

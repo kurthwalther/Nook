@@ -168,6 +168,7 @@ final class KurthCabeza {
         descartarPendiente()
         pendiente = Pendiente(tab: tab, ref: ref, boton: Self.textoDelBoton(descripcion),
                               verbo: Self.verbo(de: accion), url: url, turno: turno)
+        if let frase = pendiente?.frase { KurthWorkflows.shared.esperandoConfirmacion(frase) } // kurth: avisa si corre un workflow
         guard let ref else { return }
         let id = "espera-" + UUID().uuidString.prefix(6).lowercased()
         let puesto = try? await KurthCopilot.enMarcas(
