@@ -137,7 +137,7 @@ struct PeekOverlayView: View {
 
     @ViewBuilder
     private var backgroundOverlay: some View {
-        Color.black.opacity(0.3)
+        Color.black.opacity(0.38) // kurth: 0.38 a su pedido (antes 0.3 de upstream, 0.18 al encoger la página de atrás)
             .contentShape(Rectangle()) // Ensure proper hit testing
             .allowsHitTesting(isActive) // Only allow hit testing when peek is active
             .onTapGesture {
@@ -163,17 +163,17 @@ struct PeekOverlayView: View {
                     .clipShape(NookDesign.Radius.shape(cornerRadius))
                     .nookElevation(.floating)
 
-                // Action buttons positioned outside the main content but within the scaled area
+                // kurth: columna a un costado, arriba, como en Glance de Zen
                 actionButtons(session: session)
                     .position(
-                        x: frame.width + 30,
-                        y: 80
+                        x: frame.width + 32,
+                        y: 76
                     )
             }
             .frame(width: frame.width, height: frame.height) // Extend frame to include buttons
             .position(
                 x: frame.minX + (frame.width / 2),
-                y: geometry.size.height / 2
+                y: frame.midY
             )
         }
     }
@@ -218,7 +218,8 @@ struct PeekOverlayView: View {
 
     @ViewBuilder
     private func actionButtons(session: PeekSession) -> some View {
-        VStack(spacing: 12) {
+        GlassEffectContainer(spacing: 10) {
+        VStack(spacing: 10) {
             // Close button
             actionButton(
                 icon: "xmark",
@@ -240,6 +241,7 @@ struct PeekOverlayView: View {
                 action: { browserManager.peekManager.moveToNewTab() },
                 color: currentSpaceColor
             )
+        }
         }
     }
 
@@ -263,24 +265,18 @@ struct PeekOverlayView: View {
         @State private var isHovering = false
 
         var body: some View {
+            // kurth: Liquid Glass, el ícono en el color del texto para que se lea sobre cualquier página
             Button(action: action) {
                 Image(systemName: icon)
-                    .font(NookDesign.Font.label)
-                    .foregroundStyle(disabled ? Color.gray : color)
-                    .frame(width: 32, height: 32)
-                    .background(
-                        Circle()
-                            .fill(Color(nsColor: colorScheme == .dark ? NSColor.white : NSColor.black))
-                            .opacity(disabled ? 0.5 : (isHovering ? 0.85 : 1.0))
-                    )
-                    .overlay(
-                        Circle()
-                            .stroke(color.opacity(disabled ? 0.3 : (isHovering ? 0.8 : 0.6)), lineWidth: 1)
-                    )
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(disabled ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
+                    .frame(width: 38, height: 38)
+                    .contentShape(Circle())
             }
             .disabled(disabled)
             .buttonStyle(PlainButtonStyle())
-            .scaleEffect(disabled ? 0.9 : 1.0)
+            .glassEffect(.regular.interactive(!disabled), in: Circle())
+            .scaleEffect(isHovering && !disabled ? 1.06 : 1.0)
             .onHoverTracking { hovering in
                 isHovering = hovering
                 if hovering {
@@ -305,13 +301,14 @@ struct PeekOverlayView: View {
         let sidebarWidth: CGFloat = windowState.isSidebarVisible ? windowState.sidebarWidth : 0
         let webAreaWidth = max(0, windowSize.width - sidebarWidth)
 
-        let webViewHeight = windowSize.height - 10 // Full height PLUS 10pts
         let cornerRadius: CGFloat = NookDesign.Radius.xl
 
-        // Center within the web area (excluding sidebar) with 60pt margins
-        let horizontalMargin: CGFloat = 60
-        let peekWidth = max(0, webAreaWidth - (horizontalMargin * 2))
-        let peekXWithinWebArea = (webAreaWidth - peekWidth) / 2 // equals horizontalMargin
+        // kurth: como Glance de Zen, 80 % del ancho del área web y aire arriba y abajo,
+        // para que se lea como una hoja sobre la página y no como otra ventana.
+        let peekWidth = max(0, min(webAreaWidth - 112, max(480, webAreaWidth * 0.8)))
+        let verticalMargin = max(20, windowSize.height * 0.05)
+        let webViewHeight = max(0, windowSize.height - verticalMargin * 2)
+        let peekXWithinWebArea = (webAreaWidth - peekWidth) / 2
 
         // Calculate peek X position based on sidebar position
         let peekX: CGFloat
@@ -329,7 +326,7 @@ struct PeekOverlayView: View {
         return (
             frame: CGRect(
                 x: peekX,
-                y: 0,
+                y: verticalMargin,
                 width: peekWidth,
                 height: webViewHeight
             ),
