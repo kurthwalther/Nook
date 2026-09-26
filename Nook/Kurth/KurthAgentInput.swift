@@ -569,7 +569,7 @@ struct KurthAgentInput: View {
     }
 
     private func nombreCorto(_ url: URL) -> String {
-        url.path == FileManager.default.homeDirectoryForCurrentUser.path ? "Carpeta personal" : url.lastPathComponent
+        url.path == FileManager.default.homeDirectoryForCurrentUser.path ? "Sin proyecto" : url.lastPathComponent
     }
 
     private func elegirCarpeta() {
