@@ -52,6 +52,13 @@ final class FocusableWKWebView: WKWebView, SessionWebView {
         super.mouseDown(with: event)
     }
 
+    // kurth: jalar para recargar (Nook/Kurth/KurthJalarParaRecargar.swift). Solo mira las fases
+    // del gesto; el evento siempre sigue a WebKit, que hace el rebote y el scroll como siempre.
+    override func scrollWheel(with event: NSEvent) {
+        KurthJalarParaRecargar.rueda(event, en: self)
+        super.scrollWheel(with: event)
+    }
+
     override func rightMouseDown(with event: NSEvent) {
         owningSession?.activate()
         // Ensure this webview becomes first responder so willOpenMenu gets called
