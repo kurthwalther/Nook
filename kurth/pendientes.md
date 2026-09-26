@@ -20,8 +20,10 @@ Orden acordado; Trazo (dirección del Creative) descartada por Kurth: "está feo
 2. **Suspensión de pestañas** (M): portar `TabSuspensionService` + `UnloadedTab` de duckduckgo/apple-browsers
    (Apache-2.0). Política por inactividad y presión de memoria; fijadas y favoritos también; indicador de
    suspendida (punto 10); restaurar scroll/forms con `interactionState`.
-3. **MCP con dientes** (S por tool, M el snapshot): `fill_form`, `find`, `batch`, refs estables + `--delta`,
-   iframes y shadow DOM (portar `ariaSnapshot.ts` de Playwright). Después: `network_requests` (M parcial),
+3. **MCP con dientes** (S por tool, M el snapshot): ✅ `fill_form`, `find`, `batch`, refs estables +
+   `snapshot delta: true`, iframes del mismo origen y shadow DOM abiertos con slots (rama `kurth-mcp`,
+   26 sep; prueba sin Nook en `kurth/checks/copiloto.sh`, 47 comprobaciones). Falta probarlo en vivo
+   por `kurth/mcp.sh` y con clic nativo dentro de un iframe. Después: `network_requests` (M parcial),
    Space "Agente" no persistente, tareas programadas por launchd.
 4. **Skills con `/`, "guardar como skill", `@pestaña` / `@Space`** (S / S–M). `/` ya lista comandos; falta
    el guardado y el `@`.
