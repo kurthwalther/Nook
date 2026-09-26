@@ -224,8 +224,11 @@ struct KurthWorkflowsPopover: View {
                         metadatos(wf)
                     }
                     Spacer(minLength: 6)
-                    Button("Ejecutar") { ejecutar(wf) }
+                    // kurth: mientras el replay corre, la pastilla lo dice y no se vuelve a lanzar.
+                    let corre = KurthWorkflowsReplay.shared.corre(wf.nombre)
+                    Button(corre ? "Corriendo…" : "Ejecutar") { ejecutar(wf) }
                         .buttonStyle(KurthEstiloPildora())
+                        .disabled(corre)
                         .help(wf.parametros.isEmpty ? "Correrlo ahora" : "Correrlo ahora (te pregunta los parámetros)")
                     menu(wf)
                 }
@@ -497,50 +500,9 @@ private struct KurthWorkflowDetalle: View {
         }
     }
 
-    @ViewBuilder
+    /// kurth: las corridas con el registro del replay por paso (KurthWorkflowsReplayVista.swift).
     private func corridas(_ wf: KurthWorkflow) -> some View {
-        if !wf.corridas.isEmpty {
-            seccion("Corridas") {
-                VStack(alignment: .leading, spacing: 5) {
-                    ForEach(wf.corridas.suffix(5).reversed()) { c in
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Image(systemName: Self.icono(c.estado))
-                                .font(.system(size: 9, weight: .semibold))
-                                .foregroundStyle(Self.color(c.estado))
-                                .frame(width: 12)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(KurthWorkflowsModelo.cuando(c.inicio)
-                                     + (c.fin.map { " · " + KurthWorkflowsModelo.minutos($0.timeIntervalSince(c.inicio)) } ?? "")
-                                     + " · " + c.estado.rawValue + (c.programada ? " · programada" : ""))
-                                if let r = c.resumen, !r.isEmpty {
-                                    Text(r).foregroundStyle(.tertiary).lineLimit(2)
-                                }
-                            }
-                        }
-                        .font(NookDesign.Font.caption)
-                        .foregroundStyle(.secondary)
-                    }
-                }
-            }
-        }
-    }
-
-    private static func icono(_ e: KurthWorkflowCorrida.Estado) -> String {
-        switch e {
-        case .corriendo: return "circle.dotted"
-        case .esperando: return "hand.raised"
-        case .termino: return "checkmark"
-        case .fallo: return "exclamationmark"
-        case .saltada: return "moon.zzz"
-        }
-    }
-
-    private static func color(_ e: KurthWorkflowCorrida.Estado) -> Color {
-        switch e {
-        case .fallo: return .orange
-        case .esperando: return .accentColor
-        default: return .secondary
-        }
+        KurthWorkflowCorridas(wf: wf)
     }
 
     @ViewBuilder

@@ -309,7 +309,8 @@ enum KurthCopilot {
                 var a = args
                 if (args["accion"] as? String) == "click", let uid = args["uid"] as? String,
                    let linea = KurthWebKitAgente.renglonDe(uid, en: destino.webView),
-                   let accion = accionDelicada(linea), args["confirmado"] as? Bool != true {
+                   let accion = accionDelicada(linea), args["confirmado"] as? Bool != true,
+                   !KurthCabeza.shared.corridaAutoriza(destino.itemID) { // kurth: corrida programada de un workflow
                     // La misma guardia de click, con la tarjeta del panel; sin anillo (el uid es de WebKit).
                     if KurthCabeza.shared.tomarAutorizacion(tab: destino.itemID, ref: nil) {
                         a["confirmado"] = true
@@ -435,7 +436,9 @@ enum KurthCopilot {
         let descripcion = (try? await js(d.webView, "return window.__kurth.describir(ref)", ["ref": ref])) as? String ?? ref
         if let accion = accionDelicada(descripcion) {
             // Pasa con confirmado: true o si Kurth ya lo aprobó en la tarjeta del panel (KurthCabeza).
-            guard args["confirmado"] as? Bool == true || KurthCabeza.shared.tomarAutorizacion(tab: d.itemID, ref: ref) else {
+            // kurth: una corrida programada de un workflow repite lo que Kurth ya hizo al grabar (KurthCabeza.corridaAutoriza).
+            guard args["confirmado"] as? Bool == true || KurthCabeza.shared.corridaAutoriza(d.itemID)
+                    || KurthCabeza.shared.tomarAutorizacion(tab: d.itemID, ref: ref) else {
                 await KurthCabeza.shared.pedirConfirmacion(tab: d.itemID, ref: ref, descripcion: descripcion,
                                                            accion: accion, url: d.session.url, webView: d.webView)
                 throw KurthCopilotError("\(descripcion) parece «\(accion)»: cuesta dinero, borra o publica algo. Pregúntale a Kurth y, con su sí, repite el click con confirmado: true.")
@@ -585,7 +588,8 @@ enum KurthCopilot {
         let plan = try await js(d.webView, "return window.__kurth.formPlan(campos)", ["campos": limpios]) as? [[String: Any]] ?? []
         for (i, p) in plan.enumerated() where p["clic"] as? Bool == true {
             let desc = p["desc"] as? String ?? "campo \(i + 1)"
-            if let accion = accionDelicada(desc), args["confirmado"] as? Bool != true {
+            if let accion = accionDelicada(desc), args["confirmado"] as? Bool != true,
+               !KurthCabeza.shared.corridaAutoriza(d.itemID) { // kurth: corrida programada de un workflow
                 let ref = (i < campos.count ? campos[i]["ref"] as? String : nil).flatMap { $0.isEmpty ? nil : $0 }
                 await KurthCabeza.shared.pedirConfirmacion(tab: d.itemID, ref: ref, descripcion: desc,
                                                            accion: accion, url: d.session.url, webView: d.webView)

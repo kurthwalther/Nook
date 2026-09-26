@@ -20,14 +20,19 @@ extension KurthWorkflows {
         start (graba las pestañas de la ventana activa; reemplaza: nombre para volver a grabar uno),
         stop (termina; con nombre guarda y pide el skill al agente, sin él deja a Kurth la tarjeta del nombre),
         discard, status (grabando, pasos, duración, último paso), note (texto: narración escrita),
-        list, get (nombre: grabación legible y datos), run (nombre, parametros {clave: valor}),
+        list, get (nombre: grabación legible y datos), run (nombre, parametros {clave: valor}; lo mismo que
+        Ejecutar: replay exacto sin esperar), replay (nombre, parametros, programada: true para probar el
+        camino sin restricciones, esperar: segundos a esperar el resultado, 120 por defecto, 0 no espera),
+        detener (nombre, o sin nombre todas las corridas), actualizar (nombre, corrida opcional: aplica al
+        workflow lo que el replay encontró con otro nombre o selector),
         delete (nombre), define (lo usa el agente al terminar el SKILL.md: nombre, descripcion,
         parametros [{nombre, descripcion, ejemplo}]), schedule (nombre, regla {frecuencia: una-vez|diario|
         dias|cada-horas, fecha "AAAA-MM-DDTHH:MM" local, hora "HH:MM", dias ["lun","mié"], cadaHoras},
-        parametros), unschedule (nombre), runs (nombre: historial de corridas).
+        parametros), unschedule (nombre), runs (nombre: historial de corridas con el registro por paso del replay).
         """,
         parameters: ["type": "object", "properties": [
             "action": ["type": "string", "enum": ["start", "stop", "discard", "status", "note", "list", "get", "run",
+                                                  "replay", "detener", "actualizar",
                                                   "delete", "define", "schedule", "unschedule", "runs"]],
             "nombre": ["type": "string", "description": "Nombre corto del workflow (o, en stop, el nombre a guardar)"],
             "descripcion": ["type": "string"],
@@ -35,6 +40,9 @@ extension KurthWorkflows {
             "reemplaza": ["type": "string", "description": "start: nombre del workflow que se vuelve a grabar"],
             "parametros": ["description": "run/schedule: {clave: valor}. define: [{nombre, descripcion, ejemplo}]"],
             "regla": ["type": "object"],
+            "programada": ["type": "boolean", "description": "replay: como corrida programada (pestaña en segundo plano, sin restricciones, sin frenar lo irreversible)"],
+            "esperar": ["type": "number", "description": "replay: segundos a esperar el resultado (120 por defecto; 0 = no esperar)"],
+            "corrida": ["type": "string", "description": "actualizar: id de la corrida (por defecto la última con cambios)"],
         ], "required": ["action"]]
     )
 
@@ -96,7 +104,27 @@ extension KurthWorkflows {
             case "run":
                 let valores = (args["parametros"] as? [String: Any] ?? [:]).mapValues { "\($0)" }
                 try w.correr(n, valores: valores, programada: false)
-                return texto("Mandado al agente: «\(n)». El resultado queda en runs cuando termine.", false)
+                return texto(KurthWorkflowsReplay.shared.corre(n)
+                             ? "Corriendo «\(n)» (replay exacto). El resultado queda en runs cuando termine."
+                             : "Mandado al agente: «\(n)» (no tiene pasos que repetir). El resultado queda en runs cuando termine.", false)
+            case "replay":
+                let valores = (args["parametros"] as? [String: Any] ?? [:]).mapValues { "\($0)" }
+                let programada = args["programada"] as? Bool ?? false
+                let espera = min(max((args["esperar"] as? NSNumber)?.doubleValue ?? 120, 0), 600)
+                let id = try KurthWorkflowsReplay.shared.correr(n, valores: valores, programada: programada)
+                let termino = espera > 0 ? await KurthWorkflowsReplay.shared.esperar(id, segundos: espera) : false
+                guard termino, let c = w.tienda.cargar(n)?.corridas.first(where: { $0.id == id }) else {
+                    return texto("Corriendo «\(n)» (corrida \(id.uuidString)). Pide runs para ver cómo va.", false)
+                }
+                return texto(json(Self.fila(c)), c.estado == .fallo)
+            case "detener":
+                guard n.isEmpty || KurthWorkflowsReplay.shared.corre(n) else { return texto("«\(n)» no está corriendo.", true) }
+                KurthWorkflowsReplay.shared.detener(n.isEmpty ? nil : n)
+                return texto(n.isEmpty ? "Detenidas las corridas." : "Detenida «\(n)».", false)
+            case "actualizar":
+                let id = (args["corrida"] as? String).flatMap(UUID.init(uuidString:))
+                let cambiados = try KurthWorkflowsReplay.shared.actualizarWorkflow(n, corrida: id)
+                return texto(cambiados == 0 ? "No había nada que actualizar." : "Actualizados \(cambiados) paso(s) de «\(n)» con lo que encontró el replay.", false)
             case "delete":
                 try w.borrar(n)
                 return texto("Borrado «\(n)»; se le pidió al agente quitar su skill.", false)
@@ -122,14 +150,7 @@ extension KurthWorkflows {
                 return texto("Sin programación: «\(n)».", false)
             case "runs":
                 guard let wf = w.tienda.cargar(n) else { throw Problema.noExiste(n) }
-                let f = ISO8601DateFormatter()
-                let filas = wf.corridas.reversed().map { c -> [String: Any] in
-                    var fila: [String: Any] = ["inicio": f.string(from: c.inicio), "estado": c.estado.rawValue,
-                                               "programada": c.programada, "resumen": c.resumen ?? ""]
-                    if let fin = c.fin { fila["duracion"] = KurthWorkflowsModelo.minutos(fin.timeIntervalSince(c.inicio)) }
-                    return fila
-                }
-                return texto(json(filas), false)
+                return texto(json(wf.corridas.reversed().map(Self.fila)), false)
             default:
                 return texto("action: start, stop, discard, status, note, list, get, run, delete, define, schedule, unschedule o runs", true)
             }
@@ -153,6 +174,25 @@ extension KurthWorkflows {
         if let ultimo = g.pasos.last { e["ultimoPaso"] = KurthWorkflowsModelo.linea(ultimo) }
         if let r = g.reemplaza { e["reemplaza"] = r }
         return e
+    }
+
+    /// Una corrida para runs y replay: con el registro por paso si fue replay.
+    static func fila(_ c: KurthWorkflowCorrida) -> [String: Any] {
+        var fila: [String: Any] = ["id": c.id.uuidString, "inicio": ISO8601DateFormatter().string(from: c.inicio),
+                                   "estado": c.estado.rawValue, "programada": c.programada, "resumen": c.resumen ?? "",
+                                   "modo": c.modo ?? "agente"]
+        if let fin = c.fin { fila["duracion"] = KurthWorkflowsModelo.minutos(fin.timeIntervalSince(c.inicio)) }
+        if c.aplicada == true { fila["aplicada"] = true }
+        if let pasos = c.pasos {
+            fila["pasos"] = pasos.map { r -> [String: Any] in
+                var p: [String: Any] = ["n": r.indice, "paso": r.descripcion, "nivel": r.nivel.rawValue, "ok": r.ok, "ms": r.ms]
+                if let d = r.detalle { p["detalle"] = d }
+                if let f = r.frase { p["cambio"] = f }
+                if let s = r.similitud, r.nivel == .difuso || r.nivel == .posicion { p["similitud"] = s }
+                return p
+            }
+        }
+        return fila
     }
 
     /// minúsculas_con_guiones_bajos, como pide el skill.
