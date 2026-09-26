@@ -157,6 +157,9 @@ struct KurthBotonDeCapsula: View {
         Button(action: accion) {
             Text(titulo)
                 .font(NookDesign.Font.secondary)
+                // Nunca se corta ("Termi…" en la cápsula, 26 sep): el botón mide su texto.
+                .lineLimit(1)
+                .fixedSize()
                 .foregroundStyle(enfatizado ? Color.white : Color.primary)
                 .padding(.horizontal, 10)
                 .frame(height: KurthTopBarView.capsuleHeight - 8)

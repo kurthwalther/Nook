@@ -205,6 +205,7 @@ final class KurthAgentService {
         carpetasRecientes = Self.recientesGuardadas()
 
         sesionParaRetomar = nil
+        sesionConMensajes = nil
         apagar()
         arrancar()
     }
@@ -286,12 +287,13 @@ final class KurthAgentService {
                     do {
                         try await self.cliente.resumeSession(anterior.id, cwd: self.carpetaDeTrabajo,
                                                              mcpServers: Self.mcpDeNook(), instrucciones: Self.instrucciones)
+                        self.sesionConMensajes = anterior.id
                     } catch {
                         try await self.cliente.newSession(cwd: self.carpetaDeTrabajo,
                                                           mcpServers: Self.mcpDeNook(), instrucciones: Self.instrucciones)
                         // Lo de arriba sigue en pantalla, pero el agente ya no lo recuerda: se dice.
-                        if !self.mensajes.isEmpty {
-                            self.mensajes.append(Mensaje(autor: .agente, texto: "No pude retomar la conversación anterior; desde aquí es una nueva y no recuerdo lo de arriba."))
+                        if !self.mensajes.isEmpty, self.mensajes.last?.texto != Self.avisoSinRetomar {
+                            self.mensajes.append(Mensaje(autor: .agente, texto: Self.avisoSinRetomar))
                         }
                     }
                 } else {
@@ -509,6 +511,7 @@ final class KurthAgentService {
         mensajes.removeAll()
         plan.removeAll()
         sesionParaRetomar = nil
+        sesionConMensajes = nil
         paginasConContenido.removeAll()
         try? FileManager.default.removeItem(at: Self.archivoGuardado)
         guard estado == .listo, cliente.isRunning else { return }
@@ -570,8 +573,12 @@ final class KurthAgentService {
     private func cargarConversacion() {
         guard let datos = try? Data(contentsOf: Self.archivoGuardado),
               let guardado = try? JSONDecoder().decode(Guardado.self, from: datos) else { return }
-        // Un turno que se cortó a la mitad al cerrar Nook ya no está en curso.
+        // Un turno que se cortó a la mitad al cerrar Nook ya no está en curso. Los avisos de "no pude
+        // retomar" seguidos se quedan en uno (limpia los que dejó el error del 26 sep).
         mensajes = guardado.mensajes.map { var m = $0; m.enCurso = false; return m }
+            .enumerated().filter { i, m in
+                !(m.texto == Self.avisoSinRetomar && i > 0 && guardado.mensajes[i - 1].texto == Self.avisoSinRetomar)
+            }.map(\.element)
         guard let id = guardado.sessionId, guardado.carpeta == carpetaDeTrabajo.path else { return }
         if guardado.instrucciones == Self.instrucciones {
             sesionParaRetomar = (id, guardado.carpeta)
@@ -583,7 +590,10 @@ final class KurthAgentService {
     private func guardarConversacion() {
         guard !mensajes.isEmpty else { return }
         let guardado = Guardado(carpeta: carpetaDeTrabajo.path,
-                                sessionId: cliente.sessionId ?? sesionParaRetomar?.id,
+                                // Solo una sesión que ya recibió un mensaje: Claude Code no escribe la
+                                // sesión en disco hasta el primero, y retomar una vacía falla siempre
+                                // (26 sep: diez avisos de "No pude retomar" seguidos, uno por reinicio).
+                                sessionId: sesionConMensajes ?? sesionParaRetomar?.id,
                                 mensajes: mensajes,
                                 instrucciones: Self.instrucciones)
         guard let datos = try? JSONEncoder().encode(guardado) else { return }
@@ -643,6 +653,11 @@ final class KurthAgentService {
         if estado == .arrancando { enEspera = mandar } else { mandar() }
     }
 
+    static let avisoSinRetomar = "No pude retomar la conversación anterior; desde aquí es una nueva y no recuerdo lo de arriba."
+
+    /// La sesión del agente que ya recibió al menos un mensaje (la única que se puede retomar).
+    private var sesionConMensajes: String?
+
     private func mandar(_ limpio: String, pagina: KurthACPResourceLink?, contenido: String?,
                         señalados: [KurthSenalar.Referencia], adjuntados: [Adjunto],
                         menciones: [KurthContextoMencionado], oculto: String? = nil) {
@@ -672,6 +687,7 @@ final class KurthAgentService {
                         imagenes.append(jpeg)
                     }
                 }
+                self.sesionConMensajes = self.cliente.sessionId
                 try await self.cliente.prompt(textoCompleto, links: enlaces, adjuntos: recursos, imagenes: imagenes)
             } catch {
                 self.anexarAlAgente("\n\n⚠️ \(error.localizedDescription)")
