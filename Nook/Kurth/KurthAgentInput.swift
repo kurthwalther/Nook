@@ -184,6 +184,8 @@ struct KurthAgentInput: View {
             .font(NookDesign.Font.bodyRegular)
             .foregroundStyle(Color.primary.opacity(0.9))
             .lineLimit(1...5)
+            // kurth: ⇧↩ y ⌥↩ saltan de línea en vez de mandar (KurthSaltoDeLinea.swift).
+            .background(KurthSaltoDeLinea())
             .focused(escribiendo)
             // Sin .disabled mientras el agente trabaja: el Enter que envía desactivaba el campo a
             // media pulsación y macOS sonaba el aviso de error. Lo que se bloquea es enviar.

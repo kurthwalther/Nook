@@ -3,6 +3,14 @@
 Una sola lista para las dos Macs. Quien avance, la actualiza en el mismo commit.
 Detalle de Zen en `kurth/plan-zen.md`.
 
+## Chat del agente: seleccionar, detener y ⇧↩ — 27 sep, instalado en la Pro, falta que Kurth pruebe
+- Sus globos ya se pueden seleccionar (`.textSelection` en KurthAgentChat).
+- Detener antes de que el agente diga o haga algo saca el mensaje de la conversación y lo devuelve a la caja con
+  lo señalado, adjuntado y mencionado (`KurthAgentService.retirado` + `KurthAgentChat.devolverRetirado`). Si se
+  detiene antes de que el session/prompt salga, ya no se manda. Los mensajes de workflows y Boosts no se retiran.
+  Con el cel encendido no aplica. Al agente sí le llegó el mensaje detenido (queda en su historial).
+- ⇧↩ y ⌥↩ saltan de línea (`KurthSaltoDeLinea.swift`, monitor de teclado solo sobre el editor de esta caja).
+
 ## Decisiones de Kurth · 26 sep noche
 - ~~Pestañas en árbol (tab trails de 1.1.1): se quedan.~~ **Cambió el 26 sep en la tarde:** "quitemos las pestañas que se
   abren en árbol, es raro". Ahora van al mismo nivel (`kurth.pestanasEnArbol`, false). Y los links que piden pestaña

@@ -48,6 +48,17 @@ struct KurthAgentChat: View {
     @State private var desplazado = false
     @State private var confirmaBorrar = false
 
+    /// Lo último que salió de esta caja, para devolverlo si Kurth lo detiene antes de que el agente
+    /// conteste (KurthAgentService.retirado). `mensaje` es lo que quedó en el globo; `escrito`, lo
+    /// que había en el campo (vacío si solo mandó lo señalado o adjuntado).
+    private struct Envio {
+        let mensaje: String
+        let escrito: String
+        let señalados: [KurthSenalar.Referencia]
+        let menciones: [KurthMencion]
+    }
+    @State private var ultimoEnvio: Envio?
+
     // El encabezado copia la barra de la página y lee sus mismos ajustes (`kurth.*`, se cambian con
     // clic derecho en la barra): cápsulas de vidrio aquí también, o bloque difuminado aquí también.
     @AppStorage("kurth.barStyle") private var barStyle = "capsules"
@@ -144,6 +155,7 @@ struct KurthAgentChat: View {
             .onChange(of: texto) { _, nuevo in
                 if flotante { KurthAgentHoverManager.conBorrador = !nuevo.isEmpty }
             }
+            .onChange(of: agente.retirado?.id) { _, _ in devolverRetirado() }
             // Si al entrar al campo hay texto seleccionado en la página, va como chip (Señalar).
             .onChange(of: escribiendo) { _, enfocado in
                 guard enfocado else { return }
@@ -365,6 +377,7 @@ struct KurthAgentChat: View {
                 Text(mensaje.texto)
                     .font(.system(size: Self.tamañoDeTexto))
                     .foregroundStyle(Color.primary.opacity(0.9))
+                    .textSelection(.enabled)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .background(NookDesign.Surface.fill)
@@ -579,6 +592,7 @@ struct KurthAgentChat: View {
         texto = ""
         let pagina = paginaActiva
         let menciones = KurthMenciones.shared.tomar()
+        ultimoEnvio = Envio(mensaje: mensaje, escrito: escrito, señalados: señalados, menciones: menciones)
         // La primera pregunta sobre una página lleva su contenido: el agente contesta sin
         // herramientas (KurthCopilot.contenidoParaAgente). Leerla toma menos de un segundo.
         let sesion = browserManager.tabs.selectedSession(in: windowState)
@@ -600,5 +614,17 @@ struct KurthAgentChat: View {
                                                           activa: pagina?.uri, yaConContenido: yaLeidas)
             agente.enviar(mensaje, pagina: pagina, contenido: contenido, señalados: señalados, menciones: resueltas)
         }
+    }
+
+    /// El mensaje que Kurth detuvo antes de la respuesta vuelve al campo con lo que llevaba. Solo en
+    /// la caja que lo mandó (puede haber otra en el panel flotante o en otra ventana). Si ya empezó a
+    /// escribir otra cosa, lo devuelto va antes.
+    private func devolverRetirado() {
+        guard let retirado = agente.retirado, let envio = ultimoEnvio, envio.mensaje == retirado.texto else { return }
+        ultimoEnvio = nil
+        texto = texto.isEmpty ? envio.escrito : envio.escrito + "\n" + texto
+        KurthSenalar.shared.devolver(envio.señalados)
+        envio.menciones.forEach { KurthMenciones.shared.agregar($0) }
+        escribiendo = true
     }
 }

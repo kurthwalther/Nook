@@ -67,6 +67,24 @@ final class KurthAgentService {
 
     private(set) var adjuntos: [Adjunto] = []
 
+    /// El último mensaje de Kurth, sacado de la conversación porque lo detuvo antes de que el agente
+    /// dijera o hiciera algo. Vuelve a la caja, como en Claude Code (Kurth, 27 sep: "parece como ya
+    /// enviado"). La caja que lo mandó lo reconoce por el texto y lo devuelve (KurthAgentChat).
+    struct Retirado: Equatable {
+        let id = UUID()
+        let texto: String
+    }
+    private(set) var retirado: Retirado?
+    /// Lo que se adjuntó con el último mensaje, para devolverlo con él.
+    @ObservationIgnored private var adjuntosDelUltimo: [Adjunto] = []
+    /// El último mensaje salió de la caja tal cual. Los que arman un workflow o un Boost no se
+    /// devuelven: no hay caja donde ponerlos.
+    @ObservationIgnored private var ultimoEsDeLaCaja = false
+    /// Se detuvo sin respuesta visible: al cerrar el turno se retira el mensaje.
+    @ObservationIgnored private var retirarAlCerrar = false
+    /// El session/prompt ya salió al agente. Antes de eso, detener no le avisa nada: no se manda.
+    @ObservationIgnored private var promptEnCamino = false
+
     func adjuntar(_ adjunto: Adjunto) {
         guard !adjuntos.contains(where: { $0.tipo == adjunto.tipo }) else { return }
         adjuntos.append(adjunto)
@@ -705,6 +723,9 @@ final class KurthAgentService {
         guard !limpio.isEmpty, aceptaMensajes else { return }
         let adjuntados = adjuntos
         adjuntos.removeAll()
+        adjuntosDelUltimo = adjuntados
+        ultimoEsDeLaCaja = paraElAgente == nil && oculto == nil
+        retirarAlCerrar = false
         KurthCabeza.shared.nuevoMensaje() // kurth: si lo había detenido, con esto quiere que siga
 
         // En el globo, lo adjuntado va con «📎» para que se pinte con clip y no con el visor; lo
@@ -765,6 +786,8 @@ final class KurthAgentService {
 
         Task { [weak self] in
             guard let self else { return }
+            // Lo detuvo antes de que saliera: no se manda y vuelve a la caja.
+            guard !self.retirarAlCerrar else { self.cerrarTurno(); return }
             do {
                 var recursos = contenido.flatMap { c in pagina.map { [(uri: $0.uri, texto: c)] } } ?? []
                 if let uri = pagina?.uri, contenido != nil { self.paginasConContenido.insert(uri) }
@@ -786,19 +809,38 @@ final class KurthAgentService {
                     }
                 }
                 self.sesionConMensajes = self.cliente.sessionId
+                self.promptEnCamino = true
                 try await self.cliente.prompt(textoCompleto, links: enlaces, adjuntos: recursos, imagenes: imagenes)
             } catch {
                 self.anexarAlAgente("\n\n⚠️ \(error.localizedDescription)")
             }
+            self.promptEnCamino = false
             self.cerrarTurno()
         }
     }
 
-    /// Interrumpe el turno. El agente conserva la sesión y lo ya dicho.
+    /// Interrumpe el turno. El agente conserva la sesión y lo ya dicho. Si todavía no había dicho ni
+    /// hecho nada, el mensaje de Kurth sale de la conversación y vuelve a la caja (retirado).
     func cancelar() {
         guard estado == .trabajando else { return }
         if KurthRemoto.shared.encendido { KurthRemoto.shared.interrumpir(); return }
+        if let i = indiceDelTurno, i > 0, mensajes[i - 1].autor == .usuario,
+           mensajes[i].texto.isEmpty, mensajes[i].herramientas.isEmpty {
+            retirarAlCerrar = true
+        }
+        guard promptEnCamino else { return } // mandar() lo ve antes de mandarlo
         cliente.cancel()
+    }
+
+    /// Saca de la conversación el último mensaje de Kurth y devuelve sus adjuntos a la caja; el texto,
+    /// lo señalado y lo mencionado los devuelve la caja que lo mandó al ver `retirado`.
+    private func retirarUltimoDelUsuario() {
+        guard ultimoEsDeLaCaja, let i = mensajes.indices.last, mensajes[i].autor == .usuario else { return }
+        let mensaje = mensajes.remove(at: i)
+        let devueltos = adjuntosDelUltimo
+        adjuntos = devueltos + adjuntos.filter { a in !devueltos.contains { $0.tipo == a.tipo } }
+        adjuntosDelUltimo = []
+        retirado = Retirado(texto: mensaje.texto)
     }
 
     func responderPermiso(_ opcionId: String?) {
@@ -915,8 +957,10 @@ final class KurthAgentService {
             // burbuja vacía cuando el usuario cancela.
             if mensajes[indice].texto.isEmpty && mensajes[indice].herramientas.isEmpty {
                 mensajes.remove(at: indice)
+                if retirarAlCerrar { retirarUltimoDelUsuario() }
             }
         }
+        retirarAlCerrar = false
         permiso?.responder(nil)
         permiso = nil
         if case .error = estado {} else if cliente.isRunning {

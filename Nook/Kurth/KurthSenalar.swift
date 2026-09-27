@@ -158,6 +158,11 @@ final class KurthSenalar {
         return referencias
     }
 
+    /// Lo tomado para un mensaje que se retiró (KurthAgentService.retirado) vuelve a la caja.
+    func devolver(_ tomadas: [Referencia]) {
+        referencias = tomadas + referencias.filter { r in !tomadas.contains { $0.id == r.id } }
+    }
+
     func reiniciarNumeros() { siguienteNumero = 1 }
 
     /// El texto que describe una referencia para el agente.
