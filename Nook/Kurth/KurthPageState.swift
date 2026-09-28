@@ -48,8 +48,17 @@ final class KurthPageState {
         let state = KurthPageState()
         objc_setAssociatedObject(webView, &key, state, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         state.refreshColor(from: webView)
+        state.colorWatcher = KurthColorWatcher(webView) { [weak state, weak webView] in
+            guard let state, let webView else { return }
+            state.refreshColor(from: webView)
+        }
         return state
     }
+
+    /// Sin esto el color solo se volvía a leer con el scroll del documento, y las apps que desplazan
+    /// una caja interna (Google Ads: el documento mide lo mismo que la ventana) se quedaban con el
+    /// blanco de mientras cargaban (Kurth, 28 sep).
+    private var colorWatcher: KurthColorWatcher?
 
     fileprivate func update(offset: CGPoint, webView: WKWebView) {
         // Crudo, con el negativo del rebote: es la distancia de jalar para recargar.
@@ -136,5 +145,42 @@ final class KurthPageState {
         }
         // En la subclase: WKWebView queda intacto y solo nuestras páginas avisan.
         class_addMethod(FocusableWKWebView.self, selector, imp_implementationWithBlock(block), method_getTypeEncoding(parent))
+    }
+}
+
+/// Avisa cuando WebKit cambia los colores que usa la barra. `_sampledPageTopColor` y
+/// `_sampledTopFixedPositionContentColor` son SPI pero cumplen KVO (Safari los observa así); se
+/// observan por nombre y solo si el WebKit instalado los tiene.
+private final class KurthColorWatcher: NSObject {
+    private static let keys = ["_sampledPageTopColor", "_sampledTopFixedPositionContentColor", "themeColor"]
+    private weak var webView: WKWebView?
+    private var observed: [String] = []
+    private let onChange: @MainActor () -> Void
+
+    init(_ webView: WKWebView, onChange: @escaping @MainActor () -> Void) {
+        self.webView = webView
+        self.onChange = onChange
+        super.init()
+        for key in Self.keys where webView.responds(to: NSSelectorFromString(key)) {
+            webView.addObserver(self, forKeyPath: key, options: [], context: nil)
+            observed.append(key)
+        }
+    }
+
+    override func observeValue(forKeyPath keyPath: String?, of object: Any?,
+                               change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
+        let onChange = self.onChange
+        if Thread.isMainThread {
+            MainActor.assumeIsolated { onChange() }
+        } else {
+            DispatchQueue.main.async { onChange() }
+        }
+    }
+
+    deinit {
+        // Vive tanto como el WKWebView (va colgado de él): si ya no está, desde macOS 10.13 KVO no
+        // exige quitar el observador de un objeto que se destruye.
+        guard let webView else { return }
+        for key in observed { webView.removeObserver(self, forKeyPath: key) }
     }
 }
