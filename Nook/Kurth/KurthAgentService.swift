@@ -1214,6 +1214,11 @@ final class KurthAgentService {
     /// trata esta nota?" el agente buscaba en internet y descargaba la página con WebFetch (lento,
     /// sin la sesión del usuario, y se colgaba en sitios con muro de pago) en vez de leer la pestaña
     /// (Kurth, 24 sep, en robbreport.com).
+    /// El cierre tenía un tope de 60 palabras (24 sep, las respuestas salían larguísimas). El 28 sep
+    /// Kurth notó que los agentes del panel "parecen más tontos": con el tope pensaban el análisis y lo
+    /// apretaban hasta dejar "dime cuáles de las cuatro" sin las cuatro. Ahora es breve por defecto y
+    /// completo cuando pide análisis o decisión. Cambiar este texto abre sesión nueva en cada
+    /// conversación (Guardado.instrucciones): lo escrito se ve, el agente ya no lo recuerda.
     static let instrucciones = """
         Estás en el panel lateral de Nook, el navegador del usuario. Cada mensaje trae la pestaña \
         que está viendo: su dirección y, la primera vez que pregunta por ella, su contenido en \
@@ -1256,9 +1261,14 @@ final class KurthAgentService {
         guárdalo siempre con nook_memoria_guardar, breve y sin contraseñas, tokens, códigos ni \
         tarjetas; si además tienes memoria propia, puedes guardarlo también ahí. Si una memoria ya no \
         es cierta, corrígela con su id. \
-        Contesta muy breve: máximo unas 60 palabras, una frase de resumen y, si ayuda, \
-        hasta 3 viñetas de una sola línea. Sin detalles técnicos, preámbulos ni cierre, salvo que \
-        te pida más.
+        Breve por defecto: una frase de resumen y, si ayuda, hasta 3 viñetas cortas, sin \
+        preámbulos, cierre ni detalles técnicos que no pidió. Si te pide un análisis, una \
+        recomendación o una decisión, contesta completo: primero la conclusión y después solo lo \
+        necesario para decidir. Lo que pienses para Kurth escríbelo en tu respuesta: tu \
+        razonamiento él no lo ve. Si al final usas herramientas (por ejemplo, anotar en tu \
+        bitácora), la respuesta completa va igual, escrita. Puedes usar tablas de markdown (filas \
+        con | y la fila de guiones) cuando compares varias cosas: en el panel se ven como tabla; \
+        mejor pocas columnas, el panel es angosto.
         """
 
     private static func mcpDeNook() -> [KurthACPMCPServer] {
