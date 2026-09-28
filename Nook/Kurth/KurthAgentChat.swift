@@ -70,6 +70,7 @@ struct KurthAgentChat: View {
     @AppStorage("kurth.capsuleBlur") private var capsuleBlur = false
     @AppStorage("kurth.barScale") private var barScale = 1.0
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.nookSettings) private var nookSettings
     /// La tarjeta que se asoma con hover (KurthAgentHoverOverlay) se puede fijar.
     @AppStorage(KurthAgentHoverManager.claveFijada) private var tarjetaFijada = false
     /// El material de todas las barras (KurthPanelMaterial).
@@ -260,8 +261,16 @@ struct KurthAgentChat: View {
                 .opacity(desplazado && conBlur ? 1 : 0)
                 .allowsHitTesting(false)
         }
+        // La franja pegada a la página se queda sin difuminar: ahí cae la sombra de la página
+        // (KurthPageEdge, radius 4 y 3 pt abajo: unos 8 pt) y el blur la borraba junto con la orilla,
+        // así que en el encabezado se cortaba en seco (Kurth, 28 sep). El texto empieza a 12 pt:
+        // nunca pasa por esa franja. En el flotante no hay página al lado.
+        .padding(nookSettings.sidebarPosition == .left ? .leading : .trailing, flotante ? 0 : Self.sombraDeLaPagina)
         .animation(.easeOut(duration: 0.18), value: desplazado)
     }
+
+    /// Hasta dónde llega la sombra de la página sobre el panel (KurthPageEdge).
+    private static let sombraDeLaPagina: CGFloat = 8
 
     private var esquinasDeArriba: ConcentricRectangle {
         ConcentricRectangle(uniformTopCorners: .concentric(minimum: .fixed(0)), uniformBottomCorners: .fixed(0))
