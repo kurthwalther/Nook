@@ -8,7 +8,9 @@
 //  opciones nuevas mételas en el de opciones"):
 //  - una segunda fila con Imprimir, Boost (antes PDF) y Captura de la página completa (Archivo web quedó solo en
 //    el menú Archivo: en el panel no sumaba, Kurth 25 sep); la captura dice dónde quedó;
-//  - "Tamaño del texto" junto a "Page Zoom", con el mismo −/%/+.
+//  - "Tamaño del texto" junto a "Page Zoom", con el mismo −/%/+;
+//  - "Zoom en": el interruptor Esta pestaña | Todas del popup de zoom (KurthZoom), también aquí
+//    (Kurth, 28 sep: "no solo al presionar las teclas").
 //  Los mismos botones y filas que ya usa el panel, copiados en su forma (allá son privados).
 //
 
@@ -199,5 +201,44 @@ struct KurthFilaTamañoDeTexto: View {
     private func leer() {
         guard let pagina else { return }
         porcentaje = Int((KurthImprimir.factorDeTexto(pagina) * 100).rounded())
+    }
+}
+
+/// El mismo interruptor del popup de zoom (KurthZoom): el zoom de "Page Zoom" va solo a esta pestaña
+/// o a todas, con un nivel guardado que resiste reinicios.
+struct KurthFilaZoomEn: View {
+    let browserManager: BrowserManager
+
+    @State private var encima = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "square.stack")
+                .font(NookDesign.Font.body)
+                .foregroundStyle(.blue)
+                .frame(width: 28, height: 28)
+                .background(Color.blue.opacity(0.12))
+                .clipShape(NookDesign.Radius.shape(NookDesign.Radius.sm))
+            Text("Zoom en")
+                .font(NookDesign.Font.body)
+            Spacer()
+            Picker("Zoom en", selection: Binding(
+                get: { browserManager.zoomManager.kurthTodoElNavegador },
+                set: { browserManager.kurthZoomEnTodoElNavegador($0, conPopup: false) }
+            )) {
+                Text("Esta pestaña").tag(false)
+                Text("Todas").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.small)
+            .fixedSize()
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 7)
+        .background(encima ? NookDesign.Surface.fill : Color.clear)
+        .clipShape(NookDesign.Radius.shape(NookDesign.Radius.md))
+        .onHoverTracking { encima = $0 }
+        .help("Aplicar el zoom solo a esta pestaña, o a todas (se recuerda al reiniciar)")
     }
 }

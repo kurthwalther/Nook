@@ -246,11 +246,12 @@ extension BrowserManager {
         zoomManager.showZoomLevel(for: windowRegistry?.activeWindow?.selectedItemID)
     }
 
-    /// kurth: el interruptor del popup de zoom: solo esta pestaña o todo el navegador (KurthZoom).
-    func kurthZoomEnTodoElNavegador(_ todo: Bool) {
+    /// kurth: el interruptor de zoom: solo esta pestaña o todo el navegador (KurthZoom). Desde el popup
+    /// de zoom lo mantiene a la vista; desde el panel de la página no hace falta sacarlo.
+    func kurthZoomEnTodoElNavegador(_ todo: Bool, conPopup: Bool = true) {
         zoomManager.kurthCoordinador = webViewCoordinator
         zoomManager.kurthCambiarModo(todoElNavegador: todo, pestañaActiva: tabs.activeWindowSession?.itemID)
-        shouldShowZoomPopup = true
+        if conPopup { shouldShowZoomPopup = true }
     }
 
     /// Clean up zoom data when a tab is closed

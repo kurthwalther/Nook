@@ -202,8 +202,9 @@ struct ExtensionLibraryView: View {
                 }
             }
 
-            // kurth: solo la letra, junto al zoom de la página (KurthPanelDePagina.swift).
+            // kurth: a qué aplica el zoom, y solo la letra, junto al zoom de la página (KurthPanelDePagina.swift).
             if currentTab != nil {
+                KurthFilaZoomEn(browserManager: browserManager)
                 KurthFilaTamañoDeTexto(browserManager: browserManager, windowState: windowState)
             }
         }
