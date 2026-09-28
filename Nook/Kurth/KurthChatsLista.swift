@@ -56,8 +56,6 @@ struct KurthChatsTitulo: View {
     @State private var conMenu = false
     @State private var pendiente: Task<Void, Never>?
 
-    /// Lo justo para que pasar de largo sobre la flecha no la abra.
-    private static let esperaAlAbrir: Duration = .milliseconds(150)
     /// Margen para el trayecto en diagonal de la flecha a la lista, que cruza aire.
     private static let esperaAlCerrar: Duration = .milliseconds(350)
 
@@ -120,13 +118,11 @@ struct KurthChatsTitulo: View {
         sobreFlecha = dentro
         pendiente?.cancel()
         guard dentro else { programarCierre(); return }
+        // Sin espera (Kurth, 28 sep: "se tarda, quítale esa espera"): la flecha es chica y pasar de
+        // largo por ella es raro.
         guard !abierta else { return }
-        pendiente = Task { @MainActor in
-            try? await Task.sleep(for: Self.esperaAlAbrir)
-            guard !Task.isCancelled, sobreFlecha, !abierta else { return }
-            porHover = true
-            abierta = true
-        }
+        porHover = true
+        abierta = true
     }
 
     private func programarCierre() {
