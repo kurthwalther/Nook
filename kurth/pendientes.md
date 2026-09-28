@@ -24,6 +24,12 @@ Detalle de Zen en `kurth/plan-zen.md`.
   (cada eco a la suya, "cel B"/"caja A"), borrar la visible y la última. Medido: 150–350 MB por conversación.
 - Falta con mouse: abrir la lista, renombrar en línea, clic derecho › Borrar, ✎, el punto del título, hover
   flotante cambiando de conversación, borrador que se conserva al cambiar.
+- **Cierres del 28 sep (3 reportes, `Nook-2026-09-28-*.ips`):** NSRemoteView `containingWindowWillOrderOnScreen:` al
+  agregar una ventana hija (NSPopover de la lista de chats y KurthAnclaDePopup de «/»). Lo que truena es otra ventana
+  del grupo de la principal, no la nueva. Hipótesis: `.id(chats.activo.id)` en KurthAgentPanel destruía la caja
+  enfocada y dejaba colgada una ventana remota del sistema. Quitado en `ab9b6ef7` (la vista se queda y cambia el
+  agente). No se reprodujo desde fuera (hace falta Nook al frente con la caja enfocada): **falta que Kurth confirme**.
+  Si vuelve, la otra sospecha es la hoja de `.translationTask` (KurthTraduccionControl), que también es remota.
 - Ideas no hechas: correr cada workflow en su propia conversación (hoy va a la que se ve; una programada fuerza
   "sin restricciones" en esa); atajo de teclado para nueva; conversación por ventana.
 
