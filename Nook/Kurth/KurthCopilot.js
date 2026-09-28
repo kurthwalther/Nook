@@ -980,6 +980,10 @@
       const revisar = () => {
         agendado = false;
         ultimaVez = performance.now();
+        // Durante el rebote elástico (scrollY negativo) en y = 1 no hay página, solo el hueco de
+        // encima: se medía "nada" y la barra caía al blanco medio segundo (Google Ads, Kurth 28 sep;
+        // medido: arriba = null de -2 a -52 y de vuelta al gris en 0). Se conserva lo último.
+        if (scrollY < 0 || scrollX < 0) return;
         try { sombras(); } catch (e) { /* una página rara no debe tumbar lo del color */ }
         try {
           const a = arriba();

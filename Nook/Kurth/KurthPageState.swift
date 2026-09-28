@@ -83,7 +83,9 @@ final class KurthPageState {
         if color != topColor { topColor = color }
         let header = Self.privateColor(webView, "_sampledTopFixedPositionContentColor")
         if header != topHeaderColor { topHeaderColor = header }
-        applyUnderPageColor(sampled, to: webView)
+        // El hueco del rebote también con lo que mide el script cuando WebKit no muestrea: en Google Ads
+        // quedaba blanco bajo la barra gris al jalar hacia arriba (Kurth, 28 sep).
+        applyUnderPageColor(sampled ?? scriptTopColor, to: webView)
     }
 
     // MARK: - Hueco del rebote elástico
