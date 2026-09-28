@@ -24,7 +24,7 @@ struct NookApp: App {
     @State private var aiConfigService: AIConfigService
     @State private var mcpManager = MCPManager()
     @State private var aiService: AIService
-    @State private var kurthAgent = KurthAgentService() // kurth: el chat sobre el agente CLI
+    @State private var kurthChats = KurthChats.shared // kurth: las conversaciones con el agente CLI
     @State private var tabOrganizerManager = TabOrganizerManager()
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
@@ -69,7 +69,7 @@ struct NookApp: App {
                     .environment(aiConfigService)
                     .environment(mcpManager)
                     .environment(aiService)
-                    .environment(kurthAgent) // kurth
+                    .environment(kurthChats) // kurth
                     .environment(tabOrganizerManager)
                     .onAppear {
                         setupApplicationLifecycle()

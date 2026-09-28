@@ -73,7 +73,7 @@ final class KurthCabeza {
     func actuando(en tab: UUID) {
         guard Self.activo else { return }
         KurthCabezaGancho.shared.controlada = tab
-        delPanel = KurthAgentService.actual?.estado == .trabajando
+        delPanel = KurthChats.shared.alguienTrabaja()
         apagado?.cancel()
         guard !delPanel else { return }
         apagado = Task { [weak self] in
@@ -100,7 +100,8 @@ final class KurthCabeza {
         // kurth: si la pestaña es de un workflow que se está repitiendo, esa corrida para.
         if let tab = KurthCabezaGancho.shared.controlada { KurthWorkflowsReplay.shared.detener(enPestaña: tab) }
         detenidoHasta = Date().addingTimeInterval(Self.pausaTrasDetener)
-        KurthAgentService.actual?.cancelar()
+        // kurth: multichat — el MCP no dice qué conversación toca la página: se detienen todas.
+        KurthChats.shared.detenerTodas()
         soltar()
         descartarPendiente()
     }
@@ -161,6 +162,9 @@ final class KurthCabeza {
     }
 
     private(set) var pendiente: Pendiente?
+    /// kurth: multichat — la conversación que frenó en ese botón, si se sabe (la única que
+    /// trabajaba). La tarjeta sale en ella y la respuesta va a ella.
+    @ObservationIgnored private(set) weak var chatDelPendiente: KurthAgentService?
     @ObservationIgnored private weak var vistaDeLaMarca: WKWebView?
     @ObservationIgnored private var marca: String?
 
@@ -173,6 +177,8 @@ final class KurthCabeza {
         guard Self.activo else { return }
         if let p = pendiente, p.tab == tab, p.ref == ref { return }
         descartarPendiente()
+        let trabajando = KurthChats.shared.trabajando
+        chatDelPendiente = trabajando.count == 1 ? trabajando.first : nil
         pendiente = Pendiente(tab: tab, ref: ref, boton: Self.textoDelBoton(descripcion),
                               verbo: Self.verbo(de: accion), url: url, turno: turno)
         if let frase = pendiente?.frase { KurthWorkflows.shared.esperandoConfirmacion(frase) } // kurth: avisa si corre un workflow
@@ -194,6 +200,7 @@ final class KurthCabeza {
 
     func descartarPendiente() {
         pendiente = nil
+        chatDelPendiente = nil
         if let marca, let vista = vistaDeLaMarca {
             Task { _ = try? await KurthCopilot.enMarcas(vista, "return window.__kurth.marcas.quitar(id)", ["id": marca]) }
         }
@@ -214,8 +221,10 @@ final class KurthCabeza {
     }
 
     /// La respuesta desde la tarjeta de confirmación del panel (cuando el agente preguntó por chat).
-    func responder(_ si: Bool) {
+    /// `desde`: la conversación donde se tocó; la respuesta va a la que preguntó si se sabe.
+    func responder(_ si: Bool, desde chat: KurthAgentService) {
         guard let p = pendiente else { return }
+        let agente = chatDelPendiente ?? chat
         // kurth: la pregunta es del replay de un workflow: la respuesta va a él, no al agente.
         if let r = respuestaDelReplay {
             respuestaDelReplay = nil
@@ -224,13 +233,12 @@ final class KurthCabeza {
             r(si)
             return
         }
-        let agente = KurthAgentService.actual
         if si {
             autorizar(p)
-            agente?.enviar("Sí, adelante: \(p.verbo) (botón «\(p.boton)»).")
+            agente.enviar("Sí, adelante: \(p.verbo) (botón «\(p.boton)»).")
         } else {
             descartarPendiente()
-            agente?.enviar("No, no lo hagas.")
+            agente.enviar("No, no lo hagas.")
         }
     }
 

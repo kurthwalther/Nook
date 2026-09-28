@@ -4,19 +4,21 @@
 //  Nook (rama kurth)
 //
 //  Reglas de permisos por sitio (Kurth, 26 sep): una lista de hosts exactos con el modo de permisos
-//  que toma el agente mientras la pestaña activa esté ahí. Se abre desde el menú de permisos.
+//  que toma el agente mientras la pestaña activa esté ahí. Se abre desde el menú de permisos. Son de
+//  cada conversación (kurth: multichat, 28 sep).
 //
 
 import SwiftUI
 import NookDesign
 
 struct KurthReglasPopover: View {
+    let agente: KurthAgentService
     /// Los modos que ofrece el agente: (valor, nombre).
     let modos: [(String, String)]
     /// El host de la pestaña activa, para proponerlo al agregar.
     let sugerido: String?
 
-    @State private var reglas = KurthAgentService.reglas
+    @State private var reglas: [KurthAgentService.ReglaDeSitio] = []
     @State private var nuevoHost = ""
     @State private var nuevoModo = "auto"
     @Environment(\.dismiss) private var cerrar
@@ -98,6 +100,7 @@ struct KurthReglasPopover: View {
         }
         .padding(14)
         .frame(width: 360)
+        .onAppear { reglas = agente.reglas }
     }
 
     /// Modos del agente; si aún no hay sesión, los cinco que existen.
@@ -123,6 +126,6 @@ struct KurthReglasPopover: View {
     }
 
     private func guardar() {
-        KurthAgentService.reglas = reglas
+        agente.reglas = reglas
     }
 }

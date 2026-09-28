@@ -35,8 +35,10 @@ struct KurthAgentChat: View {
 
     @State private var texto = ""
     @FocusState private var escribiendo: Bool
-    /// Si este panel ya se contó como abierto en el servicio (ver onAppear / onDisappear).
-    @State private var panelRegistrado = false
+    /// La conversación en la que este panel se contó como abierto (ver onAppear / onDisappear). Se
+    /// guarda la instancia y no se lee del entorno al desaparecer: al cambiar de conversación, el
+    /// cierre tiene que ir a la que se deja (kurth: multichat).
+    @State private var registradoEn: KurthAgentService?
     /// Alto del encabezado y de la caja de abajo, para desvanecer la conversación antes de ellos.
     @State private var altoArriba: CGFloat = 0
     @State private var altoAbajo: CGFloat = 0
@@ -46,7 +48,6 @@ struct KurthAgentChat: View {
     private let margen: CGFloat = 8
     /// La conversación ya pasó por debajo del encabezado (enciende la línea de 1 px, como en la barra).
     @State private var desplazado = false
-    @State private var confirmaBorrar = false
 
     /// Lo último que salió de esta caja, para devolverlo si Kurth lo detiene antes de que el agente
     /// conteste (KurthAgentService.retirado). `mensaje` es lo que quedó en el globo; `escrito`, lo
@@ -127,14 +128,6 @@ struct KurthAgentChat: View {
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { altoAbajo = $0 }
             }
             .safeAreaPadding(.bottom, margen)
-            // Borrar es empezar de cero (KurthAgentService.limpiar abre otra sesión), así que se
-            // confirma. Es la hoja del sistema: el panel es angosto y una tarjeta adentro no cabe bien.
-            .alert("¿Borrar la conversación?", isPresented: $confirmaBorrar) {
-                Button("Borrar", role: .destructive) { borrarConversacion() }
-                Button("Cancelar", role: .cancel) {}
-            } message: {
-                Text("Se borra lo que ves aquí y el agente empieza de cero: ya no recuerda esta plática.")
-            }
             .animation(NookDesign.Motion.standard, value: agente.permiso?.id)
             .animation(NookDesign.Motion.standard, value: confirmacionPendiente?.id)
             .animation(NookDesign.Motion.standard, value: muestraPlan)
@@ -145,14 +138,18 @@ struct KurthAgentChat: View {
             }
             .onAppear {
                 KurthCabeza.shared.browserManager = browserManager
-                if !panelRegistrado { panelRegistrado = true; agente.panelAbierto() }
+                if registradoEn == nil { registradoEn = agente; agente.panelAbierto() }
+                // Lo que se dejó escrito en esta conversación antes de cambiar a otra.
+                if texto.isEmpty { texto = agente.borrador }
                 if !flotante { escribiendo = true }
             }
             .onDisappear {
-                if panelRegistrado { panelRegistrado = false; agente.panelCerrado() }
+                registradoEn?.panelCerrado()
+                registradoEn = nil
                 if flotante { KurthAgentHoverManager.conBorrador = false }
             }
             .onChange(of: texto) { _, nuevo in
+                agente.borrador = nuevo
                 if flotante { KurthAgentHoverManager.conBorrador = !nuevo.isEmpty }
             }
             .onChange(of: agente.retirado?.id) { _, _ in devolverRetirado() }
@@ -165,13 +162,15 @@ struct KurthAgentChat: View {
 
     // MARK: - Encabezado
 
-    /// La misma fila que la barra de la página: a la izquierda, donde ella lleva el dominio, solo el
-    /// estado cuando pide atención (ya sin el título "Agente"); a la derecha, donde ella lleva
-    /// extensiones y chat, las acciones en su cápsula si la barra va en cápsulas. Sin botón de
+    /// La misma fila que la barra de la página: a la izquierda, donde ella lleva el dominio, el
+    /// título de la conversación, que abre la lista (KurthChatsLista.swift); a la derecha, donde ella
+    /// lleva extensiones y chat, las acciones en su cápsula si la barra va en cápsulas. Sin botón de
     /// cerrar: lo cierra el mismo botón de chat de la barra que lo abrió.
     private var encabezado: some View {
         HStack(spacing: 8) {
-            titulo
+            // El título toma lo que sobre antes que el espacio vacío; si no, se cortaba en "Prueba d…"
+            // con medio encabezado libre.
+            titulo.layoutPriority(1)
             Spacer(minLength: 0)
             acciones
                 .modifier(KurthCapsule(active: esCapsulas))
@@ -183,24 +182,11 @@ struct KurthAgentChat: View {
         .animation(NookDesign.Motion.standard, value: barStyle)
     }
 
-    /// Sin "Agente" (Kurth, 25 sep: quítalo del fijo y del flotante): a la izquierda solo sale lo
-    /// que pide atención, un permiso esperando o un error. Con cápsulas va en la suya, como los
-    /// botones, porque la conversación ya pasa por debajo.
+    /// Sin "Agente" (Kurth, 25 sep: quítalo del fijo y del flotante). Desde el multichat (28 sep) va
+    /// el título de la conversación; lo que pide atención (un permiso esperando, un error) sale en
+    /// su lugar. Con cápsulas va en la suya, como los botones.
     private var titulo: some View {
-        ZStack {
-            if let detalle = detalleDeEstado {
-                Text(detalle)
-                    .font(NookDesign.Font.caption)
-                    .foregroundStyle(Color.primary.opacity(0.6))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .padding(.horizontal, 4)
-                    .frame(height: KurthTopBarView.capsuleHeight)
-                    .modifier(KurthCapsule(active: esCapsulas, minWidth: 1))
-                    .transition(.opacity)
-            }
-        }
-        .animation(NookDesign.Motion.quick, value: detalleDeEstado)
+        KurthChatsTitulo(detalle: detalleDeEstado, esCapsulas: esCapsulas)
     }
 
     private var acciones: some View {
@@ -242,12 +228,14 @@ struct KurthAgentChat: View {
             // kurth: «…» con "Guardar como skill…" (KurthGuardarSkill.swift).
             KurthMenuDelPanel(medida: medidaDeIcono)
 
-            Button("Borrar la conversación", systemImage: "trash") {
-                confirmaBorrar = true
+            // Nueva en vez de borrar (multichat): la de ahora se queda en la lista. Borrar va con
+            // clic derecho en la lista.
+            Button("Nueva conversación", systemImage: "square.and.pencil") {
+                KurthChats.shared.nueva()
             }
             .kurthBarIcon(size: medidaDeIcono)
             .disabled(agente.mensajes.isEmpty)
-            .help("Borrar la conversación")
+            .help("Nueva conversación, con la misma carpeta y permisos")
         }
     }
 
@@ -275,11 +263,6 @@ struct KurthAgentChat: View {
 
     private var esquinasDeArriba: ConcentricRectangle {
         ConcentricRectangle(uniformTopCorners: .concentric(minimum: .fixed(0)), uniformBottomCorners: .fixed(0))
-    }
-
-    private func borrarConversacion() {
-        agente.limpiar()
-        KurthSenalar.shared.reiniciarNumeros()
     }
 
     private var detalleDeEstado: String? {
@@ -478,6 +461,8 @@ struct KurthAgentChat: View {
         // kurth: el replay de un workflow espera la respuesta aunque el agente no esté corriendo.
         if KurthCabeza.activo, KurthCabeza.shared.replayEspera { return KurthCabeza.shared.pendiente }
         guard KurthCabeza.activo, agente.estado != .trabajando, agente.aceptaMensajes else { return nil }
+        // kurth: multichat — solo en la conversación que preguntó (si se sabe cuál fue).
+        if let deQuien = KurthCabeza.shared.chatDelPendiente, deQuien !== agente { return nil }
         return KurthCabeza.shared.pendiente
     }
 
@@ -513,8 +498,8 @@ struct KurthAgentChat: View {
         VStack(alignment: .leading, spacing: 10) {
             encabezadoDelicado(p)
             HStack(spacing: 6) {
-                opcionDeConfirmacion("Sí, \(p.verbo)", fuerte: true) { KurthCabeza.shared.responder(true) }
-                opcionDeConfirmacion("No", fuerte: false) { KurthCabeza.shared.responder(false) }
+                opcionDeConfirmacion("Sí, \(p.verbo)", fuerte: true) { KurthCabeza.shared.responder(true, desde: agente) }
+                opcionDeConfirmacion("No", fuerte: false) { KurthCabeza.shared.responder(false, desde: agente) }
             }
         }
         .padding(12)

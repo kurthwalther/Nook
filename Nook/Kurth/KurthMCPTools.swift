@@ -61,8 +61,6 @@ enum KurthMCPTools {
                 info: "Pestañas en árbol de upstream (tab trails): la que abre un link cuelga de la que la abrió. false = al mismo nivel, junto a ella"),
         Setting(key: KurthLinksExternos.ajuste, type: "string", defaultValue: "pestana",
                 info: "Links que llegan de otras apps: pestana = en su app si está instalada (universal links, o Zoom/Teams/Spotify/WhatsApp por su esquema), si no pestaña nueva al frente; ventanita = la ventana flotante de upstream"),
-        Setting(key: "kurth.autoPorSitio", type: "bool", defaultValue: true,
-                info: "Aplicar las reglas por sitio: mientras la pestaña activa esté en un host con regla, el agente toma ese modo de permisos y al salir vuelve al que tenía"),
         Setting(key: "kurth.passwords", type: "bool", defaultValue: true,
                 info: "Llave de contraseñas de Apple en los campos de usuario y contraseña de las páginas (Touch ID → llena la página). Se aplica a las páginas que se abran después de reiniciar Nook"),
         Setting(key: KurthAutoconsent.ajuste, type: "bool", defaultValue: true,
@@ -137,9 +135,10 @@ enum KurthMCPTools {
         ),
         AIToolDefinition(
             name: "kurth_remote_control",
-            description: "El cel: Remote Control de Claude Code sobre la conversación del panel del agente (botón junto al de permisos). action: on enciende y devuelve el enlace en cuanto lo hay; off apaga; status dice estado, enlace y desde cuándo.",
+            description: "El cel: Remote Control de Claude Code sobre una conversación del panel del agente (botón junto al de permisos; cada conversación tiene el suyo). action: on enciende y devuelve el enlace en cuanto lo hay; off apaga; status dice estado, enlace y desde cuándo. Sin chat, la conversación que se ve (ids en kurth_chats).",
             parameters: ["type": "object", "properties": [
                 "action": ["type": "string", "enum": ["on", "off", "status", "send", "echo"]],
+                "chat": ["type": "string", "description": "id de la conversación (kurth_chats); los hooks del cel lo mandan con echo"],
                 "text": ["type": "string", "description": "send: lo que se manda a la conversación como desde la caja. echo: lo que la sesión del cel reporta (lo usan sus hooks)"],
                 "role": ["type": "string", "enum": ["user", "assistant", "tool"], "description": "echo: quién lo dijo"],
             ], "required": ["action"]]
@@ -153,6 +152,7 @@ enum KurthMCPTools {
         KurthAutoconsent.herramienta,
         KurthBoosts.herramienta,
         KurthWorkflows.herramienta, // se atiende en DevMCPServer.callTool (camino async)
+        KurthChats.herramienta,
     ] + KurthMemorias.herramientas
 
     /// nil si la herramienta no es de la capa Kurth.
@@ -163,6 +163,7 @@ enum KurthMCPTools {
         if let resultado = KurthSuspension.llamar(name, args, tabs: tabs) { return resultado }
         if let resultado = KurthSplit.llamar(name, args, window: window, tabs: tabs) { return resultado }
         if let resultado = KurthBoosts.llamar(name, args, window: window, tabs: tabs) { return resultado }
+        if let resultado = KurthChats.llamar(name, args) { return resultado }
         // Las memorias se atienden antes, en DevMCPServer.callTool: no necesitan ventana.
         switch name {
         case "kurth_panel":
@@ -174,25 +175,29 @@ enum KurthMCPTools {
             }
             return text((agente ? "Agente " : "Barra lateral ") + (visible ? "abierta" : "cerrada"))
         case "kurth_remote_control":
-            let remoto = KurthRemoto.shared
+            // kurth: multichat — cada conversación tiene su cel. Los hooks mandan su id con el eco; un
+            // eco sin id (un cel que se encendió antes de actualizar) va a la que tenga el cel encendido.
+            let chats = KurthChats.shared
+            let porId = (args["chat"] as? String).flatMap(UUID.init(uuidString:)).flatMap(chats.chat)
+            let agente = porId ?? (args["action"] as? String == "echo" ? chats.chats.first { $0.remoto.encendido } : nil) ?? chats.activo
+            let remoto = agente.remoto
             switch args["action"] as? String {
             case "on":
-                guard let agente = KurthAgentService.actual else { return text("El panel del agente no ha abierto nunca en esta ejecución", error: true) }
                 if !remoto.encendido { agente.encenderRemoto() }
             case "off":
                 remoto.apagar()
             case "send":
-                guard let agente = KurthAgentService.actual else { return text("El panel del agente no ha abierto nunca en esta ejecución", error: true) }
                 guard let texto = args["text"] as? String, !texto.isEmpty else { return text("send necesita text", error: true) }
                 guard agente.aceptaMensajes else { return text("La caja no acepta mensajes ahora", error: true) }
                 agente.enviar(texto)
             case "echo":
                 guard let texto = args["text"] as? String, !texto.isEmpty else { return text("echo necesita text", error: true) }
-                KurthAgentService.actual?.ecoDelCel(rol: (args["role"] as? String) ?? "user", texto: texto)
+                agente.ecoDelCel(rol: (args["role"] as? String) ?? "user", texto: texto)
                 return text("ok")
             default: break
             }
-            var estado: [String: Any] = ["sessionId": remoto.sessionId ?? NSNull(), "conMCP": remoto.conMCP]
+            var estado: [String: Any] = ["chat": agente.id.uuidString, "titulo": agente.titulo,
+                                         "sessionId": remoto.sessionId ?? NSNull(), "conMCP": remoto.conMCP]
             switch remoto.estado {
             case .apagado: estado["estado"] = "apagado"
             case .arrancando(let paso): estado["estado"] = "arrancando"; estado["paso"] = paso

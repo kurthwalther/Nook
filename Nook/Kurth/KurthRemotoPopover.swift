@@ -15,7 +15,7 @@ struct KurthRemotoPopover: View {
     @Environment(KurthAgentService.self) private var agente
     @Environment(\.dismiss) private var cerrar
 
-    private var remoto: KurthRemoto { KurthRemoto.shared }
+    private var remoto: KurthRemoto { agente.remoto }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {

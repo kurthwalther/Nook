@@ -23,6 +23,11 @@
 //  (kurth_remote_control echo). El panel lo pinta como globos, y lo que se escribe en la caja va al
 //  pseudo-terminal: ida y vuelta, sin raspar pantalla. El texto llega por mensaje completo.
 //
+//  Uno por conversación (kurth: multichat, 28 sep; Kurth: "si está en remoto" es de cada una). Cada
+//  KurthAgentService tiene el suyo; sus archivos llevan el id de la conversación y los hooks lo
+//  mandan con el eco, para que cada globo llegue a la suya. En la app del iPhone la sesión sale
+//  como "Nook · <título>".
+//
 //  Lo que la CLI puede preguntar al arrancar, y qué se contesta (sondas del 25 sep):
 //   · "trust this folder" → Sí: la carpeta la eligió el usuario y el panel ya trabaja ahí sin preguntar.
 //   · "Enable Remote Control? (y/n)" → y; el diálogo equivalente → Enter.
@@ -39,7 +44,12 @@ import Observation
 @MainActor
 @Observable
 final class KurthRemoto {
-    static let shared = KurthRemoto()
+    /// La conversación dueña (KurthAgentService.id).
+    let chat: UUID
+
+    init(chat: UUID) {
+        self.chat = chat
+    }
 
     enum Estado: Equatable {
         case apagado
@@ -82,9 +92,10 @@ final class KurthRemoto {
 
     // MARK: - Encender y apagar
 
-    /// `opciones`: modelo, esfuerzo y permisos que el usuario dejó en el panel (kurth.agentOptions),
-    /// para que la sesión del cel arranque igual. `instrucciones`: lo que se suma al system prompt.
-    func encender(sessionId: String?, carpeta: URL, opciones: [String: String], instrucciones: String) {
+    /// `opciones`: modelo, esfuerzo y permisos de esta conversación, para que la sesión del cel
+    /// arranque igual. `instrucciones`: lo que se suma al system prompt. `nombre`: cómo sale en la app.
+    func encender(sessionId: String?, carpeta: URL, opciones: [String: String], instrucciones: String,
+                  nombre: String = "Nook") {
         guard !encendido else { return }
         self.sessionId = sessionId
         self.carpeta = carpeta
@@ -102,7 +113,7 @@ final class KurthRemoto {
                 return
             }
             do {
-                try self.lanzar(claude: claude, path: path, opciones: opciones, instrucciones: instrucciones)
+                try self.lanzar(claude: claude, path: path, opciones: opciones, instrucciones: instrucciones, nombre: nombre)
             } catch {
                 self.fallar("No pude abrir la sesión: \(error.localizedDescription)")
             }
@@ -156,13 +167,14 @@ final class KurthRemoto {
 
     // MARK: - El proceso en su pseudo-terminal
 
-    private func lanzar(claude: String, path: String?, opciones: [String: String], instrucciones: String) throws {
+    private func lanzar(claude: String, path: String?, opciones: [String: String], instrucciones: String,
+                        nombre: String) throws {
         guard let carpeta else { return }
         guard let pty = Self.abrirPseudoTerminal(columnas: 120, filas: 32) else {
             throw NSError(domain: "KurthRemoto", code: 1, userInfo: [NSLocalizedDescriptionKey: "no hay pseudo-terminal disponible"])
         }
 
-        var argumentos = ["--remote-control", "Nook", "--no-chrome"]
+        var argumentos = ["--remote-control", nombre, "--no-chrome"]
         if let sessionId { argumentos += ["--resume", sessionId] }
         if let mcp = escribirConfigMCP() {
             argumentos += ["--mcp-config", mcp.path]
@@ -434,7 +446,7 @@ final class KurthRemoto {
         guard let datos = try? JSONSerialization.data(withJSONObject: config) else { return nil }
         let carpeta = base.appendingPathComponent("Kurth")
         try? FileManager.default.createDirectory(at: carpeta, withIntermediateDirectories: true)
-        let archivo = carpeta.appendingPathComponent("remoto-mcp.json")
+        let archivo = carpeta.appendingPathComponent("remoto-mcp-\(chat.uuidString).json")
         guard (try? datos.write(to: archivo, options: .atomic)) != nil else { return nil }
         try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: archivo.path)
         return archivo
@@ -454,6 +466,7 @@ final class KurthRemoto {
         # Nook (rama kurth): eco de la sesión del cel hacia el panel del agente. Lo escribe KurthRemoto.
         import sys, json, os, urllib.request
         rol = sys.argv[1] if len(sys.argv) > 1 else "user"
+        chat = sys.argv[2] if len(sys.argv) > 2 else ""
         try: d = json.load(sys.stdin)
         except Exception: sys.exit(0)
         if rol == "user": texto = d.get("prompt") or ""
@@ -468,14 +481,14 @@ final class KurthRemoto {
         if not texto: sys.exit(0)
         try: token = open(os.path.expanduser("~/Library/Application Support/com.gstudios.nook/dev-mcp-token")).read().strip()
         except Exception: sys.exit(0)
-        cuerpo = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "kurth_remote_control", "arguments": {"action": "echo", "role": rol, "text": texto}}}).encode()
+        cuerpo = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "kurth_remote_control", "arguments": {"action": "echo", "role": rol, "text": texto, "chat": chat}}}).encode()
         req = urllib.request.Request("http://127.0.0.1:\(puerto)/mcp", data=cuerpo, headers={"Authorization": "Bearer " + token, "Content-Type": "application/json", "Accept": "application/json, text/event-stream"})
         try: urllib.request.urlopen(req, timeout=3).read()
         except Exception: pass
         """
         guard (try? codigo.write(to: script, atomically: true, encoding: .utf8)) != nil else { return nil }
         func gancho(_ rol: String) -> [String: Any] {
-            ["hooks": [["type": "command", "command": "/usr/bin/python3 '\(script.path)' \(rol)", "timeout": 5]]]
+            ["hooks": [["type": "command", "command": "/usr/bin/python3 '\(script.path)' \(rol) \(chat.uuidString)", "timeout": 5]]]
         }
         let ajustes: [String: Any] = ["hooks": [
             "UserPromptSubmit": [gancho("user")],
@@ -483,7 +496,7 @@ final class KurthRemoto {
             "PostToolUse": [gancho("tool")],
         ]]
         guard let datos = try? JSONSerialization.data(withJSONObject: ajustes) else { return nil }
-        let archivo = carpeta.appendingPathComponent("remoto-settings.json")
+        let archivo = carpeta.appendingPathComponent("remoto-settings-\(chat.uuidString).json")
         guard (try? datos.write(to: archivo, options: .atomic)) != nil else { return nil }
         return archivo
     }

@@ -17,6 +17,11 @@
 //  Quién ejecuta qué: el agente ejecuta sus propias herramientas; Nook solo autoriza. Por eso
 //  aquí no hay bucle de llamadas a herramientas como en AIService.
 //
+//  Uno por conversación (kurth: multichat, 28 sep). Cada una tiene su propio agente (proceso), su
+//  carpeta, sus permisos, sus reglas por sitio y su cel, y se guarda en su propio archivo
+//  (Kurth/Chats/<id>.json). Lo que comparten todas: las memorias del navegador y los workflows.
+//  La lista y cuál se ve viven en KurthChats.
+//
 
 import AppKit
 import Foundation
@@ -25,6 +30,23 @@ import Observation
 @MainActor
 @Observable
 final class KurthAgentService {
+
+    // MARK: - Qué conversación es
+
+    let id: UUID
+    let creado: Date
+    /// El nombre puesto a mano (Renombrar en la lista); sin él, sale del primer mensaje.
+    var tituloPuesto: String? { didSet { guardarConversacion() } }
+    var titulo: String {
+        tituloPuesto ?? KurthChatsModelo.titulo(primerMensaje: mensajes.first { $0.autor == .usuario }?.texto)
+    }
+    var ultimaActividad: Date { mensajes.last?.hora ?? creado }
+    /// Terminó un turno sin que nadie lo viera: la lista le pone punto hasta que se abra.
+    private(set) var sinLeer = false
+    /// Lo escrito en la caja sin mandar: cada conversación conserva el suyo al cambiar de una a otra.
+    @ObservationIgnored var borrador = ""
+    /// El cel de esta conversación (KurthRemoto): cada una puede tener el suyo encendido.
+    let remoto: KurthRemoto
 
     // MARK: - Lo que la vista pinta
 
@@ -131,11 +153,13 @@ final class KurthAgentService {
     /// Modelo, esfuerzo, modo y rápido, tal como los publica el agente (ver KurthACPConfigOption).
     private(set) var opciones: [KurthACPConfigOption] = []
 
-    /// Modelo, esfuerzo, rápido y permisos de la última sesión; se vuelven a aplicar en cada una.
-    /// Los permisos antes volvían a Manual a propósito (un "sin permisos" pegado es lo que
-    /// aprovecharía una página con instrucciones escondidas); Kurth pidió el 24 sep que se recuerde
-    /// todo, sabiendo el riesgo.
-    private static let claveOpciones = "kurth.agentOptions"
+    /// Modelo, esfuerzo, rápido y permisos de esta conversación; se vuelven a aplicar cada vez que su
+    /// sesión abre. Los permisos antes volvían a Manual a propósito (un "sin permisos" pegado es lo
+    /// que aprovecharía una página con instrucciones escondidas); Kurth pidió el 24 sep que se
+    /// recuerde todo, sabiendo el riesgo. Una conversación nueva copia las de la que estaba abierta.
+    private(set) var elegidas: [String: String]
+    /// Donde vivían cuando había una sola conversación: solo sirven para la primera (migrar).
+    static let claveOpciones = "kurth.agentOptions"
     /// En este orden al aplicarlas: del modelo dependen las demás (con Sonnet no existe "fast").
     private static let opcionesQueSeRecuerdan = ["model", "effort", "fast", "mode"]
 
@@ -144,9 +168,8 @@ final class KurthAgentService {
         // kurth: si Kurth elige un modo durante una corrida programada, gana su elección.
         if id == "mode" { modoForzado = nil; modoAntesDeForzar = nil }
         if Self.opcionesQueSeRecuerdan.contains(id) {
-            var elegidas = UserDefaults.standard.dictionary(forKey: Self.claveOpciones) as? [String: String] ?? [:]
             elegidas[id] = valor
-            UserDefaults.standard.set(elegidas, forKey: Self.claveOpciones)
+            guardarConversacion()
         }
         Task {
             do { try await cliente.setConfigOption(id, value: valor) } catch { ultimoDiagnostico = error.localizedDescription }
@@ -159,7 +182,7 @@ final class KurthAgentService {
         // Mientras arranca, las opciones son las de fábrica hasta que aplicarOpcionesGuardadas pone
         // las del usuario: guardarlas ahí borraría lo de la última sesión.
         guard estado != .arrancando else { return }
-        var elegidas = UserDefaults.standard.dictionary(forKey: Self.claveOpciones) as? [String: String] ?? [:]
+        var elegidas = self.elegidas
         for opcion in opciones where Self.opcionesQueSeRecuerdan.contains(opcion.id) {
             // El auto que puso el sitio no es elección del usuario: se guarda el modo de antes. Tampoco
             // el "sin restricciones" de una corrida programada (kurth: forzarModo).
@@ -170,11 +193,13 @@ final class KurthAgentService {
             }
             elegidas[opcion.id] = opcion.currentValue
         }
-        UserDefaults.standard.set(elegidas, forKey: Self.claveOpciones)
+        guard elegidas != self.elegidas else { return }
+        self.elegidas = elegidas
+        guardarConversacion()
     }
 
     private func aplicarOpcionesGuardadas() async {
-        var elegidas = UserDefaults.standard.dictionary(forKey: Self.claveOpciones) as? [String: String] ?? [:]
+        var elegidas = self.elegidas
         // Si el usuario no ha elegido esfuerzo en el panel, arranca en bajo: el panel es para
         // preguntas rápidas y en xhigh Opus se pone a verificar (24 sep: 17 s para resumir una nota).
         if elegidas["effort"] == nil { elegidas["effort"] = "low" }
@@ -187,22 +212,28 @@ final class KurthAgentService {
         opciones = cliente.configOptions
     }
 
-    /// Carpeta desde la que trabaja el agente: la elige el usuario y se recuerda entre
-    /// arranques. Decide dos cosas que se notan enseguida — qué memorias lee (el CLAUDE.md que
+    /// Carpeta desde la que trabaja el agente de esta conversación: la elige el usuario y se guarda
+    /// con ella. Decide dos cosas que se notan enseguida — qué memorias lee (el CLAUDE.md que
     /// haya ahí y los de encima) y sobre qué archivos actúa. Por eso apuntarla a un proyecto
     /// hace que el agente "sepa" de ese proyecto, y apuntarla a la carpeta personal deja un
     /// agente genérico con las memorias del usuario.
-    private(set) var carpetaDeTrabajo: URL = KurthAgentService.carpetaGuardada()
+    private(set) var carpetaDeTrabajo: URL
 
     /// Las últimas carpetas usadas, para el menú. La personal siempre va primero.
     private(set) var carpetasRecientes: [URL] = KurthAgentService.recientesGuardadas()
 
+    /// La carpeta de cuando había una sola conversación: solo sirve para la primera (migrar).
     private static let claveCarpeta = "kurth.agentFolder"
     private static let claveRecientes = "kurth.agentRecentFolders"
 
     static func carpetaGuardada() -> URL {
+        carpetaQueExiste(UserDefaults.standard.string(forKey: claveCarpeta))
+    }
+
+    /// La ruta si todavía es una carpeta; si no, la personal.
+    static func carpetaQueExiste(_ ruta: String?) -> URL {
         let personal = FileManager.default.homeDirectoryForCurrentUser
-        guard let ruta = UserDefaults.standard.string(forKey: claveCarpeta) else { return personal }
+        guard let ruta else { return personal }
         var esDirectorio: ObjCBool = false
         guard FileManager.default.fileExists(atPath: ruta, isDirectory: &esDirectorio), esDirectorio.boolValue
         else { return personal }   // la carpeta pudo borrarse o moverse desde la última vez
@@ -222,7 +253,6 @@ final class KurthAgentService {
     func cambiarCarpeta(_ url: URL) {
         guard url.path != carpetaDeTrabajo.path else { return }
         carpetaDeTrabajo = url
-        UserDefaults.standard.set(url.path, forKey: Self.claveCarpeta)
 
         var recientes = carpetasRecientes.map(\.path).filter { $0 != url.path }
         recientes.insert(url.path, at: 0)
@@ -231,6 +261,7 @@ final class KurthAgentService {
 
         sesionParaRetomar = nil
         sesionConMensajes = nil
+        guardarConversacion()
         apagar()
         arrancar()
     }
@@ -240,19 +271,24 @@ final class KurthAgentService {
 
     // MARK: - Apagado cuando nadie lo usa
 
-    /// Paneles del agente abiertos, sumando todas las ventanas (el servicio es uno para la app).
-    /// Con cero, el agente se apaga tras `esperaAntesDeApagar`: pesa ~420 MB, 1.3 GB con los MCP
-    /// de Kurth, y en la Air de 8 GB eso no puede quedarse vivo con el panel cerrado.
-    private var panelesAbiertos = 0
+    /// Paneles que enseñan esta conversación, sumando todas las ventanas. Con cero, el agente se
+    /// apaga tras `esperaAntesDeApagar`: pesa ~420 MB, 1.3 GB con los MCP de Kurth, y en la Air de
+    /// 8 GB eso no puede quedarse vivo con el panel cerrado. Si lo que pasó es que otra conversación
+    /// ocupa el panel, aguanta hasta `esperaOculta`: volver a ella es seguido y retomar tarda ~4 s.
+    private(set) var panelesAbiertos = 0
     private var apagadoProgramado: Task<Void, Never>?
     /// La conversación que se apagó por inactividad, para retomarla (session/resume) al reabrir.
     /// Solo vale para la misma carpeta: el cwd se fija al abrir la sesión.
     private var sesionParaRetomar: (id: String, carpeta: String)?
     /// Abrir y cerrar el panel seguido no debe reiniciar el agente cada vez.
     static let esperaAntesDeApagar: Duration = .seconds(30)
+    static let esperaOculta: TimeInterval = 10 * 60
+    @ObservationIgnored private var sinVerseDesde: Date?
 
     func panelAbierto() {
         panelesAbiertos += 1
+        if sinLeer { sinLeer = false; guardarConversacion() }
+        sinVerseDesde = nil
         apagadoProgramado?.cancel()
         apagadoProgramado = nil
         arrancar()
@@ -260,6 +296,7 @@ final class KurthAgentService {
 
     func panelCerrado() {
         panelesAbiertos = max(0, panelesAbiertos - 1)
+        if panelesAbiertos == 0 { sinVerseDesde = Date() }
         programarApagado()
     }
 
@@ -268,6 +305,12 @@ final class KurthAgentService {
         apagadoProgramado?.cancel()
         apagadoProgramado = Task { [weak self] in
             try? await Task.sleep(for: Self.esperaAntesDeApagar)
+            // Detrás de otra conversación que sí se ve: se queda hasta esperaOculta, revisando cada
+            // 30 s por si se cierran todos los paneles (entonces ya no hay a qué volver pronto).
+            while !Task.isCancelled, KurthChats.shared.hayPanelAbierto,
+                  let desde = self?.sinVerseDesde, Date().timeIntervalSince(desde) < Self.esperaOculta {
+                try? await Task.sleep(for: Self.esperaAntesDeApagar)
+            }
             guard !Task.isCancelled else { return }
             self?.apagarSiNadieLoUsa()
         }
@@ -289,7 +332,7 @@ final class KurthAgentService {
     func arrancar() {
         guard estado == .apagado || esError else { return }
         // Con el cel encendido la conversación es de ese proceso; el panel la retoma al apagarlo.
-        guard !KurthRemoto.shared.encendido else { return }
+        guard !remoto.encendido else { return }
         arrancando?.cancel()
         estado = .arrancando
         conectarEventos()
@@ -359,7 +402,6 @@ final class KurthAgentService {
     /// Pasa la conversación del panel al cel: se apaga el agente de aquí (guardando el id) y
     /// KurthRemoto abre esa misma conversación con Remote Control. Ver KurthRemoto.swift.
     func encenderRemoto() {
-        let remoto = KurthRemoto.shared
         guard !remoto.encendido else { return }
         // A media respuesta o con un permiso esperando no se cambia de manos: el botón va apagado.
         guard estado != .trabajando, permiso == nil else { return }
@@ -367,17 +409,17 @@ final class KurthAgentService {
         if let id { sesionParaRetomar = (id, carpetaDeTrabajo.path) }
         guardarConversacion()
         apagar()
-        let opciones = UserDefaults.standard.dictionary(forKey: Self.claveOpciones) as? [String: String] ?? [:]
         registroDelCel = []
         // Si quedó algo de un cel anterior que este agente todavía no sabe, la sesión nueva del cel lo recibe.
         let pendiente = pendienteDelCel.map { "\n\n" + Self.bloqueDelCel($0) } ?? ""
-        remoto.encender(sessionId: id, carpeta: carpetaDeTrabajo, opciones: opciones,
-                        instrucciones: KurthRemoto.instrucciones + pendiente)
+        remoto.encender(sessionId: id, carpeta: carpetaDeTrabajo, opciones: elegidas,
+                        instrucciones: KurthRemoto.instrucciones + pendiente,
+                        nombre: "Nook · " + String(titulo.prefix(40)))
     }
 
     /// Apaga el cel; si el panel está abierto, retoma la conversación por id (alApagar).
     func apagarRemoto() {
-        KurthRemoto.shared.apagar()
+        remoto.apagar()
     }
 
     /// Lo que se mandó desde esta caja al cel y todavía no vuelve como eco del hook.
@@ -446,7 +488,8 @@ final class KurthAgentService {
 
     /// Permisos ya decididos por sitio (Kurth, 26 sep): "si le pongo netflix.com que sea ese, y si se
     /// va a netflix.tv, que no". El host se compara exacto y solo en https; al salir del host vuelve el
-    /// modo que tenía. Se guardan en kurth.reglasDeSitio (JSON) y se editan desde el menú de permisos.
+    /// modo que tenía. Son de cada conversación (se guardan con ella) y se editan desde el menú de
+    /// permisos; una nueva copia las de la que estaba abierta.
     struct ReglaDeSitio: Codable, Identifiable, Equatable {
         var host: String
         /// Un valor del ajuste "mode" del agente: auto, acceptEdits, bypassPermissions, plan, default.
@@ -454,7 +497,9 @@ final class KurthAgentService {
         var id: String { host }
     }
 
+    /// Donde vivían cuando había una sola conversación: solo sirven para la primera (migrar).
     static let claveReglas = "kurth.reglasDeSitio"
+    static let claveUsaReglas = "kurth.autoPorSitio"
 
     static let reglasPorDefecto: [ReglaDeSitio] = [
         "business.facebook.com", "adsmanager.facebook.com", "www.facebook.com", "www.instagram.com",
@@ -462,21 +507,18 @@ final class KurthAgentService {
         "search.google.com", "tagmanager.google.com",
     ].map { ReglaDeSitio(host: $0, modo: "auto") }
 
-    static var reglas: [ReglaDeSitio] {
-        get {
-            guard let datos = UserDefaults.standard.data(forKey: claveReglas),
-                  let lista = try? JSONDecoder().decode([ReglaDeSitio].self, from: datos) else { return reglasPorDefecto }
-            return lista
-        }
-        set {
-            if let datos = try? JSONEncoder().encode(newValue) { UserDefaults.standard.set(datos, forKey: claveReglas) }
-            actual?.revisarSitio()
-        }
+    static var reglasGuardadas: [ReglaDeSitio] {
+        guard let datos = UserDefaults.standard.data(forKey: claveReglas),
+              let lista = try? JSONDecoder().decode([ReglaDeSitio].self, from: datos) else { return reglasPorDefecto }
+        return lista
     }
 
-    static func regla(para url: URL?) -> ReglaDeSitio? {
-        guard UserDefaults.standard.object(forKey: "kurth.autoPorSitio") as? Bool ?? true,
-              let host = url?.host()?.lowercased(), url?.scheme == "https" else { return nil }
+    var reglas: [ReglaDeSitio] { didSet { revisarSitio(); guardarConversacion() } }
+    /// El interruptor "Reglas por sitio" del menú de permisos.
+    var usaReglas: Bool { didSet { revisarSitio(); guardarConversacion() } }
+
+    func regla(para url: URL?) -> ReglaDeSitio? {
+        guard usaReglas, let host = url?.host()?.lowercased(), url?.scheme == "https" else { return nil }
         return reglas.first { $0.host.lowercased() == host }
     }
 
@@ -492,7 +534,7 @@ final class KurthAgentService {
     }
 
     func revisarSitio() {
-        let regla = Self.regla(para: ultimaURL)
+        let regla = regla(para: ultimaURL)
         reglaActiva = regla
         guard cliente.isRunning, let modo = opciones.first(where: { $0.id == "mode" }) else { return }
         // kurth: una corrida programada manda sobre la regla del sitio mientras dura (forzarModo).
@@ -536,7 +578,7 @@ final class KurthAgentService {
         guard let anterior, cliente.isRunning else { revisarSitio(); return }
         // No se pasa por revisarSitio: aplicarModo es asíncrono y ahí se leería todavía el modo
         // forzado como "el de antes del sitio". Se decide aquí con lo que ya se sabe.
-        let regla = Self.regla(para: ultimaURL)
+        let regla = regla(para: ultimaURL)
         reglaActiva = regla
         if let regla {
             if modoAntesDelSitio == nil { modoAntesDelSitio = anterior }
@@ -565,7 +607,7 @@ final class KurthAgentService {
     /// Si se puede mandar un mensaje ahora: con la sesión lista, o abriéndose y sin otro esperando.
     var aceptaMensajes: Bool {
         // Con el cel encendido la conversación es de ese proceso: se le escribe por su terminal.
-        if KurthRemoto.shared.encendido { return KurthRemoto.shared.url != nil && estado != .trabajando }
+        if remoto.encendido { return remoto.url != nil && estado != .trabajando }
         return estado == .listo || (estado == .arrancando && enEspera == nil)
     }
 
@@ -597,42 +639,17 @@ final class KurthAgentService {
             }
     }
 
-    /// Conversación nueva de verdad: antes solo se borraba lo visible y el agente seguía en la misma
-    /// sesión, con su contexto y con las instrucciones con que se creó (24 sep: Kurth limpiaba y
-    /// las respuestas seguían largas). Si el agente está corriendo, abre otra sesión en el mismo
-    /// proceso; si no, la próxima vez arranca con una nueva.
-    func limpiar() {
-        mensajes.removeAll()
-        plan.removeAll()
-        registroDelCel = []; pendienteDelCel = nil // era de la conversación que se borra
-        sesionParaRetomar = nil
-        sesionConMensajes = nil
-        paginasConContenido.removeAll()
-        try? FileManager.default.removeItem(at: Self.archivoGuardado)
-        guard estado == .listo, cliente.isRunning else { return }
-        estado = .arrancando
-        Task { [weak self] in
-            guard let self else { return }
-            do {
-                try await self.cliente.newSession(cwd: self.carpetaDeTrabajo, mcpServers: Self.mcpDeNook(),
-                                                  instrucciones: Self.instrucciones)
-                await self.aplicarOpcionesGuardadas()
-                self.modos = self.cliente.availableModes
-                self.modoActual = self.cliente.currentModeId
-                self.sesionLista()
-            } catch {
-                self.estado = .error(error.localizedDescription)
-                self.descartarEnEspera()
-            }
-        }
-    }
-
     // MARK: - Conversación guardada
 
-    /// Lo que se ve en el chat y la sesión del agente, para que cerrar Nook no borre la plática:
-    /// al abrir se pinta lo de antes y la primera sesión se retoma con session/resume, así que el
-    /// agente también lo recuerda (Kurth lo pidió el 24 sep).
-    private struct Guardado: Codable {
+    /// Lo que se ve en el chat, la sesión del agente y los ajustes de la conversación, para que
+    /// cerrar Nook no borre la plática: al abrir se pinta lo de antes y la sesión se retoma con
+    /// session/resume, así que el agente también lo recuerda (Kurth lo pidió el 24 sep). Una
+    /// conversación sin mensajes no se guarda.
+    struct Guardado: Codable {
+        /// nil solo en el agente.json de cuando había una sola conversación.
+        var id: UUID?
+        var titulo: String?
+        var creado: Date?
         var carpeta: String
         var sessionId: String?
         var mensajes: [Mensaje]
@@ -642,36 +659,117 @@ final class KurthAgentService {
         var instrucciones: String?
         /// kurth: lo del cel que el agente todavía no sabe (pendienteDelCel).
         var delCel: String?
+        var opciones: [String: String]?
+        var reglas: [ReglaDeSitio]?
+        var usaReglas: Bool?
+        /// Contestó sin que Kurth la viera; el punto de la lista sobrevive a cerrar Nook.
+        var sinLeer: Bool?
     }
 
-    private static let archivoGuardado: URL = {
+    static let carpetaDeChats: URL = {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return base.appendingPathComponent("com.gstudios.nook/Kurth/Chats", isDirectory: true)
+    }()
+
+    /// La conversación única de antes del multichat; se muda a Chats/ la primera vez.
+    private static let archivoDeAntes: URL = {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return base.appendingPathComponent("com.gstudios.nook/Kurth/agente.json")
     }()
 
-    /// La instancia viva, para el MCP (kurth_remote_control). El servicio es uno por app.
-    private(set) static weak var actual: KurthAgentService?
+    private var archivo: URL { Self.carpetaDeChats.appendingPathComponent(id.uuidString + ".json") }
 
-    init() {
-        cargarConversacion()
-        Self.actual = self
-        KurthRemoto.shared.alApagar = { [weak self] in
+    /// Borrada de la lista: ya no se escribe su archivo aunque un turno pendiente termine después.
+    @ObservationIgnored private var descartada = false
+    @ObservationIgnored private var alCerrarNook: NSObjectProtocol?
+
+    /// Una conversación guardada.
+    init(guardado: Guardado) {
+        id = guardado.id ?? UUID()
+        creado = guardado.creado ?? guardado.mensajes.first?.hora ?? Date()
+        tituloPuesto = guardado.titulo
+        carpetaDeTrabajo = Self.carpetaQueExiste(guardado.carpeta)
+        elegidas = guardado.opciones ?? [:]
+        reglas = guardado.reglas ?? Self.reglasPorDefecto
+        usaReglas = guardado.usaReglas ?? true
+        sinLeer = guardado.sinLeer ?? false
+        remoto = KurthRemoto(chat: id)
+        cargarConversacion(guardado)
+        conectarCelYCierre()
+    }
+
+    /// Una nueva. Copia carpeta, modelo, esfuerzo, permisos y reglas por sitio de `base` (la que
+    /// estaba abierta) y desde ahí cada una va por su lado. Sin base, los ajustes de cuando había
+    /// una sola conversación.
+    init(como base: KurthAgentService?) {
+        id = UUID()
+        creado = Date()
+        if let base {
+            carpetaDeTrabajo = base.carpetaDeTrabajo
+            elegidas = base.elegidas
+            reglas = base.reglas
+            usaReglas = base.usaReglas
+        } else {
+            carpetaDeTrabajo = Self.carpetaGuardada()
+            elegidas = UserDefaults.standard.dictionary(forKey: Self.claveOpciones) as? [String: String] ?? [:]
+            reglas = Self.reglasGuardadas
+            usaReglas = UserDefaults.standard.object(forKey: Self.claveUsaReglas) as? Bool ?? true
+        }
+        remoto = KurthRemoto(chat: id)
+        conectarCelYCierre()
+    }
+
+    private func conectarCelYCierre() {
+        remoto.alApagar = { [weak self] in
             guard let self else { return }
             self.celTermino()
             guard self.panelesAbiertos > 0 else { return }
             self.arrancar()
         }
-        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+        alCerrarNook = NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.guardarConversacion()
-                KurthRemoto.shared.apagar() // que el proceso del cel no sobreviva a Nook
+                self?.remoto.apagar() // que el proceso del cel no sobreviva a Nook
             }
         }
     }
 
-    private func cargarConversacion() {
-        guard let datos = try? Data(contentsOf: Self.archivoGuardado),
-              let guardado = try? JSONDecoder().decode(Guardado.self, from: datos) else { return }
+    /// Las conversaciones guardadas en Chats/, en cualquier orden (KurthChats las ordena).
+    static func cargarGuardadas() -> [KurthAgentService] {
+        let fm = FileManager.default
+        guard let archivos = try? fm.contentsOfDirectory(at: carpetaDeChats, includingPropertiesForKeys: nil) else { return [] }
+        return archivos.filter { $0.pathExtension == "json" }.compactMap { url in
+            guard let datos = try? Data(contentsOf: url), var guardado = try? JSONDecoder().decode(Guardado.self, from: datos),
+                  !guardado.mensajes.isEmpty else { return nil }
+            if guardado.id == nil { guardado.id = UUID(uuidString: url.deletingPathExtension().lastPathComponent) }
+            return KurthAgentService(guardado: guardado)
+        }
+    }
+
+    /// agente.json, la conversación única de antes del 28 sep, pasa a Chats/ con la carpeta, los
+    /// permisos y las reglas que entonces eran de toda la app. El original queda al lado como
+    /// agente.json.antes-del-multichat.
+    static func migrarConversacionUnica() {
+        let fm = FileManager.default
+        guard let datos = try? Data(contentsOf: archivoDeAntes),
+              var guardado = try? JSONDecoder().decode(Guardado.self, from: datos) else { return }
+        let id = guardado.id ?? UUID()
+        guardado.id = id
+        guardado.opciones = guardado.opciones ?? (UserDefaults.standard.dictionary(forKey: claveOpciones) as? [String: String])
+        guardado.reglas = guardado.reglas ?? reglasGuardadas
+        guardado.usaReglas = guardado.usaReglas ?? (UserDefaults.standard.object(forKey: claveUsaReglas) as? Bool ?? true)
+        try? fm.createDirectory(at: carpetaDeChats, withIntermediateDirectories: true)
+        guard let nuevos = try? JSONEncoder().encode(guardado),
+              (try? nuevos.write(to: carpetaDeChats.appendingPathComponent(id.uuidString + ".json"), options: .atomic)) != nil
+        else { return }
+        // Si el respaldo ya existía, se borra el original: lo importante ya está en Chats/ y no debe
+        // migrarse dos veces.
+        if (try? fm.moveItem(at: archivoDeAntes, to: archivoDeAntes.appendingPathExtension("antes-del-multichat"))) == nil {
+            try? fm.removeItem(at: archivoDeAntes)
+        }
+    }
+
+    private func cargarConversacion(_ guardado: Guardado) {
         // Un turno que se cortó a la mitad al cerrar Nook ya no está en curso. Los avisos de "no pude
         // retomar" seguidos se quedan en uno (limpia los que dejó el error del 26 sep).
         mensajes = guardado.mensajes.map { var m = $0; m.enCurso = false; return m }
@@ -688,19 +786,34 @@ final class KurthAgentService {
     }
 
     private func guardarConversacion() {
-        guard !mensajes.isEmpty else { return }
-        let guardado = Guardado(carpeta: carpetaDeTrabajo.path,
+        guard !mensajes.isEmpty, !descartada else { return }
+        let guardado = Guardado(id: id, titulo: tituloPuesto, creado: creado,
+                                carpeta: carpetaDeTrabajo.path,
                                 // Solo una sesión que ya recibió un mensaje: Claude Code no escribe la
                                 // sesión en disco hasta el primero, y retomar una vacía falla siempre
                                 // (26 sep: diez avisos de "No pude retomar" seguidos, uno por reinicio).
                                 sessionId: sesionConMensajes ?? sesionParaRetomar?.id,
                                 mensajes: mensajes,
                                 instrucciones: Self.instrucciones,
-                                delCel: pendienteDelCel)
+                                delCel: pendienteDelCel,
+                                opciones: elegidas, reglas: reglas, usaReglas: usaReglas,
+                                sinLeer: sinLeer)
         guard let datos = try? JSONEncoder().encode(guardado) else { return }
-        try? FileManager.default.createDirectory(at: Self.archivoGuardado.deletingLastPathComponent(),
-                                                 withIntermediateDirectories: true)
-        try? datos.write(to: Self.archivoGuardado, options: .atomic)
+        try? FileManager.default.createDirectory(at: Self.carpetaDeChats, withIntermediateDirectories: true)
+        try? datos.write(to: archivo, options: .atomic)
+    }
+
+    /// Se quita de la lista: se apaga su agente y su cel y se borra su archivo. La sesión de Claude
+    /// Code (el .jsonl en ~/.claude/projects) no se toca: se puede retomar desde la terminal.
+    func descartar() {
+        descartada = true
+        apagadoProgramado?.cancel()
+        remoto.alApagar = nil
+        remoto.apagar()
+        apagar()
+        if let alCerrarNook { NotificationCenter.default.removeObserver(alCerrarNook) }
+        alCerrarNook = nil
+        try? FileManager.default.removeItem(at: archivo)
     }
 
     // MARK: - Conversación
@@ -709,7 +822,7 @@ final class KurthAgentService {
     /// respuesta. Va como enlace (dirección y título), no el contenido: si lo necesita, el agente
     /// lee la página con el Browser Control de Nook.
     /// Páginas cuyo contenido ya se le mandó al agente en esta sesión: la segunda pregunta sobre la
-    /// misma página no lo repite. Se vacía con una sesión nueva o al limpiar.
+    /// misma página no lo repite. Se vacía con una sesión nueva.
     private(set) var paginasConContenido = Set<String>()
 
     /// `menciones`: lo elegido con «@» ya resuelto (KurthMenciones.resolver). `paraElAgente`: si el
@@ -739,10 +852,10 @@ final class KurthAgentService {
         // instrucciones largas de un workflow o un boost.
         let memorias = KurthMemorias.shared.contextoParaMensaje(
             limpio, url: pagina.flatMap { URL(string: $0.uri) } ?? ultimaURL,
-            sesion: KurthRemoto.shared.encendido ? "cel" : cliente.sessionId)
+            sesion: remoto.encendido ? "cel" : cliente.sessionId)
         let ocultoConMemorias = [oculto, memorias].compactMap { $0 }.joined(separator: "\n\n")
         let oculto: String? = ocultoConMemorias.isEmpty ? nil : ocultoConMemorias
-        if KurthRemoto.shared.encendido {
+        if remoto.encendido {
             // Al cel: el texto, la pestaña como texto (allá no hay resource links) y lo señalado. El hook
             // de la sesión lo devuelve como eco; se reconoce por el texto y no se pinta dos veces.
             // En una sola línea: al pseudo-terminal, cada salto de línea es un Enter que manda a medias.
@@ -756,7 +869,7 @@ final class KurthAgentService {
             registroDelCel.append("Kurth (desde el panel de Nook): \(limpio)")
             mensajes.append(Mensaje(autor: .agente, texto: "", enCurso: true))
             estado = .trabajando
-            KurthRemoto.shared.enviar(partes.joined(separator: " "))
+            remoto.enviar(partes.joined(separator: " "))
             return
         }
         // kurth: lo que pasó en el cel va una vez, oculto, con el primer mensaje de vuelta.
@@ -823,7 +936,7 @@ final class KurthAgentService {
     /// hecho nada, el mensaje de Kurth sale de la conversación y vuelve a la caja (retirado).
     func cancelar() {
         guard estado == .trabajando else { return }
-        if KurthRemoto.shared.encendido { KurthRemoto.shared.interrumpir(); return }
+        if remoto.encendido { remoto.interrumpir(); return }
         if let i = indiceDelTurno, i > 0, mensajes[i - 1].autor == .usuario,
            mensajes[i].texto.isEmpty, mensajes[i].herramientas.isEmpty {
             retirarAlCerrar = true
@@ -915,7 +1028,7 @@ final class KurthAgentService {
                                        responder: { continuation.resume(returning: $0) },
                                        delicada: delicada)
                 // Un workflow corriendo sin Kurth enfrente se queda aquí: se le avisa.
-                KurthWorkflows.shared.esperandoConfirmacion(delicada?.frase ?? pedido.toolTitle)
+                KurthWorkflows.shared.esperandoConfirmacion(delicada?.frase ?? pedido.toolTitle, de: self)
             }
         }
     }
@@ -949,7 +1062,9 @@ final class KurthAgentService {
     }
 
     private func cerrarTurno() {
-        KurthCabeza.shared.turnoTerminado() // kurth: la pestaña deja de verse controlada
+        // kurth: la pestaña deja de verse controlada cuando ya ninguna conversación trabaja.
+        if !KurthChats.shared.alguienTrabaja(salvo: self) { KurthCabeza.shared.turnoTerminado() }
+        var dijoAlgo = false
         if let indice = indiceDelTurno {
             mensajes[indice].enCurso = false
             mensajes[indice].duracion = Date().timeIntervalSince(mensajes[indice].hora)
@@ -958,21 +1073,25 @@ final class KurthAgentService {
             if mensajes[indice].texto.isEmpty && mensajes[indice].herramientas.isEmpty {
                 mensajes.remove(at: indice)
                 if retirarAlCerrar { retirarUltimoDelUsuario() }
+            } else {
+                dijoAlgo = true
             }
         }
+        // Contestó mientras Kurth veía otra conversación (o con el panel cerrado): punto en la lista.
+        if dijoAlgo, panelesAbiertos == 0 { sinLeer = true }
         retirarAlCerrar = false
         permiso?.responder(nil)
         permiso = nil
         if case .error = estado {} else if cliente.isRunning {
             estado = .listo
-        } else if KurthRemoto.shared.encendido {
+        } else if remoto.encendido {
             estado = .apagado
         }
         guardarConversacion()
         // Si el panel se cerró mientras trabajaba, el apagado quedó pendiente.
         programarApagado()
         // Cómo acabó la corrida de un workflow, y lo que esperaba turno (KurthWorkflows).
-        KurthWorkflows.shared.turnoTerminado()
+        KurthWorkflows.shared.turnoTerminado(de: self)
     }
 
     private var esError: Bool { if case .error = estado { return true }; return false }

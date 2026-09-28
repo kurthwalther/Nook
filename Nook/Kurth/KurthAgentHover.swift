@@ -48,7 +48,8 @@ final class KurthAgentHoverManager: ObservableObject {
     weak var browserManager: BrowserManager?
     weak var windowRegistry: WindowRegistry?
     weak var nookSettings: NookSettingsService?
-    weak var agente: KurthAgentService?
+    /// La conversación que se ve (kurth: multichat): cambia sin que el panel se rehaga.
+    @MainActor private var agente: KurthAgentService { KurthChats.shared.activo }
 
     /// Mismas medidas que HoverSidebarManager.
     let triggerWidth: CGFloat = 6
@@ -126,7 +127,7 @@ final class KurthAgentHoverManager: ObservableObject {
         }
 
         // Abierto y con algo a medias, se queda aunque el mouse se vaya.
-        if isOverlayVisible, Self.redimensionando || Self.conBorrador || agente?.permiso != nil || agente?.estado == .trabajando {
+        if isOverlayVisible, Self.redimensionando || Self.conBorrador || agente.permiso != nil || agente.estado == .trabajando {
             reveal()
             return
         }
@@ -186,7 +187,6 @@ struct KurthAgentHoverOverlay: View {
     @EnvironmentObject var browserManager: BrowserManager
     @Environment(BrowserWindowState.self) private var windowState
     @Environment(WindowRegistry.self) private var windowRegistry
-    @Environment(KurthAgentService.self) private var agente
     @Environment(\.nookSettings) var nookSettings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var hover = KurthAgentHoverManager()
@@ -212,7 +212,7 @@ struct KurthAgentHoverOverlay: View {
         let alto = Self.limitar(altoDeVentana * (fraccionEnVivo ?? fraccion), en: altoDeVentana)
         ZStack(alignment: enLaDerecha ? .bottomTrailing : .bottomLeading) {
             if !windowState.isSidebarAIChatVisible, hover.isOverlayVisible {
-                KurthAgentChat(flotante: true)
+                KurthAgentPanel(flotante: true)
                     .frame(width: windowState.aiSidebarWidth, height: alto)
                     .environmentObject(browserManager)
                     .environment(windowState)
@@ -249,7 +249,6 @@ struct KurthAgentHoverOverlay: View {
             hover.browserManager = browserManager
             hover.windowRegistry = windowRegistry
             hover.nookSettings = nookSettings
-            hover.agente = agente
             hover.start()
         }
         .onDisappear { hover.stop() }

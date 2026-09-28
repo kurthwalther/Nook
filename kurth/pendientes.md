@@ -3,6 +3,30 @@
 Una sola lista para las dos Macs. Quien avance, la actualiza en el mismo commit.
 Detalle de Zen en `kurth/plan-zen.md`.
 
+## Multichat — 28 sep, instalado en la Air, falta que Kurth pruebe con su mouse
+- Decisión de Kurth: conversaciones **independientes** (carpeta, permisos, modelo/esfuerzo, reglas por sitio y cel
+  de cada una) y **varias a la vez**; **compartido**: memorias del navegador y workflows. RAM aceptada ("ni modo").
+- Dónde: el título a la izquierda del encabezado del panel abre la lista (`KurthChatsLista.swift`); ✎ reemplaza al
+  bote; borrar y renombrar con clic derecho o «…» en la fila. Punto por fila: late = trabajando, naranja = pide
+  permiso, azul = contestó sin que la vieras (se guarda). Punto junto al título si otra te espera.
+- Un `KurthAgentService` por conversación, cada uno con su proceso; `KurthChats` guarda la lista y cuál se ve (una
+  para toda la app). Archivos en `Application Support/com.gstudios.nook/Kurth/Chats/<id>.json`; `agente.json` se
+  migra solo (queda `agente.json.antes-del-multichat`). Una nueva copia carpeta/permisos/reglas de la abierta.
+- Apagado: 30 s con el panel cerrado; **10 min** si lo que pasó es que otra conversación ocupa el panel.
+- El cel es uno por conversación (`KurthRemoto(chat:)`); en la app del iPhone sale "Nook · <título>"; los hooks
+  mandan el id con el eco.
+- Detener (modo con cabeza) detiene **todas** las que trabajan: el MCP no dice cuál toca la página. La tarjeta de
+  botón delicado va a la que trabajaba si era una sola.
+- Workflows y Boosts salen en la conversación que se ve; cada corrida se sigue en la suya (`chatDeLaCorrida`).
+- MCP `kurth_chats` (list/new/select/rename/delete/send). Pruebas sin Nook: `kurth/checks/chats.sh` (13 ✅).
+- Probado por MCP el 28 sep: dos a la vez (una oculta), carpetas distintas (una contestó "Soy José", la otra
+  "Soy Claude Code"), reinicio de Nook (las dos vuelven y retoman su sesión), cel en una con la otra por su caja
+  (cada eco a la suya, "cel B"/"caja A"), borrar la visible y la última. Medido: 150–350 MB por conversación.
+- Falta con mouse: abrir la lista, renombrar en línea, clic derecho › Borrar, ✎, el punto del título, hover
+  flotante cambiando de conversación, borrador que se conserva al cambiar.
+- Ideas no hechas: correr cada workflow en su propia conversación (hoy va a la que se ve; una programada fuerza
+  "sin restricciones" en esa); atajo de teclado para nueva; conversación por ventana.
+
 ## Chat del agente: seleccionar, detener y ⇧↩ — 27 sep, instalado en la Pro, falta que Kurth pruebe
 - Sus globos ya se pueden seleccionar (`.textSelection` en KurthAgentChat).
 - Detener antes de que el agente diga o haga algo saca el mensaje de la conversación y lo devuelve a la caja con

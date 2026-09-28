@@ -232,7 +232,8 @@ final class KurthWorkflowsReplay {
                                valores: [String: String], programada: Bool,
                                pestañas: KurthReplayPestañas) async -> KurthReplayRespaldo {
         guard !Task.isCancelled else { return .fallo("corrida detenida") }
-        guard KurthAgentService.actual != nil else { return .fallo("el agente del panel no está disponible") }
+        // kurth: multichat — la conversación que se ve es la que recibe el pedido (KurthWorkflows.mandar).
+        let agente = KurthChats.shared.activo
         guard let tab = pestañas.actual else { return .fallo("la corrida no tiene pestaña") }
         nota(wf.nombre, "el agente resuelve el paso \(n)")
         let foto = await pestañas.foto()
@@ -240,9 +241,9 @@ final class KurthWorkflowsReplay {
         let instrucciones = Self.instruccionesDeRespaldo(wf, paso: p, n: n, motivo: motivo, valor: valor, tab: tab,
                                                         programada: programada, foto: foto)
         // Sin restricciones solo mientras el agente resuelve el paso de una programada.
-        if programada { KurthAgentService.actual?.forzarModo("bypassPermissions") }
+        if programada { agente.forzarModo("bypassPermissions") }
         defer {
-            if programada { KurthAgentService.actual?.forzarModo(nil) }
+            if programada { agente.forzarModo(nil) }
             nota(wf.nombre, nil)
         }
         let esta = UUID()

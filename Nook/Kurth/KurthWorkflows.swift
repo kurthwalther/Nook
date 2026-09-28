@@ -497,6 +497,9 @@ final class KurthWorkflows {
 
     /// Lo que no pudo salir porque el agente estaba ocupado: sale al terminar su turno.
     @ObservationIgnored private var cola: [Envio] = []
+    /// kurth: multichat — la conversación donde salió el último envío. Los workflows son de todas,
+    /// pero cada corrida se sigue en la suya: el turno que termina en otra no es de la corrida.
+    @ObservationIgnored private weak var chatDeLaCorrida: KurthAgentService?
 
     private struct Envio {
         let visible: String
@@ -515,12 +518,13 @@ final class KurthWorkflows {
     }
 
     private func mandar(_ envio: Envio) -> Bool {
-        guard let agente = KurthAgentService.actual else { return false }
+        let agente = KurthChats.shared.activo
         if let v = ventanaParaElPanel(), !v.isSidebarAIChatVisible {
             withAnimation(.easeInOut(duration: 0.2)) { v.isSidebarAIChatVisible = true }
         }
         agente.arrancar()
         guard agente.aceptaMensajes else { return false }
+        chatDeLaCorrida = agente
         envio.alSalir?()
         agente.enviar(envio.visible, paraElAgente: envio.instrucciones)
         return true
@@ -577,7 +581,7 @@ final class KurthWorkflows {
             self?.activa = CorridaActiva(nombre: nombre, corrida: corrida.id, programada: programada)
             self?.actualizarCorrida(nombre, corrida.id) { $0.inicio = Date(); $0.modo = "agente" }
             if programada {
-                KurthAgentService.actual?.forzarModo("bypassPermissions")
+                self?.chatDeLaCorrida?.forzarModo("bypassPermissions")
                 KurthCabeza.shared.autorizarCorridaDelAgente(true)
             }
         }
@@ -591,12 +595,12 @@ final class KurthWorkflows {
     }
 
     /// Gancho en KurthAgentService.cerrarTurno: se lee cómo acabó la corrida y sale lo encolado.
-    func turnoTerminado() {
+    func turnoTerminado(de agente: KurthAgentService) {
         defer { despacharCola() }
+        guard chatDeLaCorrida == nil || chatDeLaCorrida === agente else { return }
         // El turno era el del respaldo de un replay: su respuesta es para el replay.
-        if let agente = KurthAgentService.actual,
-           KurthWorkflowsReplay.shared.turnoDelAgente(agente.mensajes.last { $0.autor == .agente }?.texto ?? "") { return }
-        guard var a = activa, let agente = KurthAgentService.actual else { return }
+        if KurthWorkflowsReplay.shared.turnoDelAgente(agente.mensajes.last { $0.autor == .agente }?.texto ?? "") { return }
+        guard var a = activa else { return }
         a.turnos += 1
         activa = a
         let ultimo = agente.mensajes.last { $0.autor == .agente }?.texto ?? ""
@@ -623,7 +627,7 @@ final class KurthWorkflows {
         }
         // Programada: el modo y la guardia vuelven a lo de siempre en cuanto el agente suelta el turno.
         if a.programada {
-            KurthAgentService.actual?.forzarModo(nil)
+            agente.forzarModo(nil)
             KurthCabeza.shared.autorizarCorridaDelAgente(false)
         }
         switch estado {
@@ -638,8 +642,9 @@ final class KurthWorkflows {
     }
 
     /// Gancho en la tarjeta de permiso del agente y en la confirmación de un botón delicado.
-    func esperandoConfirmacion(_ que: String) {
+    func esperandoConfirmacion(_ que: String, de chat: KurthAgentService? = nil) {
         guard let a = activa, !a.avisada else { return }
+        if let chat, let deLaCorrida = chatDeLaCorrida, chat !== deLaCorrida { return }
         let titulo = workflow(a.nombre)?.titulo ?? a.nombre
         actualizarCorrida(a.nombre, a.corrida) { $0.estado = .esperando; $0.resumen = que }
         avisarQueEspera(titulo, que)

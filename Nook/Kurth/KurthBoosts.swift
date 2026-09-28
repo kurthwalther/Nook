@@ -312,7 +312,8 @@ final class KurthBoosts {
     /// (no al aparecer el panel) para que el mensaje quede en espera y no se pierda.
     static func describir(_ pedido: String, host: String, pagina: PageSession?, en ventana: BrowserWindowState) {
         let limpio = pedido.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !limpio.isEmpty, let agente = KurthAgentService.actual else { return }
+        guard !limpio.isEmpty else { return }
+        let agente = KurthChats.shared.activo
         withAnimation(.easeInOut(duration: 0.2)) { ventana.isSidebarAIChatVisible = true }
         agente.arrancar()
         guard agente.aceptaMensajes else { return }
@@ -325,9 +326,9 @@ final class KurthBoosts {
 
     /// Si el botón de "Describe" puede mandar: con el agente apagado o en error también (lo arranca).
     static func agentePuedeRecibir() -> Bool {
-        guard let agente = KurthAgentService.actual else { return false }
+        let agente = KurthChats.shared.activo
         switch agente.estado {
-        case .apagado, .error: return !KurthRemoto.shared.encendido || agente.aceptaMensajes
+        case .apagado, .error: return !agente.remoto.encendido || agente.aceptaMensajes
         default: return agente.aceptaMensajes
         }
     }

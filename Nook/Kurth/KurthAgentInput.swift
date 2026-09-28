@@ -64,7 +64,7 @@ struct KurthAgentInput: View {
 
     private var filaDeArriba: some View {
         let abriendo = agente.estado == .arrancando
-        let remoto = KurthRemoto.shared
+        let remoto = agente.remoto
         return HStack(spacing: 4) {
             menuDeAgregar
             botonSeñalar
@@ -221,7 +221,7 @@ struct KurthAgentInput: View {
     private var marcador: String {
         // Grabando un workflow en esta ventana, lo que se escribe es narración (KurthAgentChat.enviar).
         if KurthWorkflows.shared.grabandoEn(windowState.id) { return "Cuenta lo que haces…" }
-        return KurthRemoto.shared.encendido && KurthRemoto.shared.url == nil ? "Conectando el cel…" : "Pídele algo…"
+        return agente.remoto.encendido && agente.remoto.url == nil ? "Conectando el cel…" : "Pídele algo…"
     }
 
     private var menuDeAgregar: some View {
@@ -461,13 +461,13 @@ struct KurthAgentInput: View {
         agente.carpetaDeTrabajo.path != FileManager.default.homeDirectoryForCurrentUser.path
     }
 
-    @AppStorage("kurth.autoPorSitio") private var autoPorSitio = true
     @State private var popoverReglas = false
 
     private var menuDePermisos: some View {
         let modo = opcion("mode")
         return Menu {
-            Toggle("Reglas por sitio", isOn: $autoPorSitio)
+            // De esta conversación, como sus reglas (kurth: multichat).
+            Toggle("Reglas por sitio", isOn: Binding(get: { agente.usaReglas }, set: { agente.usaReglas = $0 }))
             Button("Reglas…") { popoverReglas = true }
             Divider()
             if let modo {
@@ -510,16 +510,17 @@ struct KurthAgentInput: View {
         .disabled(modo == nil)
         .help("Permisos: qué puede hacer el agente sin preguntarte")
         .popover(isPresented: $popoverReglas, arrowEdge: .top) {
-            KurthReglasPopover(modos: modo?.choices.map { ($0.value, nombreDeEleccion("mode", $0)) } ?? [],
+            KurthReglasPopover(agente: agente,
+                               modos: modo?.choices.map { ($0.value, nombreDeEleccion("mode", $0)) } ?? [],
                                sugerido: agente.ultimaURL?.host()?.lowercased())
         }
     }
 
-    /// Cel: Remote Control sobre esta conversación (KurthRemoto). Apagado, tocarlo enciende y abre el
-    /// popover con el QR; encendido, abre el popover (estado, enlace, apagar). El puntito verde dice
-    /// que ya hay enlace; naranja, que sigue conectando.
+    /// Cel: Remote Control sobre esta conversación (KurthRemoto; cada conversación tiene el suyo).
+    /// Apagado, tocarlo enciende y abre el popover con el QR; encendido, abre el popover (estado,
+    /// enlace, apagar). El puntito verde dice que ya hay enlace; naranja, que sigue conectando.
     private var botonDeCel: some View {
-        let remoto = KurthRemoto.shared
+        let remoto = agente.remoto
         let ocupado = agente.estado == .trabajando || agente.permiso != nil
         return Button {
             if !remoto.encendido { agente.encenderRemoto() }
