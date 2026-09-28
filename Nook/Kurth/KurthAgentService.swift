@@ -198,11 +198,23 @@ final class KurthAgentService {
         guardarConversacion()
     }
 
+    /// El esfuerzo de una conversación mientras Kurth no le elija otro (28 sep: "dale por default a
+    /// todos los agentes xhigh a menos que yo se los cambie"; antes era low, porque en xhigh Opus
+    /// verifica más y tarda: 17 s para resumir una nota el 24 sep). Si el modelo no tiene xhigh, se
+    /// queda en el nivel por defecto del modelo (aplicarOpcionesGuardadas lo salta).
+    static let esfuerzoPorDefecto = "xhigh"
+
+    /// Una sola vez (KurthChats): las conversaciones que ya existían traían el esfuerzo heredado de
+    /// cuando había una sola, no uno elegido para ellas; pasan al de por defecto.
+    func usarEsfuerzoPorDefecto() {
+        guard elegidas["effort"] != nil else { return }
+        elegidas["effort"] = nil
+        guardarConversacion()
+    }
+
     private func aplicarOpcionesGuardadas() async {
         var elegidas = self.elegidas
-        // Si el usuario no ha elegido esfuerzo en el panel, arranca en bajo: el panel es para
-        // preguntas rápidas y en xhigh Opus se pone a verificar (24 sep: 17 s para resumir una nota).
-        if elegidas["effort"] == nil { elegidas["effort"] = "low" }
+        if elegidas["effort"] == nil { elegidas["effort"] = Self.esfuerzoPorDefecto }
         for id in Self.opcionesQueSeRecuerdan {
             guard let valor = elegidas[id], let opcion = cliente.configOptions.first(where: { $0.id == id }),
                   opcion.currentValue != valor,
@@ -412,7 +424,9 @@ final class KurthAgentService {
         registroDelCel = []
         // Si quedó algo de un cel anterior que este agente todavía no sabe, la sesión nueva del cel lo recibe.
         let pendiente = pendienteDelCel.map { "\n\n" + Self.bloqueDelCel($0) } ?? ""
-        remoto.encender(sessionId: id, carpeta: carpetaDeTrabajo, opciones: elegidas,
+        var opciones = elegidas
+        if opciones["effort"] == nil { opciones["effort"] = Self.esfuerzoPorDefecto }
+        remoto.encender(sessionId: id, carpeta: carpetaDeTrabajo, opciones: opciones,
                         instrucciones: KurthRemoto.instrucciones + pendiente,
                         nombre: "Nook · " + String(titulo.prefix(40)))
     }
@@ -783,17 +797,21 @@ final class KurthAgentService {
     init(como base: KurthAgentService?) {
         id = UUID()
         creado = Date()
+        var opciones: [String: String]
         if let base {
             carpetaDeTrabajo = base.carpetaDeTrabajo
-            elegidas = base.elegidas
+            opciones = base.elegidas
             reglas = base.reglas
             usaReglas = base.usaReglas
         } else {
             carpetaDeTrabajo = Self.carpetaGuardada()
-            elegidas = UserDefaults.standard.dictionary(forKey: Self.claveOpciones) as? [String: String] ?? [:]
+            opciones = UserDefaults.standard.dictionary(forKey: Self.claveOpciones) as? [String: String] ?? [:]
             reglas = Self.reglasGuardadas
             usaReglas = UserDefaults.standard.object(forKey: Self.claveUsaReglas) as? Bool ?? true
         }
+        // El esfuerzo no se hereda: toda conversación nueva arranca en esfuerzoPorDefecto.
+        opciones["effort"] = nil
+        elegidas = opciones
         remoto = KurthRemoto(chat: id)
         conectarCelYCierre()
     }

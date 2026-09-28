@@ -29,10 +29,16 @@ final class KurthChats {
     private(set) var activo: KurthAgentService
 
     private static let claveActivo = "kurth.chatActivo"
+    /// Marca de que las conversaciones de antes ya pasaron a xhigh (28 sep), para hacerlo una sola vez.
+    private static let claveEsfuerzo = "kurth.chatsEsfuerzoXhigh"
 
     private init() {
         KurthAgentService.migrarConversacionUnica()
         var cargados = KurthAgentService.cargarGuardadas()
+        if !UserDefaults.standard.bool(forKey: Self.claveEsfuerzo) {
+            cargados.forEach { $0.usarEsfuerzoPorDefecto() }
+            UserDefaults.standard.set(true, forKey: Self.claveEsfuerzo)
+        }
         let guardado = UserDefaults.standard.string(forKey: Self.claveActivo).flatMap(UUID.init(uuidString:))
         let activo: KurthAgentService
         if let elegida = cargados.first(where: { $0.id == guardado }) {
