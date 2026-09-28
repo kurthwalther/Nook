@@ -994,6 +994,7 @@ final class KurthAgentService {
                         señalados: [KurthSenalar.Referencia], adjuntados: [Adjunto],
                         menciones: [KurthContextoMencionado], oculto: String? = nil) {
         mensajes.append(Mensaje(autor: .agente, texto: "", enCurso: true))
+        textoTrasHerramienta = false
         plan.removeAll()
         estado = .trabajando
 
@@ -1084,6 +1085,7 @@ final class KurthAgentService {
 
             case .toolStarted(let id, let titulo, let kind):
                 self.actualizarHerramienta(id: id, titulo: titulo, kind: kind, estado: "in_progress")
+                self.textoTrasHerramienta = true
 
             case .toolUpdated(let id, let estadoNuevo, let titulo):
                 self.actualizarHerramienta(id: id, titulo: titulo, kind: nil, estado: estadoNuevo)
@@ -1133,13 +1135,21 @@ final class KurthAgentService {
         }
     }
 
+    /// Hubo una herramienta desde el último texto del turno. Lo que el agente escribe antes y después
+    /// de usar una herramienta son bloques distintos de su respuesta, y llegan sin separación: se
+    /// pegaban ("…cobertura de la campaña.Anotado en bitácora…", Kurth 28 sep) y parecía una sola
+    /// respuesta mocha. El texto que sigue a una herramienta va en párrafo aparte.
+    @ObservationIgnored private var textoTrasHerramienta = false
+
     private func anexarAlAgente(_ texto: String) {
         guard !texto.isEmpty else { return }
         if let indice = indiceDelTurno {
-            mensajes[indice].texto += texto
+            let aparte = textoTrasHerramienta && !mensajes[indice].texto.isEmpty && !texto.hasPrefix("\n")
+            mensajes[indice].texto += (aparte ? "\n\n" : "") + texto
         } else {
             mensajes.append(Mensaje(autor: .agente, texto: texto, enCurso: true))
         }
+        textoTrasHerramienta = false
     }
 
     private func actualizarHerramienta(id: String, titulo: String?, kind: String?, estado: String) {
