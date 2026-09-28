@@ -136,13 +136,13 @@ Orden acordado; Trazo (dirección del Creative) descartada por Kurth: "está feo
    arrastres (lateral y tira), el ⌥-clic y el clic derecho en un link.
 9. **Traducción on-device** (M): framework Translation; lo difícil es reinyectar el texto traducido.
 10. **Detalles Apple** (S): pull-to-refresh, progreso de carga en la barra, indicador de pestaña suspendida.
-   ✅ **Hecho 26 sep (rama `kurth-detalles`, sin instalar):** jalar para recargar (`24fc2541`,
+   ✅ **Hecho 26 sep (rama `kurth-detalles`, sin instalar):** ~~jalar para recargar (`24fc2541`,
    `KurthJalarParaRecargar.swift`; la distancia es el estiramiento real de WebKit, háptico al pasar
-   64 pt; `kurth/checks/jalar.sh` 9 ✅ con gestos sintéticos) y progreso dentro de la cápsula
+   64 pt; `kurth/checks/jalar.sh` 9 ✅ con gestos sintéticos)~~ **quitado por completo el 28 sep a
+   pedido de Kurth** (archivo, ganchos en FocusableWKWebView y KurthPageState, ajustes y prueba) y progreso dentro de la cápsula
    (`76448103`, `KurthProgresoDeCarga.swift`; WebsiteLoadingIndicator no medía nada y se quitó de la
-   barra flotante). El indicador de suspendida ya estaba (punto 2). **Falta que Kurth pruebe con el
-   trackpad:** que el umbral de 64 pt se sienta bien (se cambia en vivo con
-   `kurth.pullToRefreshDistancia`), el golpe háptico, cómo se ve la flecha y la línea de progreso.
+   barra flotante). El indicador de suspendida ya estaba (punto 2). **Falta que Kurth pruebe** la línea
+   de progreso.
 
 ## Workflows grabados — 26 sep (rama `kurth-workflows`, solo compila, sin instalar)
 

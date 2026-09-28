@@ -72,8 +72,6 @@ final class KurthPageState {
     private var colorWatcher: KurthColorWatcher?
 
     fileprivate func update(offset: CGPoint, webView: WKWebView) {
-        // Crudo, con el negativo del rebote: es la distancia de jalar para recargar.
-        KurthJalarParaRecargar.desplazamiento(offset.y, en: webView)
         let y = max(0, offset.y)
         if abs(y - scrollY) >= 0.5 { scrollY = y }
         refreshColor(from: webView)
