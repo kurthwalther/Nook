@@ -145,10 +145,33 @@ struct KurthAgentInput: View {
             if encontrados.count == 1 && encontrados[0].name == escrito { return [] }
             return KurthSkillsLocales.sugerencias(encontrados, carpeta: agente.carpetaDeTrabajo)
         }
+        if let valores = valoresDeOpcion { return valores }
         if let consulta = KurthMenciones.consultaDeArroba(texto) {
             return KurthMenciones.sugerencias(para: consulta, tabs: browserManager.tabs, ventana: windowState)
         }
         return []
+    }
+
+    /// Tras «/effort », «/model » o «/fast »: los valores que hay, el actual marcado. Con uno ya
+    /// escrito completo no sale nada y Enter lo aplica (KurthAgentService.resolverComandoDeOpcion).
+    private var valoresDeOpcion: [KurthSugerencia]? {
+        guard texto.hasPrefix("/"), !texto.contains("\n"), let espacio = texto.firstIndex(of: " ") else { return nil }
+        let id = texto[texto.index(after: texto.startIndex)..<espacio].lowercased()
+        guard KurthAgentService.opcionesConComando.contains(id),
+              let opcion = agente.opciones.first(where: { $0.id == id }) else { return nil }
+        let escrito = texto[texto.index(after: espacio)...].trimmingCharacters(in: .whitespaces).lowercased()
+        let valores = opcion.choices.filter { eleccion in
+            let nombre = KurthAgentService.nombre(eleccion.value, en: opcion)
+            return escrito.isEmpty || nombre.lowercased().contains(escrito) || eleccion.value.lowercased().contains(escrito)
+        }
+        if valores.contains(where: { KurthAgentService.nombre($0.value, en: opcion).lowercased() == escrito || $0.value.lowercased() == escrito }) {
+            return []
+        }
+        return valores.map { eleccion in
+            let nombre = KurthAgentService.nombre(eleccion.value, en: opcion)
+            return KurthSugerencia(accion: .comando(id + " " + nombre), grupo: .sistema, titulo: nombre,
+                                   detalle: eleccion.value == opcion.currentValue ? "actual" : "")
+        }
     }
 
     /// La fila elegida, si la lista está abierta.

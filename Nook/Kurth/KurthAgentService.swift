@@ -629,7 +629,8 @@ final class KurthAgentService {
     /// Los comandos que empatan con lo que se lleva escrito tras la «/».
     func comandos(queEmpiecenCon prefijo: String) -> [KurthACPCommand] {
         let busqueda = prefijo.lowercased()
-        return comandos
+        let propios = comandosDeOpciones
+        return (propios + comandos.filter { c in !propios.contains { $0.name == c.name } })
             .filter { busqueda.isEmpty || $0.name.lowercased().contains(busqueda) }
             .sorted { a, b in
                 // Primero los que empiezan igual: escribir "mo" debe ofrecer /model antes que
@@ -637,6 +638,84 @@ final class KurthAgentService {
                 let ea = a.name.lowercased().hasPrefix(busqueda), eb = b.name.lowercased().hasPrefix(busqueda)
                 return ea == eb ? a.name.count < b.name.count : ea
             }
+    }
+
+    // MARK: - «/model», «/effort» y «/fast» escritos en la caja
+
+    /// Las opciones de la sesión que también se cambian escribiendo, como en el CLI. Si le llegan al
+    /// agente como texto no las ejecuta: las lee como mensaje (Kurth, 28 sep: "/effort" no hizo nada).
+    static let opcionesConComando = ["model", "effort", "fast"]
+
+    private var comandosDeOpciones: [KurthACPCommand] {
+        guard !remoto.encendido else { return [] }
+        return opciones.filter { Self.opcionesConComando.contains($0.id) }.map { opcion in
+            KurthACPCommand(name: opcion.id,
+                            description: "\(Self.titulo(opcion.id)) · ahora: \(Self.nombre(opcion.currentValue, en: opcion))")
+        }
+    }
+
+    static func titulo(_ id: String) -> String {
+        switch id {
+        case "model": return "Modelo"
+        case "effort": return "Esfuerzo"
+        case "fast": return "Modo rápido"
+        default: return id
+        }
+    }
+
+    /// Como en el botón de abajo: el modelo con su nombre, el esfuerzo con la palabra del CLI.
+    static func nombre(_ valor: String, en opcion: KurthACPConfigOption) -> String {
+        switch (opcion.id, valor) {
+        case (_, "default"): return "por defecto"
+        case ("effort", _): return valor
+        case ("fast", "on"): return "encendido"
+        case ("fast", "off"): return "apagado"
+        default: return opcion.choices.first { $0.value == valor }?.name ?? valor
+        }
+    }
+
+    /// La elección que corresponde a lo escrito: valor o nombre exactos, "sí"/"no" para rápido, y si
+    /// no, la única que lo contenga ("sonnet" → Sonnet 5).
+    static func eleccion(_ escrito: String, en opcion: KurthACPConfigOption) -> KurthACPConfigOption.Choice? {
+        var pedido = escrito.lowercased()
+        if opcion.id == "fast" {
+            if ["si", "sí", "encendido", "prendido", "prender", "encender"].contains(pedido) { pedido = "on" }
+            if ["no", "apagado", "apagar"].contains(pedido) { pedido = "off" }
+        }
+        if let exacta = opcion.choices.first(where: {
+            $0.value.lowercased() == pedido || $0.name.lowercased() == pedido || nombre($0.value, en: opcion) == pedido
+        }) { return exacta }
+        let parecidas = opcion.choices.filter {
+            $0.value.lowercased().contains(pedido) || $0.name.lowercased().contains(pedido)
+        }
+        return parecidas.count == 1 ? parecidas[0] : nil
+    }
+
+    /// Resuelve aquí «/effort high», «/model sonnet» o «/fast» (sin valor: dice cuál está y cuáles
+    /// hay) sin mandarle nada al agente. False si no es uno de esos o la sesión aún no los publica.
+    private func resolverComandoDeOpcion(_ texto: String) -> Bool {
+        guard texto.hasPrefix("/"), !remoto.encendido else { return false }
+        let partes = texto.dropFirst().split(separator: " ", maxSplits: 1)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        guard let id = partes.first?.lowercased(), Self.opcionesConComando.contains(id),
+              let opcion = opciones.first(where: { $0.id == id }) else { return false }
+        let titulo = Self.titulo(id)
+        let pedido = partes.count > 1 ? partes[1] : ""
+        let lista = opcion.choices.map { Self.nombre($0.value, en: opcion) }.joined(separator: ", ")
+        let respuesta: String
+        if pedido.isEmpty {
+            respuesta = "\(titulo): **\(Self.nombre(opcion.currentValue, en: opcion))**. Hay: \(lista). "
+                + "Escribe /\(id) y el valor, o cámbialo en el botón de abajo."
+        } else if let eleccion = Self.eleccion(pedido, en: opcion) {
+            cambiarOpcion(id, a: eleccion.value)
+            respuesta = "✅ \(titulo): **\(Self.nombre(eleccion.value, en: opcion))**."
+        } else {
+            respuesta = "⚠️ «\(pedido)» no es una opción de \(titulo.lowercased()). Hay: \(lista)."
+        }
+        mensajes.append(Mensaje(autor: .usuario, texto: texto))
+        mensajes.append(Mensaje(autor: .agente, texto: respuesta))
+        guardarConversacion()
+        return true
     }
 
     // MARK: - Conversación guardada
@@ -833,7 +912,10 @@ final class KurthAgentService {
                 señalados: [KurthSenalar.Referencia] = [], menciones: [KurthContextoMencionado] = [],
                 paraElAgente: String? = nil, oculto: String? = nil) {
         let limpio = texto.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !limpio.isEmpty, aceptaMensajes else { return }
+        guard !limpio.isEmpty else { return }
+        // Cambiar modelo o esfuerzo no espera a que el agente acabe: se aplica al siguiente turno.
+        if paraElAgente == nil, oculto == nil, resolverComandoDeOpcion(limpio) { return }
+        guard aceptaMensajes else { return }
         let adjuntados = adjuntos
         adjuntos.removeAll()
         adjuntosDelUltimo = adjuntados
