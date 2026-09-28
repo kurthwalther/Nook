@@ -869,6 +869,7 @@
     if (canal && window.top === window) {
       // Página nueva: el color de la anterior ya no vale (si no, se arrastra un instante).
       canal.postMessage({ tipo: 'encabezado', rgba: null });
+      canal.postMessage({ tipo: 'arriba', rgba: null });
       const lienzo = document.createElement('canvas');
       lienzo.width = lienzo.height = 1;
       const ctx = lienzo.getContext('2d', { willReadFrequently: true });
@@ -926,6 +927,25 @@
         }
         return null;
       };
+      // Lo que se ve hasta arriba de la página, para cuando WebKit no lo muestrea
+      // (KurthPageState.scriptTopColor). Google Ads pinta su gris en una capa absoluta detrás de todo
+      // con html y body transparentes, y la barra caía al blanco del lienzo (Kurth, 28 sep). Cinco
+      // puntos de lado a lado; cuenta si al menos cuatro ven el mismo color sólido.
+      const arriba = () => {
+        const w = innerWidth, votos = new Map();
+        for (const f of [0.02, 0.25, 0.5, 0.75, 0.98]) {
+          for (const e of document.elementsFromPoint(w * f, 1)) {
+            const s = getComputedStyle(e);
+            if (!transparente(s.backgroundColor)) {
+              if (aRGBA(s.backgroundColor)[3] === 255) votos.set(s.backgroundColor, (votos.get(s.backgroundColor) || 0) + 1);
+              break;
+            }
+            if (s.backgroundImage !== 'none') break;
+          }
+        }
+        for (const [c, n] of votos) if (n >= 4) return aRGBA(c);
+        return null;
+      };
       // Menús fijos escondidos justo arriba de lo visible (ultrajewels: top -60, bottom 0) dejan
       // caer su sombra bajo la barra: una franja gris de corte duro de lado a lado (Kurth, 25 sep).
       // Mientras están enteros arriba se les quita la sombra; al empezar a entrar, se les regresa.
@@ -956,11 +976,19 @@
           }
         }
       };
-      let ultimo = '', agendado = false, ultimaVez = 0;
+      let ultimo = '', ultimoArriba = '', agendado = false, ultimaVez = 0;
       const revisar = () => {
         agendado = false;
         ultimaVez = performance.now();
         try { sombras(); } catch (e) { /* una página rara no debe tumbar lo del color */ }
+        try {
+          const a = arriba();
+          const claveArriba = a ? a.join(',') : '';
+          if (claveArriba !== ultimoArriba) {
+            ultimoArriba = claveArriba;
+            canal.postMessage({ tipo: 'arriba', rgba: a });
+          }
+        } catch (e) { /* sin esto la barra se queda con lo de WebKit */ }
         const c = buscar();
         const clave = c ? c.join(',') : '';
         if (clave === ultimo) return;

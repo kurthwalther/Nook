@@ -33,6 +33,17 @@ final class KurthPageState {
     /// asomaba entre la barra y él (Kurth, 25 sep). Con este, la barra pinta la franja ella misma.
     private(set) var scriptHeaderColor: NSColor?
 
+    /// Lo que el script ve hasta arriba de la página (KurthCopilot.js, `arriba`). Solo cuenta si
+    /// WebKit no muestrea nada ni hay theme-color: Google Ads tiene html y body transparentes y su
+    /// gris en una capa absoluta, y sin esto la barra caía al blanco del lienzo (Kurth, 28 sep).
+    private(set) var scriptTopColor: NSColor?
+
+    func setScriptTopColor(_ color: NSColor?, webView: WKWebView) {
+        guard color != scriptTopColor else { return }
+        scriptTopColor = color
+        refreshColor(from: webView)
+    }
+
     var hasTopHeader: Bool { topHeaderColor != nil || scriptHeaderColor != nil }
 
     func setScriptHeaderColor(_ color: NSColor?) {
@@ -70,7 +81,7 @@ final class KurthPageState {
 
     func refreshColor(from webView: WKWebView) {
         let sampled = Self.privateColor(webView, "_sampledPageTopColor")
-        let color = sampled ?? webView.themeColor ?? webView.underPageBackgroundColor
+        let color = sampled ?? webView.themeColor ?? scriptTopColor ?? webView.underPageBackgroundColor
         if color != topColor { topColor = color }
         let header = Self.privateColor(webView, "_sampledTopFixedPositionContentColor")
         if header != topHeaderColor { topHeaderColor = header }

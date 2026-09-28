@@ -288,6 +288,15 @@ final class KurthSenalar {
                 }
                 return
             }
+            // Lo que se ve hasta arriba, para cuando WebKit no lo muestrea (KurthPageState.scriptTopColor).
+            if cuerpo["tipo"] as? String == "arriba" {
+                let rgba = (cuerpo["rgba"] as? [NSNumber])?.map { CGFloat($0.doubleValue) / 255 }
+                MainActor.assumeIsolated {
+                    let color = rgba.flatMap { $0.count == 4 ? NSColor(srgbRed: $0[0], green: $0[1], blue: $0[2], alpha: $0[3]) : nil }
+                    KurthPageState.of(webView).setScriptTopColor(color, webView: webView)
+                }
+                return
+            }
             guard cuerpo["tipo"] as? String == "pedirMarcas", let texto = cuerpo["url"] as? String else { return }
             MainActor.assumeIsolated {
                 let lista = KurthSenalar.shared.marcasGuardadas(para: URL(string: texto))
