@@ -75,6 +75,11 @@ class WebViewCoordinator {
         webViewsByItemAndWindow[itemID].map { Array($0.values) } ?? []
     }
 
+    /// kurth: todas las vistas vivas con su pestaña, para el zoom de todo el navegador (KurthZoom).
+    var kurthVistas: [(pestaña: UUID, vista: WKWebView)] {
+        webViewsByItemAndWindow.flatMap { pestaña, porVentana in porVentana.values.map { (pestaña, $0) } }
+    }
+
     func setWebView(_ webView: WKWebView, for itemID: UUID, in windowId: UUID) {
         webViewsByItemAndWindow[itemID, default: [:]][windowId] = webView
     }

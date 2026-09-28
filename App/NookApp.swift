@@ -158,6 +158,7 @@ struct NookApp: App {
         // TEMPORARY: Wire coordinators to BrowserManager
         // TODO: Remove these connections - coordinators should be independent
         browserManager.webViewCoordinator = webViewCoordinator
+        browserManager.zoomManager.kurthCoordinador = webViewCoordinator // kurth: zoom de todo el navegador
         browserManager.windowRegistry = windowRegistry
         browserManager.nookSettings = settingsManager
         // Rules written before spaces owned their data still name a profile.

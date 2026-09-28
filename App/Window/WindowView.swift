@@ -117,7 +117,8 @@ struct WindowView: View {
                     onZoomIn: { browserManager.zoomInCurrentTab() },
                     onZoomOut: { browserManager.zoomOutCurrentTab() },
                     onZoomReset: { browserManager.resetZoomCurrentTab() },
-                    onDismiss: { browserManager.shouldShowZoomPopup = false }
+                    onDismiss: { browserManager.shouldShowZoomPopup = false },
+                    onModo: { browserManager.kurthZoomEnTodoElNavegador($0) } // kurth
                 )
                 .transition(.scale(scale: 0.0, anchor: .top))
                 .animation(.spring(response: 0.5, dampingFraction: 0.8), value: browserManager.shouldShowZoomPopup)

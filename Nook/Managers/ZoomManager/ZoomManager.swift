@@ -12,17 +12,23 @@ import WebKit
 @Observable
 @MainActor
 class ZoomManager {
-    private static let presets: [Double] = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
+    // kurth: sin presets; de 10 en 10 % entre 50 y 300 % (KurthZoom).
 
     private var tabZoomLevels: [UUID: Double] = [:]
 
     var currentZoomLevel: Double = 1.0
 
-    var currentZoomPercentage: Int { Int(currentZoomLevel * 100) }
+    // kurth: redondeado; con Int() 1.1 × 100 se leía 110 pero 0.7 × 100 se leía 69.
+    var currentZoomPercentage: Int { Int((currentZoomLevel * 100).rounded()) }
 
-    var isAtMinimumZoom: Bool { currentZoomLevel <= 0.5 }
+    var isAtMinimumZoom: Bool { currentZoomLevel <= KurthZoom.minimo + 0.001 }
 
-    var isAtMaximumZoom: Bool { currentZoomLevel >= 2.0 }
+    var isAtMaximumZoom: Bool { currentZoomLevel >= KurthZoom.maximo - 0.001 }
+
+    /// kurth: el interruptor del popup (KurthZoom): un nivel para todo el navegador o uno por pestaña.
+    var kurthTodoElNavegador = KurthZoom.todoElNavegador
+    /// kurth: para llevar el nivel de todo el navegador a cada página abierta.
+    @ObservationIgnored weak var kurthCoordinador: WebViewCoordinator?
 
     func getZoomPercentageDisplay() -> String {
         return "\(currentZoomPercentage)%"
@@ -32,23 +38,65 @@ class ZoomManager {
 
     /// Apply a zoom level to a web view.
     func applyZoom(_ zoomLevel: Double, to webView: WKWebView, tabId: UUID) {
-        let clampedZoom = max(0.5, min(2.0, zoomLevel))
+        let clampedZoom = KurthZoom.limitar(zoomLevel) // kurth
 
-        // pageZoom relays the page out, so text and canvases re-render sharp. magnification is a
-        // layer scale a stray trackpad pinch leaves behind, and it resamples canvas-drawn pages.
-        webView.pageZoom = clampedZoom
-        webView.magnification = 1.0
+        poner(clampedZoom, en: webView)
 
-        tabZoomLevels[tabId] = clampedZoom
         currentZoomLevel = clampedZoom
+        // kurth: en "todo el navegador" el nivel es uno: se guarda y va a todas las páginas abiertas.
+        // Los de cada pestaña no se tocan, para que vuelvan si se regresa a "esta pestaña".
+        if kurthTodoElNavegador {
+            KurthZoom.nivelDelNavegador = clampedZoom
+            for vista in kurthCoordinador?.kurthVistas.map(\.vista) ?? [] where vista !== webView {
+                poner(clampedZoom, en: vista)
+            }
+        } else {
+            tabZoomLevels[tabId] = clampedZoom
+        }
+    }
+
+    // pageZoom relays the page out, so text and canvases re-render sharp. magnification is a
+    // layer scale a stray trackpad pinch leaves behind, and it resamples canvas-drawn pages.
+    private func poner(_ nivel: Double, en webView: WKWebView) {
+        webView.pageZoom = nivel
+        webView.magnification = 1.0
     }
 
     func zoomIn(for webView: WKWebView, tabId: UUID) {
-        applyZoom(nextZoomLevel(from: zoomLevel(for: tabId), direction: .up), to: webView, tabId: tabId)
+        applyZoom(nextZoomLevel(from: kurthNivel(for: tabId), direction: .up), to: webView, tabId: tabId)
     }
 
     func zoomOut(for webView: WKWebView, tabId: UUID) {
-        applyZoom(nextZoomLevel(from: zoomLevel(for: tabId), direction: .down), to: webView, tabId: tabId)
+        applyZoom(nextZoomLevel(from: kurthNivel(for: tabId), direction: .down), to: webView, tabId: tabId)
+    }
+
+    /// kurth: al navegar, la página toma el nivel que le toca (el de todo el navegador o el de su
+    /// pestaña) en vez de volver a 100 %. No mueve lo que dice el popup: eso es de la pestaña a la vista.
+    func kurthAlNavegar(_ webView: WKWebView, tabId: UUID) {
+        poner(kurthNivel(for: tabId), en: webView)
+    }
+
+    /// kurth: el interruptor. Lo que se está viendo se queda: pasa a ser el nivel de todo el
+    /// navegador, o el de la pestaña activa; las demás pestañas vuelven al suyo (100 % si no tenían).
+    func kurthCambiarModo(todoElNavegador: Bool, pestañaActiva: UUID?) {
+        guard todoElNavegador != kurthTodoElNavegador else { return }
+        let visto = currentZoomLevel
+        kurthTodoElNavegador = todoElNavegador
+        KurthZoom.todoElNavegador = todoElNavegador
+        if todoElNavegador {
+            KurthZoom.nivelDelNavegador = visto
+        } else if let pestañaActiva {
+            tabZoomLevels[pestañaActiva] = visto
+        }
+        for (pestaña, vista) in kurthCoordinador?.kurthVistas ?? [] {
+            poner(todoElNavegador ? visto : zoomLevel(for: pestaña), en: vista)
+        }
+        currentZoomLevel = visto
+    }
+
+    /// kurth: el nivel que corresponde a esa pestaña según el modo.
+    private func kurthNivel(for tabId: UUID) -> Double {
+        kurthTodoElNavegador ? KurthZoom.nivelDelNavegador : zoomLevel(for: tabId)
     }
 
     /// Back to 100%. Also runs on navigation, so a page never inherits the last one's zoom.
@@ -58,7 +106,7 @@ class ZoomManager {
 
     /// Points the displayed level at `tabId`. Zoom is per tab, the readout is one value.
     func showZoomLevel(for tabId: UUID?) {
-        currentZoomLevel = tabId.map { zoomLevel(for: $0) } ?? 1.0
+        currentZoomLevel = kurthTodoElNavegador ? KurthZoom.nivelDelNavegador : tabId.map { zoomLevel(for: $0) } ?? 1.0 // kurth
     }
 
     /// Remove the zoom level for a closed tab
@@ -72,14 +120,9 @@ class ZoomManager {
         return tabZoomLevels[tabId] ?? 1.0
     }
 
-    /// Nearest preset in the given direction; the tolerance skips the current level.
+    /// kurth: el siguiente múltiplo de 10 % en esa dirección (KurthZoom.siguiente).
     private func nextZoomLevel(from currentLevel: Double, direction: ZoomDirection) -> Double {
-        switch direction {
-        case .up:
-            return Self.presets.first { $0 > currentLevel + 0.01 } ?? 2.0
-        case .down:
-            return Self.presets.last { $0 < currentLevel - 0.01 } ?? 0.5
-        }
+        KurthZoom.siguiente(desde: currentLevel, subiendo: direction == .up)
     }
 }
 
