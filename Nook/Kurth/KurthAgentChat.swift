@@ -36,8 +36,8 @@ struct KurthAgentChat: View {
     @State private var texto = ""
     @FocusState private var escribiendo: Bool
     /// La conversación en la que este panel se contó como abierto (ver onAppear / onDisappear). Se
-    /// guarda la instancia y no se lee del entorno al desaparecer: al cambiar de conversación, el
-    /// cierre tiene que ir a la que se deja (kurth: multichat).
+    /// guarda la instancia y no se lee del entorno: al cambiar de conversación, el cierre tiene que ir
+    /// a la que se deja (kurth: multichat, cambioDeConversacion).
     @State private var registradoEn: KurthAgentService?
     /// Alto del encabezado y de la caja de abajo, para desvanecer la conversación antes de ellos.
     @State private var altoArriba: CGFloat = 0
@@ -153,6 +153,8 @@ struct KurthAgentChat: View {
                 if flotante { KurthAgentHoverManager.conBorrador = !nuevo.isEmpty }
             }
             .onChange(of: agente.retirado?.id) { _, _ in devolverRetirado() }
+            // kurth: multichat — la vista se queda y cambia la conversación que enseña.
+            .onChange(of: agente.id) { _, _ in cambioDeConversacion() }
             // Si al entrar al campo hay texto seleccionado en la página, va como chip (Señalar).
             .onChange(of: escribiendo) { _, enfocado in
                 guard enfocado else { return }
@@ -323,6 +325,8 @@ struct KurthAgentChat: View {
             .onChange(of: agente.mensajes.count) { _, _ in
                 withAnimation(NookDesign.Motion.standard) { scroll.scrollTo("final", anchor: .bottom) }
             }
+            // Otra conversación: se ve lo último de ella, sin animar desde donde iba la anterior.
+            .onChange(of: agente.id) { _, _ in scroll.scrollTo("final", anchor: .bottom) }
         }
     }
 
@@ -554,6 +558,19 @@ struct KurthAgentChat: View {
         return agente.aceptaMensajes
             && (!texto.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !KurthSenalar.shared.referencias.isEmpty
                 || !agente.adjuntos.isEmpty || !KurthMenciones.shared.elegidas.isEmpty)
+    }
+
+    /// Otra conversación en el mismo panel: la que se deja deja de contarse como vista, la nueva sí; la
+    /// caja trae el borrador de la nueva (el de la anterior ya quedó en ella, onChange de texto) y el
+    /// agente nuevo se entera de qué pestaña se ve (sus reglas por sitio).
+    private func cambioDeConversacion() {
+        guard registradoEn !== agente else { return }
+        registradoEn?.panelCerrado()
+        registradoEn = agente
+        agente.panelAbierto()
+        texto = agente.borrador
+        ultimoEnvio = nil
+        agente.pestañaActiva(browserManager.tabs.selectedSession(in: windowState)?.url)
     }
 
     private func borrarMarcas(_ autor: String?) {

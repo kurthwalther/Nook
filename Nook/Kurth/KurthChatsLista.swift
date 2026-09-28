@@ -22,7 +22,11 @@ import NookDesign
 import NookUI
 
 /// El panel del agente: enseña la conversación que KurthChats tiene a la vista. Al cambiar de una a
-/// otra la vista se rehace (`id`), así cada caja conserva su borrador y cada agente sabe si se ve.
+/// otra la vista es la misma y solo cambia el agente del entorno (KurthAgentChat.cambioDeConversacion
+/// pasa el borrador y el conteo de paneles). Antes se rehacía con `.id` y Nook se cerraba: destruir
+/// de golpe la caja enfocada y el botón con la lista abierta dejaba ventanas del sistema colgadas de
+/// la ventana, y el siguiente popover o la lista de «/» tronaban en AppKit (NSRemoteView,
+/// 28 sep, tres reportes).
 struct KurthAgentPanel: View {
     @Environment(KurthChats.self) private var chats
     var flotante = false
@@ -30,7 +34,6 @@ struct KurthAgentPanel: View {
     var body: some View {
         KurthAgentChat(flotante: flotante)
             .environment(chats.activo)
-            .id(chats.activo.id)
     }
 }
 

@@ -58,6 +58,11 @@ struct KurthAgentInput: View {
             filaDeArriba
             caja
         }
+        // kurth: multichat — el cel y las reglas que estaban abiertos eran de la conversación anterior.
+        .onChange(of: agente.id) { _, _ in
+            popoverCel = false
+            popoverReglas = false
+        }
     }
 
     // MARK: - Arriba del bloque: agregar, señalar y el aviso de la sesión
