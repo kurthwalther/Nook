@@ -12,8 +12,11 @@
 //     de todos los días. Borrar y renombrar van con clic derecho (o «…») sobre cada fila.
 //   · Cada fila dice si esa conversación trabaja, espera un permiso o contestó sin que la vieras; el
 //     título lleva un punto cuando alguna de las otras te espera.
+//   · La lista también se abre con el mouse sobre la flechita (Kurth, 28 sep), y abierta así se
+//     cierra sola al salir de la flechita y de la lista. Con clic se queda, como cualquier popover.
 //
 
+import AppKit
 import SwiftUI
 import NookDesign
 import NookUI
@@ -44,9 +47,22 @@ struct KurthChatsTitulo: View {
 
     @State private var abierta = false
     @State private var encima = false
+    /// Se abrió con el mouse sobre la flechita: se cierra sola al salir de la flechita y de la lista.
+    @State private var porHover = false
+    @State private var sobreFlecha = false
+    @State private var sobreLista = false
+    /// Hay un menú abierto (el «…» de una fila o el clic derecho): para usarlo el mouse sale de la
+    /// lista, y eso no debe cerrarla.
+    @State private var conMenu = false
+    @State private var pendiente: Task<Void, Never>?
+
+    /// Lo justo para que pasar de largo sobre la flecha no la abra.
+    private static let esperaAlAbrir: Duration = .milliseconds(150)
+    /// Margen para el trayecto en diagonal de la flecha a la lista, que cruza aire.
+    private static let esperaAlCerrar: Duration = .milliseconds(350)
 
     var body: some View {
-        Button { abierta.toggle() } label: {
+        Button(action: clic) {
             HStack(spacing: KurthEscala.pt(4)) {
                 Text(detalle ?? agente.titulo)
                     .font(KurthEscala.fuente(13))
@@ -55,8 +71,12 @@ struct KurthChatsTitulo: View {
                     .truncationMode(.tail)
                 Image(systemName: "chevron.down")
                     .font(.system(size: KurthEscala.pt(9), weight: .semibold))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(sobreFlecha || abierta ? .secondary : .tertiary)
                     .overlay(alignment: .topTrailing) { puntoDeAviso }
+                    // La zona de la flecha es más grande que el dibujo: 9 pt no se atinan con el mouse.
+                    .frame(width: KurthEscala.pt(14), height: KurthTopBarView.capsuleHeight)
+                    .contentShape(Rectangle())
+                    .onHoverTracking(perform: flecha)
             }
             .padding(.horizontal, 4)
             .frame(height: KurthTopBarView.capsuleHeight)
@@ -67,10 +87,56 @@ struct KurthChatsTitulo: View {
         .modifier(KurthCapsule(active: esCapsulas, minWidth: 1))
         .help("Conversaciones")
         .popover(isPresented: $abierta, arrowEdge: .bottom) {
-            KurthChatsLista(cerrar: { abierta = false })
+            KurthChatsLista(cerrar: { abierta = false }, fijar: { porHover = false })
                 .environment(chats)
+                .onHoverTracking { dentro in
+                    sobreLista = dentro
+                    if dentro { pendiente?.cancel() } else { programarCierre() }
+                }
+        }
+        .onChange(of: abierta) { _, ahora in
+            if !ahora { porHover = false; sobreLista = false; pendiente?.cancel() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)) { _ in
+            conMenu = true
+            pendiente?.cancel()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSMenu.didEndTrackingNotification)) { _ in
+            conMenu = false
+            programarCierre()
         }
         .animation(NookDesign.Motion.quick, value: detalle)
+    }
+
+    private func clic() {
+        pendiente?.cancel()
+        // Abierta por hover, el clic la deja fija en vez de cerrarla: quien da clic ahí quería abrirla.
+        if abierta, porHover { porHover = false; return }
+        porHover = false
+        abierta.toggle()
+    }
+
+    private func flecha(_ dentro: Bool) {
+        sobreFlecha = dentro
+        pendiente?.cancel()
+        guard dentro else { programarCierre(); return }
+        guard !abierta else { return }
+        pendiente = Task { @MainActor in
+            try? await Task.sleep(for: Self.esperaAlAbrir)
+            guard !Task.isCancelled, sobreFlecha, !abierta else { return }
+            porHover = true
+            abierta = true
+        }
+    }
+
+    private func programarCierre() {
+        guard abierta, porHover, !sobreFlecha, !sobreLista, !conMenu else { return }
+        pendiente?.cancel()
+        pendiente = Task { @MainActor in
+            try? await Task.sleep(for: Self.esperaAlCerrar)
+            guard !Task.isCancelled, porHover, !sobreFlecha, !sobreLista, !conMenu else { return }
+            abierta = false
+        }
     }
 
     /// Otra conversación pide permiso (naranja, como la mano de la tarjeta) o contestó sin que la
@@ -91,6 +157,8 @@ struct KurthChatsTitulo: View {
 struct KurthChatsLista: View {
     @Environment(KurthChats.self) private var chats
     let cerrar: () -> Void
+    /// Que ya no se cierre sola al salir el mouse (se abrió con hover y ahora se está renombrando).
+    var fijar: () -> Void = {}
 
     @State private var renombrando: UUID?
     @State private var nombre = ""
@@ -183,6 +251,7 @@ struct KurthChatsLista: View {
     @ViewBuilder private func acciones(_ chat: KurthAgentService) -> some View {
         Button("Renombrar", systemImage: "pencil") {
             nombre = chat.tituloPuesto ?? chat.titulo
+            fijar()
             renombrando = chat.id
             campoEnfocado = true
         }
